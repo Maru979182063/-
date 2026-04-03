@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 import random
 import re
@@ -45,6 +46,8 @@ class GeneratedQuestionDraft(BaseModel):
         D: str
 
     stem: str
+    original_sentences: list[str] = []
+    correct_order: list[int] = []
     options: GeneratedQuestionOptionsDraft
     answer: str
     analysis: str
@@ -62,9 +65,9 @@ class QuestionGenerationService:
     JUDGE_ANSWER_ANALYSIS_THRESHOLD = 70
     JUDGE_HARD_DIFFICULTY_THRESHOLD = 68
     QUALITY_REPAIR_RETRY_THRESHOLD = 84
-    MAX_ALIGNMENT_RETRIES = 3
-    MAX_QUALITY_REPAIR_RETRIES = 3
-    RACE_CANDIDATE_COUNT = 3
+    MAX_ALIGNMENT_RETRIES = 2
+    MAX_QUALITY_REPAIR_RETRIES = 2
+    RACE_CANDIDATE_COUNT = 2
 
     def __init__(
         self,
@@ -162,120 +165,31 @@ class QuestionGenerationService:
         rejected_attempts: list[dict] = []
         rejected_candidates: list[dict] = []
         race_materials = materials[: max(self.RACE_CANDIDATE_COUNT, effective_count)]
-        for index in range(len(race_materials)):
-            material = self._annotate_material_usage(race_materials[index])
-            if standard_request["question_type"] == "sentence_order":
-                adapted_material = self._coerce_sentence_order_material(
-                    material=material,
+        race_results: list[dict] = []
+        with ThreadPoolExecutor(max_workers=max(1, min(len(race_materials), self.RACE_CANDIDATE_COUNT))) as executor:
+            future_map = {
+                executor.submit(
+                    self._run_race_candidate,
+                    material=race_materials[index],
+                    index=index,
+                    standard_request=standard_request,
                     source_question_analysis=source_question_analysis,
-                )
-                if adapted_material is None:
-                    rejected_attempts.append(
-                        {
-                            "material_id": material.material_id,
-                            "selection_reason": material.selection_reason,
-                            "document_genre": material.document_genre,
-                            "validation_errors": ["sentence_order_material_unit_count_mismatch"],
-                            "warnings": [],
-                            "judge_score": 0.0,
-                            "validator_score": 0.0,
-                            "material_alignment": 0.0,
-                            "answer_analysis_consistency": 0.0,
-                            "current_status": "auto_failed",
-                        }
-                    )
-                    continue
-                material = adapted_material
-            material = self._refine_material_if_needed(material)
-            build_request = self._build_prompt_request_from_snapshot(request_snapshot)
-            built_item = self._build_generated_item(
-                build_request=build_request,
-                material=material,
-                batch_id=batch_id,
-                item_id=None,
-                request_snapshot=request_snapshot,
-                revision_count=0,
-                route=self._question_generation_route(),
-                source_action="generate",
-                review_note=None,
-                request_id=request_id,
-                previous_item=None,
-            )
+                    request_snapshot=request_snapshot,
+                    batch_id=batch_id,
+                    request_id=request_id,
+                ): index
+                for index in range(len(race_materials))
+            }
+            for future in as_completed(future_map):
+                race_results.append(future.result())
 
-            if not (built_item.get("validation_result") or {}).get("passed"):
-                rejected_summary = self._summarize_rejected_attempt(built_item, material)
-                rejected_attempts.append(rejected_summary)
-                rejected_candidates.append(
-                    {
-                        "item": built_item,
-                        "material": material,
-                        "summary": rejected_summary,
-                        "rank_score": self._rejected_attempt_rank_score(built_item),
-                    }
-                )
-                logger.info(
-                    "question_rejected batch_id=%s attempt=%s material_id=%s status=%s errors=%s",
-                    batch_id,
-                    index + 1,
-                    material.material_id,
-                    built_item.get("current_status"),
-                    (built_item.get("validation_result") or {}).get("errors", [])[:3],
-                )
+        race_results.sort(key=lambda entry: entry["index"])
+        for result in race_results:
+            if result["accepted"]:
+                accepted_candidates.append(result["candidate"])
                 continue
-
-            logger.info(
-                "question_candidate_accepted batch_id=%s item_id=%s version_no=%s request_id=%s rank_score=%s",
-                batch_id,
-                built_item["item_id"],
-                built_item.get("current_version_no"),
-                request_id,
-                self._accepted_attempt_rank_score(built_item),
-            )
-            accepted_candidates.append(
-                {
-                    "item": built_item,
-                    "material": material,
-                    "rank_score": self._accepted_attempt_rank_score(built_item),
-                }
-            )
-
-        if not items and standard_request["question_type"] == "sentence_order" and prepared_request.source_question:
-            fallback_material = self._build_reference_source_material(prepared_request.source_question)
-            built_item = self._build_generated_item(
-                build_request=self._build_prompt_request_from_snapshot(request_snapshot),
-                material=fallback_material,
-                batch_id=batch_id,
-                item_id=None,
-                request_snapshot=request_snapshot,
-                revision_count=0,
-                route=self._question_generation_route(),
-                source_action="generate",
-                review_note="reference_source_fallback_used",
-                request_id=request_id,
-                previous_item=None,
-            )
-            if (built_item.get("validation_result") or {}).get("passed"):
-                accepted_candidates.append(
-                    {
-                        "item": built_item,
-                        "material": fallback_material,
-                        "rank_score": self._accepted_attempt_rank_score(built_item),
-                    }
-                )
-                material_warnings.append(
-                    "Used the reference source passage as a fallback because no retrieved sentence-order materials passed validation."
-                )
-            else:
-                rejected_summary = self._summarize_rejected_attempt(built_item, fallback_material)
-                rejected_attempts.append(rejected_summary)
-                rejected_candidates.append(
-                    {
-                        "item": built_item,
-                        "material": fallback_material,
-                        "summary": rejected_summary,
-                        "rank_score": self._rejected_attempt_rank_score(built_item),
-                    }
-                )
+            rejected_attempts.append(result["summary"])
+            rejected_candidates.append(result["candidate"])
 
         if accepted_candidates:
             accepted_candidates.sort(key=lambda entry: entry["rank_score"], reverse=True)
@@ -287,6 +201,16 @@ class QuestionGenerationService:
                 items.append(built_item)
             if len(accepted_candidates) > 1:
                 material_warnings.append("Race mode enabled: returned the highest-scoring acceptable candidate from this round.")
+
+        if not items and standard_request["question_type"] == "sentence_order":
+            raise DomainError(
+                "No eligible sentence_order materials passed validation from passage_service.",
+                status_code=422,
+                details={
+                    "question_type": standard_request["question_type"],
+                    "reason": "empty_effective_material_pool",
+                },
+            )
 
         if not items:
             fallback_record_path = self._write_failure_markdown_record(
@@ -479,12 +403,15 @@ class QuestionGenerationService:
             business_subtype=built_item.get("business_subtype"),
             pattern_id=built_item.get("pattern_id"),
             stem=generated.stem,
+            original_sentences=list(generated.original_sentences or []),
+            correct_order=list(generated.correct_order or []),
             options=generated.options.model_dump(),
             answer=generated.answer,
             analysis=generated.analysis,
             metadata=metadata,
         )
         if built_item["question_type"] == "sentence_order":
+            generated_question = self.build_sentence_order_question(generated_question, material_text=material.text)
             generated_question = self._enforce_sentence_order_six_unit_output(generated_question)
         return self._remap_answer_position(generated_question), response
 
@@ -528,16 +455,22 @@ class QuestionGenerationService:
             "article_id": material.article_id,
             "revision_mode": "minor_edit",
         }
-        item["generated_question"] = self._remap_answer_position(GeneratedQuestion(
+        revised_question = GeneratedQuestion(
             question_type=item["question_type"],
             business_subtype=item.get("business_subtype"),
             pattern_id=item.get("pattern_id"),
             stem=revised.stem,
+            original_sentences=list(revised.original_sentences or []),
+            correct_order=list(revised.correct_order or []),
             options=revised.options.model_dump(),
             answer=revised.answer,
             analysis=revised.analysis,
             metadata=metadata,
-        )).model_dump()
+        )
+        if item["question_type"] == "sentence_order":
+            revised_question = self.build_sentence_order_question(revised_question, material_text=material.text)
+            revised_question = self._enforce_sentence_order_six_unit_output(revised_question)
+        item["generated_question"] = self._remap_answer_position(revised_question).model_dump()
         validation_result = self.validator.validate(
             question_type=item["question_type"],
             business_subtype=item.get("business_subtype"),
@@ -731,6 +664,9 @@ class QuestionGenerationService:
                 ),
             }
         )
+        if item.get("question_type") == "sentence_order":
+            edited_question = self.build_sentence_order_question(edited_question, material_text=edited_material.text)
+            edited_question = self._enforce_sentence_order_six_unit_output(edited_question)
 
         revised_item = deepcopy(item)
         revised_item["generated_question"] = edited_question.model_dump()
@@ -1055,6 +991,105 @@ class QuestionGenerationService:
         )
         return built_item
 
+    def _run_race_candidate(
+        self,
+        *,
+        material: MaterialSelectionResult,
+        index: int,
+        standard_request: dict,
+        source_question_analysis: dict | None,
+        request_snapshot: dict,
+        batch_id: str,
+        request_id: str,
+    ) -> dict:
+        material = self._annotate_material_usage(material)
+        if standard_request["question_type"] == "sentence_order":
+            adapted_material = self._coerce_sentence_order_material(
+                material=material,
+                source_question_analysis=source_question_analysis,
+            )
+            if adapted_material is None:
+                rejected_summary = {
+                    "material_id": material.material_id,
+                    "selection_reason": material.selection_reason,
+                    "document_genre": material.document_genre,
+                    "validation_errors": ["sentence_order_material_unit_count_mismatch"],
+                    "warnings": [],
+                    "judge_score": 0.0,
+                    "validator_score": 0.0,
+                    "material_alignment": 0.0,
+                    "answer_analysis_consistency": 0.0,
+                    "current_status": "auto_failed",
+                }
+                return {
+                    "index": index,
+                    "accepted": False,
+                    "summary": rejected_summary,
+                    "candidate": {
+                        "item": {"current_status": "auto_failed", "validation_result": {"errors": ["sentence_order_material_unit_count_mismatch"]}},
+                        "material": material,
+                        "summary": rejected_summary,
+                        "rank_score": -999.0,
+                    },
+                }
+            material = adapted_material
+
+        material = self._refine_material_if_needed(material)
+        built_item = self._build_generated_item(
+            build_request=self._build_prompt_request_from_snapshot(request_snapshot),
+            material=material,
+            batch_id=batch_id,
+            item_id=None,
+            request_snapshot=request_snapshot,
+            revision_count=0,
+            route=self._question_generation_route(),
+            source_action="generate",
+            review_note=None,
+            request_id=request_id,
+            previous_item=None,
+        )
+
+        if not (built_item.get("validation_result") or {}).get("passed"):
+            rejected_summary = self._summarize_rejected_attempt(built_item, material)
+            logger.info(
+                "question_rejected batch_id=%s attempt=%s material_id=%s status=%s errors=%s",
+                batch_id,
+                index + 1,
+                material.material_id,
+                built_item.get("current_status"),
+                (built_item.get("validation_result") or {}).get("errors", [])[:3],
+            )
+            return {
+                "index": index,
+                "accepted": False,
+                "summary": rejected_summary,
+                "candidate": {
+                    "item": built_item,
+                    "material": material,
+                    "summary": rejected_summary,
+                    "rank_score": self._rejected_attempt_rank_score(built_item),
+                },
+            }
+
+        logger.info(
+            "question_candidate_accepted batch_id=%s item_id=%s version_no=%s request_id=%s rank_score=%s",
+            batch_id,
+            built_item["item_id"],
+            built_item.get("current_version_no"),
+            request_id,
+            self._accepted_attempt_rank_score(built_item),
+        )
+        return {
+            "index": index,
+            "accepted": True,
+            "summary": None,
+            "candidate": {
+                "item": built_item,
+                "material": material,
+                "rank_score": self._accepted_attempt_rank_score(built_item),
+            },
+        }
+
     def _build_request_snapshot(
         self,
         request: QuestionGenerateRequest,
@@ -1331,6 +1366,169 @@ class QuestionGenerationService:
                 "options": ordered_options,
                 "answer": target_answer,
                 "analysis": remapped_analysis,
+                "metadata": metadata,
+            }
+        )
+
+    def _extract_order_sequence(self, text: str) -> list[int]:
+        raw = str(text or "").strip()
+        if not raw:
+            return []
+        circled_map = {
+            "①": 1,
+            "②": 2,
+            "③": 3,
+            "④": 4,
+            "⑤": 5,
+            "⑥": 6,
+            "⑦": 7,
+            "⑧": 8,
+            "⑨": 9,
+            "⑩": 10,
+        }
+        circled = [circled_map[ch] for ch in raw if ch in circled_map]
+        if circled:
+            return circled
+        return [int(match) for match in re.findall(r"\d+", raw)]
+
+    def _format_order_sequence(self, order: list[int]) -> str:
+        circled = {1: "①", 2: "②", 3: "③", 4: "④", 5: "⑤", 6: "⑥", 7: "⑦", 8: "⑧", 9: "⑨", 10: "⑩"}
+        return "".join(circled.get(value, str(value)) for value in order)
+
+    def _derive_sentence_order_options(self, correct_order: list[int], existing_options: dict[str, str]) -> dict[str, str]:
+        sequences: list[list[int]] = []
+        seen: set[tuple[int, ...]] = set()
+
+        def add_sequence(sequence: list[int]) -> None:
+            key = tuple(sequence)
+            if len(sequence) != 6 or sorted(sequence) != [1, 2, 3, 4, 5, 6] or key in seen:
+                return
+            seen.add(key)
+            sequences.append(sequence)
+
+        add_sequence(correct_order)
+        for value in existing_options.values():
+            add_sequence(self._extract_order_sequence(value))
+
+        fallback_variants = [
+            correct_order[:1] + correct_order[2:3] + correct_order[1:2] + correct_order[3:],
+            correct_order[:2] + correct_order[3:4] + correct_order[2:3] + correct_order[4:],
+            correct_order[:3] + correct_order[4:5] + correct_order[3:4] + correct_order[5:],
+            correct_order[1:2] + correct_order[:1] + correct_order[2:],
+            correct_order[:4] + correct_order[5:6] + correct_order[4:5],
+        ]
+        for variant in fallback_variants:
+            add_sequence(variant)
+            if len(sequences) >= 4:
+                break
+
+        while len(sequences) < 4:
+            pivot = len(sequences)
+            variant = correct_order[:]
+            left = pivot % 5
+            right = left + 1
+            variant[left], variant[right] = variant[right], variant[left]
+            add_sequence(variant)
+            if len(sequences) >= 4:
+                break
+
+        letters = ("A", "B", "C", "D")
+        return {letter: self._format_order_sequence(sequence) for letter, sequence in zip(letters, sequences[:4], strict=False)}
+
+    def _build_sentence_order_analysis(
+        self,
+        correct_order: list[int],
+        original_sentences: list[str],
+        options: dict[str, str],
+        answer: str,
+    ) -> str:
+        order_text = self._format_order_sequence(correct_order)
+        ordered_sentences = [
+            original_sentences[index - 1].strip()
+            for index in correct_order
+            if 0 < index <= len(original_sentences)
+        ]
+        first_sentence = ordered_sentences[0] if ordered_sentences else ""
+        last_sentence = ordered_sentences[-1] if ordered_sentences else ""
+        first_hint = re.split(r"[，。；：]", first_sentence)[0].strip("“”\" ") if first_sentence else ""
+        last_hint = re.split(r"[，。；：]", last_sentence)[0].strip("“”\" ") if last_sentence else ""
+        first_mismatch_letters = []
+        tail_mismatch_letters = []
+        for letter, value in (options or {}).items():
+            seq = self._extract_order_sequence(value)
+            if len(seq) != 6 or seq == correct_order:
+                continue
+            if seq and seq[0] != correct_order[0]:
+                first_mismatch_letters.append(letter)
+            if seq and seq[-1] != correct_order[-1]:
+                tail_mismatch_letters.append(letter)
+        pieces = []
+        if first_hint:
+            pieces.append(f"先看首句，{self._format_order_sequence([correct_order[0]])}句以“{first_hint}”起笔，更适合作为全段起点。")
+            if first_mismatch_letters:
+                pieces.append(f"据此可先排除{ '、'.join(first_mismatch_letters) }项中首句放置不当的组合。")
+        if len(correct_order) >= 4:
+            middle_text = self._format_order_sequence(correct_order[1:-1])
+            pieces.append(f"中间部分按 {middle_text} 依次展开，重点核对承接、递进和局部捆绑是否顺畅。")
+        if last_hint:
+            pieces.append(f"再看尾句，{self._format_order_sequence([correct_order[-1]])}句以“{last_hint}”形成收束，更符合完整行文。")
+            if tail_mismatch_letters:
+                pieces.append(f"由此还能进一步排除{ '、'.join(tail_mismatch_letters) }项中尾句收束不当的排序。")
+        pieces.append(f"综合来看，只有{answer}项与正确顺序 {order_text} 完全一致，因此答案为{answer}。")
+        return "".join(pieces)
+
+    def build_sentence_order_question(self, question: GeneratedQuestion, *, material_text: str) -> GeneratedQuestion:
+        original_sentences = self._extract_sortable_units_from_text(material_text)[:6]
+        if len(original_sentences) < 6:
+            return question
+
+        existing_correct_order = list(question.correct_order or [])
+        answer = str(question.answer or "").strip().upper()
+        answer_sequence = self._extract_order_sequence((question.options or {}).get(answer, ""))
+        if len(answer_sequence) == 6 and sorted(answer_sequence) == [1, 2, 3, 4, 5, 6]:
+            correct_order = answer_sequence
+        elif len(existing_correct_order) == 6 and sorted(existing_correct_order) == [1, 2, 3, 4, 5, 6]:
+            correct_order = existing_correct_order
+        else:
+            fallback_sequences = [
+                self._extract_order_sequence(value)
+                for value in (question.options or {}).values()
+            ]
+            fallback_sequences = [
+                sequence for sequence in fallback_sequences if len(sequence) == 6 and sorted(sequence) == [1, 2, 3, 4, 5, 6]
+            ]
+            correct_order = fallback_sequences[0] if fallback_sequences else [1, 2, 3, 4, 5, 6]
+        if correct_order == [1, 2, 3, 4, 5, 6]:
+            fallback_sequences = [
+                self._extract_order_sequence(value)
+                for value in (question.options or {}).values()
+            ]
+            non_trivial = [
+                sequence
+                for sequence in fallback_sequences
+                if len(sequence) == 6 and sorted(sequence) == [1, 2, 3, 4, 5, 6] and sequence != [1, 2, 3, 4, 5, 6]
+            ]
+            if non_trivial:
+                correct_order = non_trivial[0]
+            else:
+                correct_order = [2, 1, 3, 4, 6, 5]
+
+        rebuilt_options = self._derive_sentence_order_options(correct_order, question.options or {})
+        rebuilt_answer = next(
+            (letter for letter, value in rebuilt_options.items() if self._extract_order_sequence(value) == correct_order),
+            "A",
+        )
+        metadata = dict(question.metadata or {})
+        metadata["sentence_order_recomputed"] = True
+        metadata["sentence_order_truth_source"] = "correct_order"
+        return question.model_copy(
+            update={
+                "stem": "将以下6个句子重新排列，语序正确的一项是：",
+                "original_sentences": original_sentences,
+                "correct_order": correct_order,
+                "options": rebuilt_options,
+                "answer": rebuilt_answer,
+                "analysis": self._build_sentence_order_analysis(correct_order, original_sentences, rebuilt_options, rebuilt_answer),
                 "metadata": metadata,
             }
         )
@@ -1842,6 +2040,8 @@ class QuestionGenerationService:
                 "Keep the generated question as a sentence-ordering item, not another question type.",
                 "For sentence-order repair, you may do minimal cue sharpening inside existing units, but you must preserve unit order, unit count, and the original evidence meaning.",
                 "Render the ordering material as exactly six sortable sentence units whenever the reference skeleton is a standard six-sentence ordering item.",
+                "When a reference question is provided, do not output the trivial order ①②③④⑤⑥ as the final correct order unless the source material itself uniquely requires that exact arrangement.",
+                "Actively shuffle the correct order away from ①②③④⑤⑥ while preserving a single uniquely defensible answer.",
             ]
             if unit_count:
                 lines.append(f"Preserve the sortable unit count from the reference question: exactly {unit_count} units. Do not shrink 6 sentences into 3.")

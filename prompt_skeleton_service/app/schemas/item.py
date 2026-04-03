@@ -26,6 +26,8 @@ class GeneratedQuestion(BaseModel):
     business_subtype: str | None = None
     pattern_id: str | None = None
     stem: str
+    original_sentences: list[str] = Field(default_factory=list)
+    correct_order: list[int] = Field(default_factory=list)
     options: dict[str, str] = Field(default_factory=lambda: {"A": "", "B": "", "C": "", "D": ""})
     answer: str
     analysis: str

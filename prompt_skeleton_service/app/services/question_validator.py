@@ -378,6 +378,14 @@ class QuestionValidatorService:
         orderability = self._build_sentence_order_uniqueness_profile(material_text)
         expected_binding_pair_count = int(structure_constraints.get("expected_binding_pair_count") or 2)
         expected_unique_answer_strength = float(structure_constraints.get("expected_unique_answer_strength") or 0.0)
+        correct_order = list(generated_question.correct_order or [])
+        original_sentences = list(generated_question.original_sentences or [])
+        option_orders = {
+            key: self._extract_order_sequence(value)
+            for key, value in (generated_question.options or {}).items()
+        }
+        answer = str(generated_question.answer or "").strip().upper()
+        analysis_orders = self._extract_order_sequences_from_text(generated_question.analysis or "")
 
         checks = {
             "sentence_order_signal": {"passed": has_order_signal},
@@ -390,6 +398,8 @@ class QuestionValidatorService:
             "sentence_order_exchange_risk": {"passed": orderability["exchange_risk"] <= 0.38, "score": orderability["exchange_risk"]},
             "sentence_order_multi_path_risk": {"passed": orderability["multi_path_risk"] <= 0.40, "score": orderability["multi_path_risk"]},
             "sentence_order_function_overlap": {"passed": orderability["function_overlap_score"] <= 0.46, "score": orderability["function_overlap_score"]},
+            "sentence_order_original_sentences": {"passed": len(original_sentences) == 6, "count": len(original_sentences)},
+            "sentence_order_correct_order": {"passed": len(correct_order) == 6 and sorted(correct_order) == [1, 2, 3, 4, 5, 6], "value": correct_order},
         }
         errors: list[str] = []
         warnings: list[str] = []
@@ -402,6 +412,31 @@ class QuestionValidatorService:
             errors.append("sentence_order material does not preserve enough sortable units.")
         if option_unit_counts and len(set(option_unit_counts)) > 1:
             errors.append("sentence_order options do not use a consistent sortable-unit set.")
+        if len(original_sentences) != 6:
+            errors.append("sentence_order original_sentences must contain exactly 6 units.")
+        if len(correct_order) != 6 or sorted(correct_order) != [1, 2, 3, 4, 5, 6]:
+            errors.append("sentence_order correct_order must be a single 6-unit truth source.")
+        correct_option_letters = [key for key, sequence in option_orders.items() if sequence == correct_order]
+        checks["sentence_order_single_truth_option"] = {"passed": len(correct_option_letters) == 1, "matching_letters": correct_option_letters}
+        if len(correct_option_letters) != 1:
+            errors.append("sentence_order options must contain exactly one option derived from correct_order.")
+        checks["sentence_order_answer_binding"] = {
+            "passed": bool(answer and answer in option_orders and option_orders.get(answer) == correct_order),
+            "answer": answer,
+            "answer_order": option_orders.get(answer),
+            "correct_order": correct_order,
+        }
+        if answer not in option_orders or option_orders.get(answer) != correct_order:
+            errors.append("sentence_order answer does not point to the option derived from correct_order.")
+        checks["sentence_order_analysis_binding"] = {
+            "passed": bool(analysis_orders and analysis_orders[0] == correct_order),
+            "analysis_orders": analysis_orders,
+            "correct_order": correct_order,
+        }
+        if not analysis_orders or analysis_orders[0] != correct_order:
+            errors.append("sentence_order analysis must explicitly explain the same correct_order as the answer.")
+        if len(analysis_orders) > 1 and any(sequence != correct_order for sequence in analysis_orders[1:]):
+            errors.append("sentence_order analysis contains conflicting ordering sequences.")
         if reference_unit_count:
             aligned = option_unit_count == reference_unit_count or material_unit_count == reference_unit_count
             checks["sentence_order_reference_unit_alignment"] = {
@@ -612,6 +647,38 @@ class QuestionValidatorService:
             if digits:
                 counts.append(len(set(digits)))
         return counts
+
+    def _extract_order_sequence(self, text: str) -> list[int]:
+        raw = str(text or "").strip()
+        if not raw:
+            return []
+        circled_map = {
+            "①": 1,
+            "②": 2,
+            "③": 3,
+            "④": 4,
+            "⑤": 5,
+            "⑥": 6,
+            "⑦": 7,
+            "⑧": 8,
+            "⑨": 9,
+            "⑩": 10,
+        }
+        circled = [circled_map[ch] for ch in raw if ch in circled_map]
+        if circled:
+            return circled
+        return [int(value) for value in re.findall(r"\d+", raw)]
+
+    def _extract_order_sequences_from_text(self, text: str) -> list[list[int]]:
+        raw = str(text or "")
+        if not raw:
+            return []
+        sequences: list[list[int]] = []
+        for match in re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]{6,10}", raw):
+            sequence = self._extract_order_sequence(match)
+            if len(sequence) >= 6:
+                sequences.append(sequence[:6])
+        return sequences
 
     def _detect_blank_position(self, material_text: str) -> str:
         text = (material_text or "").strip()
