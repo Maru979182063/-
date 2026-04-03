@@ -1,0 +1,9 @@
+from typing import Any, Protocol
+
+from app.infra.db.orm.job import JobORM
+
+
+class JobRepository(Protocol):
+    def create(self, kind: str, payload: dict[str, Any] | None = None) -> JobORM: ...
+    def get(self, job_id: str) -> JobORM | None: ...
+    def mark_finished(self, job_id: str, status: str, result: dict[str, Any] | None = None) -> JobORM: ...

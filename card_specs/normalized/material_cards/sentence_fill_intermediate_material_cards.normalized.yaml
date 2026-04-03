@@ -1,0 +1,262 @@
+schema_version: material_card_registry.v1
+registry_id: sentence_fill_material_cards_v1
+business_family_id: sentence_fill
+registry_role: intermediate_structure_cards
+notes:
+- 以下8张卡以语句填空题配置文件中的8个pattern为核心原型，并对齐docx真题的空位功能方式。
+- 这些卡是材料层中间结构卡，不直接等于题目生成prompt。
+- question card会将8张材料卡一对一映射到8个填空生成原型。
+cards:
+- card_id: fill_material.opening_summary
+  display_name: 段首总起卡
+  selection_core: 空位位于段首，需要一句总起句统摄后文多个信息维度或分述方向。
+  structures:
+  - 段首空位
+  - 总领后文
+  - 高位概括
+  required_signals:
+    blank_position: opening
+    function_type: opening_summary
+    logic_relation: summary
+    abstraction_level: '>=0.60'
+  preferred_signals:
+  - 后文信息密集且维度较多
+  - 存在明显分述关系
+  - 可被一句话高位统摄
+  avoid_signals:
+  - 后文只单线推进
+  - 后文主题散乱不可压缩
+  - 总起句会抢占后文结论功能
+  candidate_contract:
+    raw_policy: whole_passage 或 multi_paragraph_unit 优先
+    allowed_candidate_types: &id001
+    - whole_passage
+    - multi_paragraph_unit
+    preferred_candidate_types: *id001
+  card_bias: 总起统摄型填空
+  default_generation_archetype: opening_summary
+  distractor_bias:
+  - 维度错位
+  - 只抓局部功能
+  - 主题不匹配
+- card_id: fill_material.bridge_transition
+  display_name: 承上启下卡
+  selection_core: 空位位于段中，需要同时承接前文对象并自然引出后文下一层展开。
+  structures:
+  - 段中桥梁
+  - 双向验证
+  - 承前启后
+  required_signals:
+    blank_position: middle
+    function_type: bridge
+    bidirectional_validation: '>=0.60'
+    logic_relation: continuation_or_transition
+  preferred_signals:
+  - 前文先提出对象/问题
+  - 后文继续说明作用、机制或应用
+  - 空位明显承担过渡功能
+  avoid_signals:
+  - 只需单向连接即可
+  - 后文并未真正展开新层
+  - 前后话题断裂过强
+  candidate_contract:
+    raw_policy: whole_passage 或 closed_span
+    allowed_candidate_types:
+    - whole_passage
+    - closed_span
+    preferred_candidate_types: []
+  card_bias: 承接过渡型填空
+  default_generation_archetype: bridge_transition
+  distractor_bias:
+  - 解释提前
+  - 只承前不启后
+  - 话题断裂
+- card_id: fill_material.middle_focus_shift
+  display_name: 中间承接聚焦卡
+  selection_core: 前文总论较宽，后文开始集中解释某个关键因素，空位负责完成“收束到焦点”。
+  structures:
+  - 段中聚焦
+  - 总到分
+  - 焦点切换
+  required_signals:
+    blank_position: middle
+    function_type: middle_focus_shift
+    logic_relation: focus_shift
+    context_dependency: '>=0.70'
+  preferred_signals:
+  - 前文提出“因素众多/方面很多”等宽口径表述
+  - 后文只聚焦一个关键因素
+  - 空位需要做压缩与收束
+  avoid_signals:
+  - 后文仍是并列展开
+  - 前文未形成总论
+  - 焦点不唯一
+  candidate_contract:
+    raw_policy: closed_span 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - closed_span
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 聚焦转入型填空
+  default_generation_archetype: middle_focus_shift
+  distractor_bias:
+  - 单一局部因素项
+  - 空泛综合项
+  - 焦点错位项
+- card_id: fill_material.middle_explanation
+  display_name: 中间解释卡
+  selection_core: 前文抛出抽象概念或判断，后文举例或细化，空位承担解释桥梁作用。
+  structures:
+  - 概念后置解释
+  - 解释层
+  - 功能桥梁
+  required_signals:
+    blank_position: middle
+    function_type: middle_explanation
+    logic_relation: explanation
+  preferred_signals:
+  - 前文概念需要说明
+  - 后文继续举例或细化
+  - 空位更像定义/解释句
+  avoid_signals:
+  - 空位更像总结句
+  - 空位直接是案例句
+  - 前文概念已被解释完成
+  candidate_contract:
+    raw_policy: closed_span 优先
+    allowed_candidate_types: &id002
+    - closed_span
+    preferred_candidate_types: *id002
+  card_bias: 解释补足型填空
+  default_generation_archetype: middle_explanation
+  distractor_bias:
+  - 总结句错位
+  - 案例句提前
+  - 功能层级跳跃
+- card_id: fill_material.ending_summary
+  display_name: 尾句总结卡
+  selection_core: 空位位于段尾，前文围绕单一问题推进，需要一句总结句统一回收主线任务。
+  structures:
+  - 段尾收束
+  - 主线提炼
+  - 对象绑定
+  required_signals:
+    blank_position: ending
+    function_type: ending_summary
+    logic_relation: summary
+  preferred_signals:
+  - 前文信息点较多但主线单一
+  - 段尾有明显总结需求
+  - 正确项需保留对象与任务指向
+  avoid_signals:
+  - 结尾仍需新增论证
+  - 只有局部结论无需全段回收
+  - 总结过宽导致失焦
+  candidate_contract:
+    raw_policy: whole_passage 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - whole_passage
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 段尾概括型填空
+  default_generation_archetype: ending_summary
+  distractor_bias:
+  - 泛化概括
+  - 偏离主线
+  - 方向相反
+- card_id: fill_material.ending_elevation
+  display_name: 尾句升华卡
+  selection_core: 前文以实验、案例或事实为主，空位位于段尾，需要回收为更高一层的观点或价值判断。
+  structures:
+  - 案例回收
+  - 观点升华
+  - 事实到价值
+  required_signals:
+    blank_position: ending
+    function_type: ending_elevation
+    logic_relation: elevation
+    abstraction_level: '>=0.60'
+  preferred_signals:
+  - 前文案例充分
+  - 尾句适合回到中心观点
+  - 升华不脱离事实依据
+  avoid_signals:
+  - 前文本就是抽象论证
+  - 升华空间过小
+  - 正确项停留在案例层
+  candidate_contract:
+    raw_policy: whole_passage 优先
+    allowed_candidate_types: &id003
+    - whole_passage
+    preferred_candidate_types: *id003
+  card_bias: 案例升华型填空
+  default_generation_archetype: ending_elevation
+  distractor_bias:
+  - 跑题比较
+  - 单一品质项
+  - 物种/对象差异项
+- card_id: fill_material.inserted_reference_match
+  display_name: 定位插入卡
+  selection_core: 空位为插入型，需要同时匹配前后文中的指代对象、主语或理论说明范围。
+  structures:
+  - 插入定位
+  - 指代匹配
+  - 前后双卡位
+  required_signals:
+    blank_position: inserted
+    function_type: inserted_reference
+    logic_relation: reference_match
+    reference_dependency: '>=0.60'
+  preferred_signals:
+  - 前文提出理论/对象
+  - 后文继续解释其适用范围
+  - 候选句能同时卡住前后文
+  avoid_signals:
+  - 无明确指代对象
+  - 只能承前不能启后
+  - 语义近似但位置不对
+  candidate_contract:
+    raw_policy: insertion_context_unit 或 closed_span
+    allowed_candidate_types:
+    - closed_span
+    - insertion_context_unit
+    preferred_candidate_types: []
+  card_bias: 插入定位型填空
+  default_generation_archetype: inserted_reference_match
+  distractor_bias:
+  - 指代缺失
+  - 只承前不启后
+  - 勉强承接但无法引后文
+- card_id: fill_material.comprehensive_multi_match
+  display_name: 综合多维匹配卡
+  selection_core: 空位同时受位置、逻辑、指代等多重条件制约，必须做综合判断而非单维定位。
+  structures:
+  - 多条件叠加
+  - 高依赖
+  - 综合判定
+  required_signals:
+    function_type: comprehensive_match
+    logic_relation: multi_constraint
+    context_dependency: '>=0.70'
+    bidirectional_validation: '>=0.70'
+    reference_dependency: '>=0.70'
+  preferred_signals:
+  - 至少两个以上线索共同决定答案
+  - 既有对象限制又有结构位置要求
+  - 单看关键词无法作答
+  avoid_signals:
+  - 只需单维定位即可
+  - 逻辑或位置约束很弱
+  - 指代关系模糊不可判定
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id004
+    - multi_paragraph_unit
+    preferred_candidate_types: *id004
+  card_bias: 综合高阶型填空
+  default_generation_archetype: comprehensive_multi_match
+  distractor_bias:
+  - 仅指代匹配
+  - 仅逻辑匹配
+  - 仅结构匹配
+normalized_from: sentence_fill_intermediate_material_cards.yaml

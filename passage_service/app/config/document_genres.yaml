@@ -1,0 +1,32 @@
+version: "genre.v1"
+default_genre: "通用说明文"
+
+genres:
+  - label: "政策文"
+    title_keywords: ["意见", "方案", "办法", "通知", "规定", "决定", "若干措施", "规划"]
+    text_keywords: ["贯彻落实", "政策措施", "制度安排", "有关部门", "实施意见", "工作机制"]
+    source_keywords: ["国务院", "政府", "人民网", "新华网"]
+  - label: "法条文"
+    title_keywords: ["条例", "法", "司法解释", "法律责任", "实施细则"]
+    text_keywords: ["依照", "本条", "应当", "不得", "法律责任", "条款"]
+    source_keywords: ["最高人民法院", "最高人民检察院", "中国人大网"]
+  - label: "科普文"
+    title_keywords: ["为什么", "如何", "揭秘", "原理", "知识", "科普"]
+    text_keywords: ["科学家", "实验", "研究发现", "原理", "机制", "数据表明"]
+    source_keywords: ["科普中国", "中国科协", "新华社"]
+  - label: "评论文"
+    title_keywords: ["评论", "时评", "人民论坛", "观点", "锐评"]
+    text_keywords: ["值得警惕", "启示", "折射出", "说明了", "提醒我们", "应当看到"]
+    source_keywords: ["人民网", "光明网"]
+  - label: "新闻报道"
+    title_keywords: ["消息", "报道", "观察", "现场", "纪实"]
+    text_keywords: ["记者", "获悉", "报道称", "据了解", "发布会", "消息人士"]
+    source_keywords: ["新华社", "人民网", "光明网", "央视网"]
+  - label: "通知公告"
+    title_keywords: ["公告", "通报", "公示", "名单", "提示"]
+    text_keywords: ["特此公告", "现将", "公示如下", "通报如下", "请按要求"]
+    source_keywords: ["政府", "教育部", "财政部"]
+  - label: "经验材料"
+    title_keywords: ["做法", "经验", "案例", "启示录", "样本"]
+    text_keywords: ["实践中", "探索出", "典型做法", "经验表明", "案例显示"]
+    source_keywords: ["人民网", "半月谈", "中国组织人事报"]

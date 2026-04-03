@@ -1,0 +1,122 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: turning_relation_focus__main_idea
+  display_name: 转折关系-转折后是重点
+  description: 适用于存在显式转折、重心后移的文段，优先抓转折后的核心判断。
+  mother_family_id: main_idea
+  business_subtype: center_understanding
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 转折关系
+    - 转折后重点
+
+feature_signature:
+  relation_type: 转折关系
+  relation_focus: 转折之后是重点
+  typical_formats:
+    - 虽然……但是……
+    - 尽管……可是……
+  explicit_markers:
+    cause_markers: []
+    conclusion_markers:
+      - 但是
+      - 然而
+      - 不过
+      - 却
+      - 其实
+      - 事实上
+      - 实际上
+    variant_markers: []
+  structural_features:
+    conclusion_is_core: true
+    conclusion_position: tail_or_late
+    sentence_position_hint: after_turning
+    needs_multi_relation_analysis: false
+  distractor_features:
+    strong_modes:
+      - middle_conclusion
+      - scope_shift
+      - fabrication
+    non_key_content_sources:
+      - 转折前内容
+      - 围绕解释说明的表述
+  extraction_hints:
+    require_explicit_marker: true
+    require_complete_meaning: true
+    min_sentence_count: 2
+    preferred_paragraph_window:
+      - 1
+      - 2
+
+retrieval_profile:
+  hard_filters:
+    logic_relations:
+      - 转折
+    require_explicit_marker: true
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 评论文
+      - 政策文
+      - 宣传文
+      - 科普文
+    preferred_material_structures:
+      - 背景-核心结论
+      - 观点-论证
+    preferred_conclusion_position:
+      - tail_or_late
+    preferred_markers:
+      - 但是
+      - 然而
+      - 不过
+  ranking_weights:
+    relation_match: 0.35
+    marker_match: 0.25
+    structural_match: 0.20
+    semantic_completeness: 0.10
+    readability: 0.10
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: true
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: main_idea
+  business_subtype: center_understanding
+  pattern_candidates:
+    - conclusion_sentence_refinement
+    - whole_passage_integration
+  type_slots:
+    structure_type: turning
+    main_point_source: whole_passage
+    abstraction_level: medium
+    coverage_requirement: integrated
+    target_form: central_meaning
+    distractor_modes:
+      - middle_conclusion
+      - scope_shift
+      - fabrication
+    distractor_strength: high
+    statement_visibility: medium
+  prompt_extras:
+    business_feature_card_id: turning_relation_focus__main_idea
+    business_feature_card_label: 转折关系-转折后是重点
+    retrieval_mode: business_feature_card
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations:
+      - 转折
+    position_roles:
+      - 尾段总结
+    material_structure_label: 背景-核心结论
+  expected_business_fields:
+    feature_type: 转折关系
+    conclusion_focus: true
+    conclusion_position: tail_or_late
+    explicit_marker_group:
+      - 但是
+      - 然而
+      - 不过

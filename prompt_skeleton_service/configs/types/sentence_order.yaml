@@ -1,0 +1,521 @@
+type_id: sentence_order
+display_name: 语句排序题
+enabled: true
+aliases:
+  - 语句排序
+  - 排序题
+  - 句群排序
+  - 语段排序
+
+task_definition: >
+  基于给定句群，为语句排序题生成稳定的 prompt 骨架。
+  核心任务不是概括主旨，而是识别句群内部的先后接口：
+  包括首句合法性、中段承接与捆绑关系、尾句收束功能以及板块推进顺序。
+  正确项必须体现“首句可起、局部可接、整体可收”的顺序逻辑；
+  错误项应在局部仍显通顺的前提下，通过首句错置、尾句错置、捆绑断裂、
+  板块调换或层级错位制造干扰。
+
+default_pattern_id: dual_anchor_lock
+
+difficulty_target_profiles:
+  easy:
+    complexity: { min: 0.20, max: 0.42 }
+    ambiguity: { min: 0.18, max: 0.36 }
+    reasoning_depth: { min: 0.20, max: 0.42 }
+    distractor_similarity: { min: 0.22, max: 0.50 }
+  medium:
+    complexity: { min: 0.38, max: 0.62 }
+    ambiguity: { min: 0.32, max: 0.56 }
+    reasoning_depth: { min: 0.38, max: 0.64 }
+    distractor_similarity: { min: 0.45, max: 0.72 }
+  hard:
+    complexity: { min: 0.56, max: 0.84 }
+    ambiguity: { min: 0.48, max: 0.78 }
+    reasoning_depth: { min: 0.56, max: 0.86 }
+    distractor_similarity: { min: 0.62, max: 0.90 }
+
+skeleton:
+  anchor_type: sentence_group_interfaces
+  operation_type: reorder
+  target_type: coherent_sequence
+
+slot_schema:
+  opening_anchor_type:
+    type: string
+    required: false
+    default: explicit_topic
+    allowed:
+      - explicit_topic
+      - upper_context_link
+      - viewpoint_opening
+      - problem_opening
+      - weak_opening
+      - none
+    description: 首句锚点类型
+
+  opening_signal_strength:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - high
+      - medium
+      - low
+      - none
+    description: 首句可识别程度
+
+  middle_structure_type:
+    type: string
+    required: false
+    default: local_binding
+    allowed:
+      - local_binding
+      - parallel_expansion
+      - cause_effect_chain
+      - problem_solution_blocks
+      - mixed_layers
+    description: 中段主要结构关系
+
+  local_binding_strength:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - high
+      - medium
+      - low
+    description: 局部捆绑关系清晰度
+
+  closing_anchor_type:
+    type: string
+    required: false
+    default: conclusion
+    allowed:
+      - conclusion
+      - summary
+      - call_to_action
+      - case_support
+      - none
+    description: 尾句锚点类型
+
+  closing_signal_strength:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - high
+      - medium
+      - low
+      - none
+    description: 尾句可识别程度
+
+  block_order_complexity:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 是否存在板块级顺序判断
+
+  distractor_modes:
+    type: array
+    required: false
+    default:
+      - wrong_opening
+      - local_binding_break
+      - wrong_closing
+    allowed:
+      - wrong_opening
+      - wrong_closing
+      - local_binding_break
+      - block_swap
+      - connector_mislead
+      - parallel_misorder
+      - summary_misplace
+      - reason_fronting
+      - action_fronting
+    description: 错误项模式
+
+  distractor_strength:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 错误项迷惑强度
+
+default_slots:
+  opening_anchor_type: explicit_topic
+  opening_signal_strength: medium
+  middle_structure_type: local_binding
+  local_binding_strength: medium
+  closing_anchor_type: conclusion
+  closing_signal_strength: medium
+  block_order_complexity: medium
+  distractor_modes:
+    - wrong_opening
+    - local_binding_break
+    - wrong_closing
+  distractor_strength: high
+
+fewshot_policy:
+  enabled: true
+  bind_to_difficulty: false
+  max_examples: 1
+  mode: structure_only
+
+default_fewshot:
+  title: 语句排序题结构示例
+  content: >
+    示例只用于提示“排序题要同时满足首句合法、中段可接、尾句可收”，
+    不用于绑定具体难度。
+
+patterns:
+  - pattern_id: dual_anchor_lock
+    pattern_name: 首尾双锚点锁序型
+    enabled: true
+    match_rules:
+      opening_anchor_type:
+        - explicit_topic
+        - viewpoint_opening
+      closing_anchor_type:
+        - conclusion
+        - summary
+      opening_signal_strength:
+        - high
+        - medium
+      closing_signal_strength:
+        - high
+        - medium
+
+    control_logic:
+      difficulty_source: 首句+尾句双锚点
+      option_confusion: 中
+      control_levers:
+        passage: 首句应有较强起笔特征，尾句应有总结或结论信号
+        correct_option: 先锁定首句，再利用尾句功能和局部捆绑推导完整顺序
+        wrong_options:
+          - 设置解释句或展开句误作首句
+          - 设置结论句错位
+          - 保留部分中段顺序正确但破坏首尾接口
+      special_fields:
+        reverse_inference_key: 先排除不能首句和不能尾句的句子，再处理中段局部链条
+
+    generation_logic:
+      generation_core: 首尾双锚点锁序型排序题制作
+      processing_type: 首句判断+尾句判断+局部捆绑
+      correct_logic: 正确顺序必须同时满足首句合法、尾句可收束、中段局部关系不断裂
+      high_freq_traps:
+        - 把解释句误当首句
+        - 把展开句误当首句
+        - 忽略结论句应在末尾
+      distractor_pattern: 设置首句错误项、尾句错置项和局部顺序看似正确但整体接口错误的选项
+      analysis_steps:
+        step1_首句排除: 排除依赖前文、解释、转折后半句等不适合作首句的句子
+        step2_尾句识别: 找出带总结、结论、行动号召色彩的尾句
+        step3_局部捆绑: 建立紧邻关系或小链条
+        step4_整体锁序: 用首尾双锚点锁定整体顺序
+
+    difficulty_rules:
+      complexity:
+        base: 0.34
+      ambiguity:
+        by_slot:
+          opening_signal_strength:
+            high: 0.24
+            medium: 0.38
+            low: 0.54
+          closing_signal_strength:
+            high: 0.24
+            medium: 0.36
+            low: 0.50
+      reasoning_depth:
+        by_slot:
+          middle_structure_type:
+            local_binding: 0.34
+            mixed_layers: 0.52
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.28
+            medium: 0.46
+            high: 0.64
+
+    fewshot_example:
+      title: 语句排序题示例-首尾双锚点锁序型
+      fit_slots:
+        opening_anchor_type: viewpoint_opening
+        opening_signal_strength: high
+        middle_structure_type: cause_effect_chain
+        closing_anchor_type: conclusion
+        closing_signal_strength: high
+      input_brief: >
+        句群先提出“人的身体是人力资本正常发挥的必要条件”这一总领判断，
+        接着分别说明生育过程的生理变化、育后抚养带来的精力消耗，以及责任超载的结果，
+        最后用“因此”得出回归职场后注意力不集中、工作懈怠的结论。
+      question_brief: 对文章第四段进行排序最准确的是（ ）。
+      options_brief:
+        - 一组能保证总领句在前、结论句在后的顺序
+        - 一组把解释句提前、打乱首尾接口的顺序
+        - 一组把结论句放中间的顺序
+        - 一组局部通顺但整体逻辑未闭合的顺序
+      answer: 先总领、再解释生理与精力消耗、再指出责任超载、最后得出“因此”结论的顺序
+      rationale_brief: >
+        这类题关键是先锁定能作首句的总领判断，再识别带“因此”的结论句作尾句，
+        中间再按因果链和局部承接关系补足；错项常表现为首句错、尾句错或局部链条断裂。
+
+  - pattern_id: carry_parallel_expand
+    pattern_name: 承接并列展开型
+    enabled: true
+    match_rules:
+      opening_anchor_type:
+        - upper_context_link
+      middle_structure_type:
+        - parallel_expansion
+      closing_anchor_type:
+        - summary
+      block_order_complexity:
+        - medium
+        - high
+
+    control_logic:
+      difficulty_source: 首句承接+并列展开接口
+      option_confusion: 高
+      control_levers:
+        passage: 首句需承接上文，中段存在并列与补充关系，尾句有总结提升
+        correct_option: 先识别承接句，再按并列/补充接口排列中段，最后落到总结句
+        wrong_options:
+          - 让并列项局部顺序错位
+          - 让中段局部看似成立但断开承接链
+          - 让总结句提前
+      special_fields:
+        reverse_inference_key: 先判断谁能承接上文，再看并列项之间是否是同层展开，最后确定总结句
+
+    generation_logic:
+      generation_core: 承接并列展开型排序题制作
+      processing_type: 承接上文+并列关系排序
+      correct_logic: 正确顺序应体现“承接→并列/补充→总结”的递进过程
+      high_freq_traps:
+        - 承接句后接话题漂移
+        - 转折后半句误作首句
+        - 并列关系错位
+      distractor_pattern: 围绕承接句合法性、并列项错位和总结句前置设置干扰
+      analysis_steps:
+        step1_承接句识别: 找出真正能承接上文的句子
+        step2_并列关系排序: 判断同层展开句之间的接口和次序
+        step3_补充链条: 识别解释、补充或递进关系
+        step4_总结收束: 用总结句完成排序闭合
+
+    difficulty_rules:
+      complexity:
+        base: 0.50
+      ambiguity:
+        by_slot:
+          opening_signal_strength:
+            medium: 0.46
+            low: 0.62
+      reasoning_depth:
+        by_slot:
+          middle_structure_type:
+            parallel_expansion: 0.62
+            mixed_layers: 0.72
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.62
+            high: 0.80
+
+    fewshot_example:
+      title: 语句排序题示例-承接并列展开型
+      fit_slots:
+        opening_anchor_type: upper_context_link
+        middle_structure_type: parallel_expansion
+        closing_anchor_type: summary
+        block_order_complexity: high
+      input_brief: >
+        前一段已经介绍了中华创世神话成果展，待排序句群从“从展览出发”继续承接，
+        先并列写上海后续多项展示安排，再补充出版、连环画、广播剧等衍生成果，
+        最后回到综合大展对整个文化工程的总体呈现。
+      question_brief: 文章第三段排列正确的顺序应是（ ）。
+      options_brief:
+        - 一组先承接展览，再并列扩写，再回到整体总结的顺序
+        - 一组把并列项局部顺序打乱的顺序
+        - 一组把总结句提前的顺序
+        - 一组未能承接上文展览话题的顺序
+      answer: 先承接上文展览，再并列列出多项扩展展示，最后用整体呈现句收束的顺序
+      rationale_brief: >
+        这类题关键是先找能承接上文的话头句，再理清并列扩展项之间的顺序，最后把总结或统摄性句子放在后部；
+        错项常表现为承接句缺失、并列项错位或总结句提前。
+
+  - pattern_id: viewpoint_reason_action
+    pattern_name: 观点原因对策链型
+    enabled: true
+    match_rules:
+      opening_anchor_type:
+        - viewpoint_opening
+      middle_structure_type:
+        - cause_effect_chain
+      closing_anchor_type:
+        - call_to_action
+      block_order_complexity:
+        - medium
+
+    control_logic:
+      difficulty_source: 观点起笔+原因链+对策落点
+      option_confusion: 中
+      control_levers:
+        passage: 首句以观点或判断起笔，中段补原因、让步或条件，末段落到行动/对策
+        correct_option: 保持“观点→原因/条件→对策”的功能序列
+        wrong_options:
+          - 让原因句前置
+          - 让行动号召提前
+          - 把让步句或解释句误作开头
+      special_fields:
+        reverse_inference_key: 先判断文段是“先立观点”还是“先铺事实”，若是观点起笔，后文通常补原因和对策
+
+    generation_logic:
+      generation_core: 观点原因对策链型排序题制作
+      processing_type: 观点→原因→让步/条件→对策
+      correct_logic: 正确顺序必须先立观点，再补因果或条件，最后落到行动或策略
+      high_freq_traps:
+        - 让步句开头
+        - 原因句前置
+        - 对策句提前
+      distractor_pattern: 用不能首句句型和功能顺序错位共同制造干扰
+      analysis_steps:
+        step1_观点句定位: 找到总领观点句
+        step2_原因链识别: 排出原因、让步、条件之间的承接顺序
+        step3_行动句收尾: 将对策/号召放在逻辑终点
+        step4_错位排除: 排除功能顺序错置的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.44
+      ambiguity:
+        by_slot:
+          opening_signal_strength:
+            high: 0.30
+            medium: 0.42
+            low: 0.56
+      reasoning_depth:
+        by_slot:
+          middle_structure_type:
+            cause_effect_chain: 0.56
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.54
+            high: 0.72
+
+  - pattern_id: problem_solution_case_blocks
+    pattern_name: 问题对策案例板块型
+    enabled: true
+    match_rules:
+      opening_anchor_type:
+        - problem_opening
+      middle_structure_type:
+        - problem_solution_blocks
+      closing_anchor_type:
+        - case_support
+      block_order_complexity:
+        - high
+
+    control_logic:
+      difficulty_source: 板块顺序+局部正确干扰
+      option_confusion: 中高
+      control_levers:
+        passage: 先问题块，再对策块，最后案例或补充说明，块间功能差异清楚但可局部混淆
+        correct_option: 保持问题→对策→案例/补充的整体块顺序
+        wrong_options:
+          - 整体调换问题块与对策块
+          - 保留某一块内部顺序正确但交换块顺序
+          - 用指代句或转折句制造假首句
+      special_fields:
+        reverse_inference_key: 不是只看单句能否相接，而是先判断文段整体属于哪个功能板块，再排块顺序
+
+    generation_logic:
+      generation_core: 问题对策案例板块型排序题制作
+      processing_type: 问题展开+对策+举例/案例
+      correct_logic: 正确顺序必须满足板块级逻辑推进，局部通顺不能替代整体顺序正确
+      high_freq_traps:
+        - 转折句开头
+        - 指代句开头
+        - 问题对策倒置
+      distractor_pattern: 保留块内正确顺序，只交换块间位置，提升干扰强度
+      analysis_steps:
+        step1_识别板块: 将句群划分为问题块、对策块、案例块
+        step2_锁定首句: 选择能自然进入问题块的句子
+        step3_板块排序: 先问题后对策，再案例或补充
+        step4_局部校验: 检查块内顺序是否顺畅
+
+    difficulty_rules:
+      complexity:
+        base: 0.58
+      ambiguity:
+        by_slot:
+          block_order_complexity:
+            low: 0.36
+            medium: 0.50
+            high: 0.66
+      reasoning_depth:
+        by_slot:
+          middle_structure_type:
+            problem_solution_blocks: 0.66
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.62
+            high: 0.80
+
+  - pattern_id: phrase_order_variant
+    pattern_name: 短语内部排序变体
+    enabled: false
+    match_rules:
+      opening_anchor_type:
+        - none
+      closing_anchor_type:
+        - none
+
+    control_logic:
+      difficulty_source: 语义常识+固定搭配+动作流程
+      option_confusion: 高
+      control_levers:
+        passage: 不使用句群首尾结构，而使用并列短语或固定表达内部次序
+        correct_option: 保持动作流程、价值顺序或语体习惯上的自然先后
+        wrong_options:
+          - 语义表面通顺但动作顺序不合逻辑
+          - 搭配习惯不自然
+          - 价值排序失衡
+      special_fields:
+        reverse_inference_key: 这类题不看首尾，而看内部短语顺序是否符合语义流程和语体习惯
+
+    generation_logic:
+      generation_core: 短语内部排序变体制作
+      processing_type: 短语逻辑顺序判断
+      correct_logic: 正确项应体现自然的动作链、搭配链或价值排序，而不是单纯语义相关
+      high_freq_traps:
+        - 语义顺序错
+        - 表达习惯错误
+        - 价值排序错误
+      distractor_pattern: 用“看似通顺但不合流程”的选项做强迷惑干扰
+      analysis_steps:
+        step1_识别核心链条: 找出动作或价值递进顺序
+        step2_比较选项内部: 对比选项内部短语顺序
+        step3_排除伪通顺: 排除表面顺但逻辑不合的表达
+
+    difficulty_rules:
+      complexity:
+        base: 0.52
+      ambiguity:
+        base: 0.68
+      reasoning_depth:
+        base: 0.58
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.72
+            high: 0.86

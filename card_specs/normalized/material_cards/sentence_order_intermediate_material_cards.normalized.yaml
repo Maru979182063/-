@@ -1,0 +1,204 @@
+schema_version: material_card_registry.v1
+registry_id: sentence_order_material_cards_v1
+business_family_id: sentence_order
+registry_role: intermediate_structure_cards
+notes:
+- 以下5张卡直接来自用户提供的语句排序题配置文件中的5个核心 pattern，并与题目控制/制作/选段逻辑对齐。
+- 这些卡是材料层中间结构卡，不直接等于题目生成 pattern，但一一映射到排序题的生成原型。
+cards:
+- card_id: order_material.dual_anchor_lock
+  display_name: 首尾双锚点锁序卡
+  selection_core: 同时具备可识别首句与尾句信号，且中段存在局部捆绑的小链条句群。
+  structures:
+  - 观点+解释+结论
+  - 总领+展开+总结
+  - 首尾显性锚点
+  required_signals:
+    opening_signal_strength: '>=0.68'
+    closing_signal_strength: '>=0.68'
+    unique_opener_score: '>=0.62'
+    binding_pair_count: '>=2'
+    exchange_risk: <=0.32
+    function_overlap_score: <=0.42
+    local_binding_strength: '>=0.60'
+    discourse_progression_strength: '>=0.58'
+    context_closure_score: '>=0.62'
+    sequence_integrity: '>=0.66'
+  preferred_signals:
+  - 总领句显性
+  - 结论词
+  - 因此/总之/可见
+  - 解释句依附性强
+  avoid_signals:
+  - 所有句子并列且都可开头
+  - 不存在明显尾句功能
+  - 全段仅靠常识硬排
+  - 政策要求句连续堆叠
+  - 多句功能角色高度相似
+  candidate_contract:
+    raw_policy: sentence_block_group 优先
+    allowed_candidate_types: &id001
+    - sentence_block_group
+    preferred_candidate_types: *id001
+  card_bias: 先首句再尾句再处理中段
+  default_generation_archetype: dual_anchor_lock
+  distractor_bias:
+  - 解释句误作首句
+  - 结论句前置
+  - 中段局部顺序正确但首尾接口错误
+- card_id: order_material.carry_parallel_expand
+  display_name: 承接并列展开卡
+  selection_core: 首句承接上文，中段为并列扩写或补充，末段有总结/统摄句的句群。
+  structures:
+  - 承接+并列+总结
+  - 上文衔接+扩写
+  - 并列展开后归拢
+  required_signals:
+    opening_anchor_type: upper_context_link
+    middle_structure_type: parallel_expansion
+    unique_opener_score: '>=0.58'
+    binding_pair_count: '>=2'
+    exchange_risk: <=0.28
+    function_overlap_score: <=0.34
+    block_order_complexity: '>=0.62'
+    discourse_progression_strength: '>=0.60'
+    context_closure_score: '>=0.60'
+    sequence_integrity: '>=0.64'
+  preferred_signals:
+  - 从…出发
+  - 此外/同时/还
+  - 不仅…还
+  - 而
+  - 总结句
+  avoid_signals:
+  - 首句无衔接性
+  - 并列点完全可互换
+  - 结尾没有统摄回收
+  - 多句都是独立成立的执行要求句
+  - 句间主要靠主题相关而非真实承接
+  candidate_contract:
+    raw_policy: sentence_block_group，仅适用于有上文承接的闭合段
+    allowed_candidate_types:
+    - sentence_block_group
+    preferred_candidate_types: []
+  card_bias: 先承接句，再并列扩写，最后总体收束
+  default_generation_archetype: carry_parallel_expand
+  distractor_bias:
+  - 并列项错位
+  - 承接句缺失
+  - 总结句前置
+- card_id: order_material.viewpoint_reason_action
+  display_name: 观点原因对策链卡
+  selection_core: 以观点或价值判断起笔，中段补原因/条件/让步，末段落到对策或号召的议论链条。
+  structures:
+  - 观点→原因→对策
+  - 价值判断→解释→行动
+  - 评论推进型
+  required_signals:
+    opening_anchor_type: viewpoint_opening
+    middle_structure_type: cause_effect_chain
+    closing_anchor_type: call_to_action
+    unique_opener_score: '>=0.60'
+    binding_pair_count: '>=2'
+    exchange_risk: <=0.26
+    function_overlap_score: <=0.30
+    discourse_progression_strength: '>=0.66'
+    context_closure_score: '>=0.64'
+    sequence_integrity: '>=0.62'
+  preferred_signals:
+  - 必须
+  - 应当
+  - 无论如何
+  - 因此
+  - 当然
+  - 因为
+  avoid_signals:
+  - 行动号召过早出现
+  - 首句是让步/解释句
+  - 全段没有策略落点
+  - 评论摘句堆叠且多句都可独立成立
+  - 多句共享相近功能角色
+  candidate_contract:
+    raw_policy: sentence_block_group
+    allowed_candidate_types:
+    - sentence_block_group
+    preferred_candidate_types: []
+  card_bias: 先立观点，再补原因或限制，最后给行动落点
+  default_generation_archetype: viewpoint_reason_action
+  distractor_bias:
+  - 原因句前置
+  - 让步句开头
+  - 对策句提前
+- card_id: order_material.problem_solution_case_blocks
+  display_name: 问题对策案例板块卡
+  selection_core: 存在明显问题块、对策块和案例/补充块，排序依赖板块级先后而非单句接口。
+  structures:
+  - 问题→对策→案例
+  - 问题→原则→举例
+  - 板块式推进
+  required_signals:
+    opening_anchor_type: problem_opening
+    middle_structure_type: problem_solution_blocks
+    unique_opener_score: '>=0.58'
+    binding_pair_count: '>=2'
+    exchange_risk: <=0.30
+    function_overlap_score: <=0.34
+    block_order_complexity: '>=0.72'
+    discourse_progression_strength: '>=0.66'
+    context_closure_score: '>=0.66'
+    sequence_integrity: '>=0.64'
+  preferred_signals:
+  - 问题判断
+  - 限制说明
+  - 原则句
+  - 例如/比如/另外
+  avoid_signals:
+  - 问题与对策高度混杂不可分块
+  - 只有单一线性递进
+  - 案例并非末段补充
+  - 缺乏明确收束句
+  candidate_contract:
+    raw_policy: sentence_block_group
+    allowed_candidate_types:
+    - sentence_block_group
+    preferred_candidate_types: []
+  card_bias: 先问题后对策，最后案例/补充
+  default_generation_archetype: problem_solution_case_blocks
+  distractor_bias:
+  - 整体块顺序交换
+  - 块内正确块间错误
+  - 假首句由指代句/转折句制造
+- card_id: order_material.phrase_order_variant
+  display_name: 短语内部排序变体卡
+  selection_core: 不依赖首尾锚点，而依赖固定搭配、动作流程或价值排序恢复内部短语顺序。
+  structures:
+  - 句内排序
+  - 固定搭配
+  - 价值递进
+  - 动作流程
+  required_signals:
+    opening_anchor_type: none
+    closing_anchor_type: none
+    block_order_complexity: '>=0.76'
+    sequence_integrity: '>=0.58'
+  preferred_signals:
+  - 并列短语
+  - 政策表达惯例
+  - 动作先后明确
+  - 语义前提链
+  avoid_signals:
+  - 短语间完全可互换
+  - 只有字面同义替换
+  - 不需要语义流程判断
+  candidate_contract:
+    raw_policy: phrase_or_clause_group
+    allowed_candidate_types:
+    - phrase_or_clause_group
+    preferred_candidate_types: []
+  card_bias: 比较内部语义流程，不看首尾
+  default_generation_archetype: phrase_order_variant
+  distractor_bias:
+  - 似通顺但不合语义流程
+  - 固定搭配顺序错
+  - 价值排序错
+normalized_from: sentence_order_intermediate_material_cards.yaml

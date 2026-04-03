@@ -1,0 +1,103 @@
+schema_version: signal_layer.v1
+layer_id: sentence_fill_signal_layer_v1
+business_family_id: sentence_fill
+layer_role: neutral_signal_profile
+notes:
+- 本层只描述语句填空题真正需要的中性信号，不直接给出主族结论。
+- 主族只做检索桶；真正执行的是中间结构卡与题卡。
+signals:
+- signal_id: blank_position
+  type: enum
+  description: 空位位于段首、段中、段尾、插入位或混合复杂位置。
+  allowed_values:
+  - opening
+  - middle
+  - ending
+  - inserted
+  - mixed
+- signal_id: function_type
+  type: enum
+  description: 空位在段落中的功能身份。
+  allowed_values:
+  - opening_summary
+  - bridge
+  - middle_explanation
+  - middle_focus_shift
+  - ending_summary
+  - ending_elevation
+  - inserted_reference
+  - comprehensive_match
+- signal_id: logic_relation
+  type: enum
+  description: 空位句与前后文之间的主要逻辑关系。
+  allowed_values:
+  - continuation
+  - transition
+  - explanation
+  - focus_shift
+  - summary
+  - elevation
+  - reference_match
+  - multi_constraint
+- signal_id: context_dependency
+  type: float
+  description: 正确项对上下文依赖的强弱；越高表示脱离上下文越难判断。
+- signal_id: bidirectional_validation
+  type: float
+  description: 是否必须同时验证承前与启后；越高表示不能只看单侧。
+- signal_id: reference_dependency
+  type: float
+  description: 是否涉及指代对象、主语、理论范围或概念匹配。
+- signal_id: abstraction_level
+  type: float
+  description: 正确项抽象程度；越高越偏总括、升华或高位总结。
+- signal_id: backward_link_strength
+  type: float
+  description: 候选句对前文承接的紧密程度。
+- signal_id: forward_link_strength
+  type: float
+  description: 候选句对后文引出的有效程度。
+- signal_id: object_match_strength
+  type: float
+  description: 候选句中的核心对象、代词或概念是否与前后文一致。
+- signal_id: summary_need_strength
+  type: float
+  description: 文段当前位置是否存在明显的总起或总结需求。
+- signal_id: focus_shift_strength
+  type: float
+  description: 文段是否从总论转向单一焦点，需要收束后文着力点。
+- signal_id: explanation_need_strength
+  type: float
+  description: 前文概念或判断是否需要解释层补足。
+- signal_id: elevation_space_strength
+  type: float
+  description: 案例/事实后是否有足够空间回收到更高层观点。
+- signal_id: insertion_fit_strength
+  type: float
+  description: 某句作为插入句时，在该位置的卡位适配程度。
+- signal_id: multi_constraint_density
+  type: float
+  description: 同时约束答案的线索密度；越高表示越像综合多维匹配题。
+recommended_candidate_types:
+- whole_passage
+- closed_span
+- multi_paragraph_unit
+- insertion_context_unit
+candidate_profile_template:
+  blank_position: middle
+  function_type: bridge
+  logic_relation: continuation
+  context_dependency: 0.5
+  bidirectional_validation: 0.5
+  reference_dependency: 0.2
+  abstraction_level: 0.5
+  backward_link_strength: 0.5
+  forward_link_strength: 0.5
+  object_match_strength: 0.5
+  summary_need_strength: 0.5
+  focus_shift_strength: 0.0
+  explanation_need_strength: 0.0
+  elevation_space_strength: 0.0
+  insertion_fit_strength: 0.0
+  multi_constraint_density: 0.0
+normalized_from: sentence_fill_signal_layer.yaml

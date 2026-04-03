@@ -1,0 +1,71 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_order__timeline_action_sequence__abstract
+  display_name: 语句排序-时间与行动顺序
+  description: 依靠时间脉络、步骤顺序、动作先后来判断句群顺序的业务卡。
+  mother_family_id: sentence_order
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句排序题
+    - 时间脉络
+    - 行动顺序
+    - 先后关系
+
+feature_signature:
+  relation_type: 时间与行动顺序
+  relation_focus: 判断时间推进与步骤先后
+  typical_formats:
+    - 将以上几个句子重新排列，语序正确的是……
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 说明文
+    preferred_material_structures:
+      - 时间推进
+      - 过程说明
+      - 现象-分析
+    preferred_markers:
+      - 起初
+      - 后来
+      - 随后
+      - 首先
+      - 其次
+      - 最后
+  ranking_weights:
+    relation_match: 0.26
+    marker_match: 0.16
+    structural_match: 0.22
+    semantic_completeness: 0.15
+    readability: 0.07
+    temporal_order_strength: 0.08
+    action_sequence_irreversibility: 0.06
+
+slot_projection:
+  question_type: sentence_order
+  business_subtype: null
+  pattern_candidates:
+    - carry_parallel_expand
+    - dual_anchor_lock
+  type_slots:
+    opening_anchor_type: explicit_topic
+    opening_signal_strength: medium
+    middle_structure_type: parallel_expansion
+    local_binding_strength: medium
+    closing_anchor_type: summary
+    closing_signal_strength: medium
+    block_order_complexity: high
+    distractor_modes:
+      - parallel_misorder
+      - block_swap
+      - wrong_closing
+    distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_order__timeline_action_sequence__abstract
+    business_feature_card_label: 语句排序-时间与行动顺序
+    business_core_rule: 先看时间或步骤线，再排局部承接

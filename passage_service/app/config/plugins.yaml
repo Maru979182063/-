@@ -1,0 +1,27 @@
+taggers:
+  - name: "llm_feature_tagger"
+    module: "app.infra.plugins.builtins.taggers.llm_feature_tagger"
+    class: "LLMFeatureTagger"
+    enabled: true
+    config:
+      default_keep_threshold: 120
+  - name: "keyword_tagger"
+    module: "app.infra.plugins.builtins.taggers.keyword_tagger"
+    class: "KeywordTagger"
+    enabled: true
+    config:
+      match_mode: "contains"
+
+controllers:
+  - name: "noop_controller"
+    module: "app.infra.plugins.builtins.controllers.noop_controller"
+    class: "NoopController"
+    enabled: true
+    config: {}
+
+builders:
+  - name: "noop_builder"
+    module: "app.infra.plugins.builtins.builders.noop_builder"
+    class: "NoopBuilder"
+    enabled: true
+    config: {}

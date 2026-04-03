@@ -1,0 +1,367 @@
+schema_version: material_card_registry.v1
+registry_id: title_selection_material_cards_v1
+business_family_id: title_selection
+registry_role: intermediate_structure_cards
+notes:
+- 以下10张卡来自用户提供的文段选取逻辑jsonl的10类选材原型，并与现有main_idea/title_selection配置对齐。
+- 这些卡是材料层中间结构卡，不直接等于题目生成pattern。
+- question card会将10张材料卡映射到5个生成原型。
+cards:
+- card_id: title_material.plain_main_recovery
+  display_name: 平实主旨回收卡
+  selection_core: 主旨明确且可抽象命名的说明/评论类文段
+  structures:
+  - 总分
+  - 分总
+  - 总分总
+  required_signals:
+    single_center_strength: '>=0.72'
+    titleability: '>=0.72'
+    closure_score: '>=0.72'
+    core_object_anchor_strength: '>=0.68'
+  preferred_signals:
+  - 核心概念重复出现
+  - 末段总结
+  - 设问后作答
+  - 观点句显性
+  avoid_signals:
+  - 信息并列且无统摄中心
+  - 材料拼盘
+  - 主旨需依赖外部背景
+  candidate_contract:
+    raw_policy: whole_passage 或 闭合段优先
+    allowed_candidate_types: &id001
+    - whole_passage
+    preferred_candidate_types: *id001
+  card_bias: 平实概括型标题
+  default_generation_archetype: main_recovery
+  distractor_bias:
+  - 局部信息
+  - 仅对象无判断
+  - 大而空泛概念
+- card_id: title_material.example_then_recovery
+  display_name: 例证归纳回收卡
+  selection_core: 前文铺陈、后文收束的主旨回收型文段
+  structures:
+  - 分总
+  - 举例后总结
+  required_signals:
+    summary_strength: '>=0.72'
+    example_to_theme_strength: '>=0.72'
+    closure_score: '>=0.70'
+  preferred_signals:
+  - 最后一段总括
+  - 转折后核心判断
+  - 前文多例共指同一结论
+  avoid_signals:
+  - 例子之间缺少共同指向
+  - 结尾仍停留事实层
+  - 多个小结论竞争
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id002
+    - multi_paragraph_unit
+    preferred_candidate_types: *id002
+  card_bias: 抽象概括型标题
+  default_generation_archetype: main_recovery
+  distractor_bias:
+  - 把案例当主旨
+  - 只取分述角度
+  - 补入文段没有的新判断
+- card_id: title_material.turning_focus
+  display_name: 转折后重心卡
+  selection_core: 带明显转折、重心后移的评论型文段
+  structures:
+  - 转折结构
+  - 让步后结论
+  required_signals:
+    turning_focus_strength: '>=0.74'
+    closure_score: '>=0.68'
+    single_center_strength: '>=0.62'
+  preferred_signals:
+  - 但是
+  - 然而
+  - 其实
+  - 更重要的是
+  - 真正关键在于
+  avoid_signals:
+  - 前后并重
+  - 转折只修饰细节
+  - 结论不独立
+  candidate_contract:
+    raw_policy: closed_span 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - closed_span
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 对比感/重心迁移标题
+  default_generation_archetype: turning_focus
+  distractor_bias:
+  - 停留在转折前铺垫
+  - 次要背景拔高
+  - 只写对策不写问题核心
+- card_id: title_material.multi_dimension_unification
+  display_name: 多维统摄卡
+  selection_core: 多维展开但能统一归纳的综合说明文段
+  structures:
+  - 并列
+  - 多维分析
+  - 总分并列
+  required_signals:
+    multi_dimension_cohesion: '>=0.70'
+    titleability: '>=0.70'
+    core_object_anchor_strength: '>=0.64'
+  preferred_signals:
+  - 从…看
+  - 一方面…另一方面…
+  - 从时间/内容/意义等维度展开
+  avoid_signals:
+  - 并列点发散
+  - 只能做列表式小标题
+  - 缺少统一对象
+  candidate_contract:
+    raw_policy: whole_passage 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - whole_passage
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 统摄型标题
+  default_generation_archetype: multi_dimension
+  distractor_bias:
+  - 只截取单一维度
+  - 机械拼接分点
+  - 抽象过头
+- card_id: title_material.single_object_exposition
+  display_name: 单对象说明卡
+  selection_core: 单对象深描的知识说明类文段
+  structures:
+  - 对象说明
+  - 定义+展开
+  - 原理+应用
+  required_signals:
+    core_object_anchor_strength: '>=0.78'
+    object_scope_stability: '>=0.76'
+    titleability: '>=0.68'
+  preferred_signals:
+  - 开头点名核心对象
+  - 后文持续重复同一对象
+  - 无明显主线切换
+  avoid_signals:
+  - 对象不断更换
+  - 信息碎片化严重
+  - 应用场景盖过对象本身
+  candidate_contract:
+    raw_policy: whole_passage 优先
+    allowed_candidate_types: &id003
+    - whole_passage
+    preferred_candidate_types: *id003
+  card_bias: 对象命名型或对象+属性型标题
+  default_generation_archetype: single_object
+  distractor_bias:
+  - 把应用场景当标题
+  - 拿比较对象代替主体
+  - 只谈技术细节
+- card_id: title_material.problem_essence_judgement
+  display_name: 问题本质判断卡
+  selection_core: 问题—分析—结论链条清晰的议论文段
+  structures:
+  - 问题-分析-结论
+  - 问题-原因-结论
+  - 现象-本质
+  required_signals:
+    problem_signal_strength: '>=0.68'
+    analysis_to_conclusion_strength: '>=0.70'
+    value_judgement_strength: '>=0.56'
+  preferred_signals:
+  - 为什么
+  - 症结在于
+  - 关键在于
+  - 由此可见
+  avoid_signals:
+  - 只有问题没有结论
+  - 结论与分析脱节
+  - 对策过多冲淡标题中心
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id004
+    - multi_paragraph_unit
+    preferred_candidate_types: *id004
+  card_bias: 判断型/立场型标题
+  default_generation_archetype: turning_focus
+  distractor_bias:
+  - 只写现象层
+  - 只写解决办法
+  - 拔高到无关宏大命题
+- card_id: title_material.counterintuitive_reversal
+  display_name: 反常识反转卡
+  selection_core: 反常识或认知反转型科普/评论文段
+  structures:
+  - 反常识开篇
+  - 设问反转
+  - 常识-纠偏
+  required_signals:
+    counterintuitive_strength: '>=0.74'
+    titleability: '>=0.70'
+    closure_score: '>=0.66'
+  preferred_signals:
+  - 你可能想不到
+  - 其实
+  - 并非
+  - 不只是
+  - 恰恰相反
+  avoid_signals:
+  - 反常识点只是噱头
+  - 后文未持续围绕反转解释
+  - 真正主旨另有他指
+  candidate_contract:
+    raw_policy: whole_passage 或 closed_span
+    allowed_candidate_types:
+    - whole_passage
+    - closed_span
+    preferred_candidate_types: []
+  card_bias: 反转型/提醒型标题
+  default_generation_archetype: counterintuitive
+  distractor_bias:
+  - 回到常识表述
+  - 只写一般性作用/危害
+  - 局部后果当总标题
+- card_id: title_material.development_timeline
+  display_name: 发展脉络卡
+  selection_core: 时间演进明显的发展历程类文段
+  structures:
+  - 时间线
+  - 历史演进
+  - 发展脉络
+  required_signals:
+    timeline_strength: '>=0.72'
+    core_object_anchor_strength: '>=0.64'
+    closure_score: '>=0.64'
+  preferred_signals:
+  - 起初
+  - 后来
+  - 近年来
+  - 未来
+  - 至今
+  avoid_signals:
+  - 时间只是罗列事件
+  - 主线对象中途转移
+  - 现状与历史脱节
+  candidate_contract:
+    raw_policy: whole_passage 优先
+    allowed_candidate_types: &id005
+    - whole_passage
+    preferred_candidate_types: *id005
+  card_bias: 对象+发展逻辑型标题
+  default_generation_archetype: single_object
+  distractor_bias:
+  - 只取起点背景
+  - 只说当前应用
+  - 只谈未来展望
+- card_id: title_material.case_to_theme_elevation
+  display_name: 由小见大升华卡
+  selection_core: 人物/案例引入后升华主题的评论文段
+  structures:
+  - 案例引入
+  - 人物故事+主题升华
+  required_signals:
+    example_to_theme_strength: '>=0.74'
+    value_judgement_strength: '>=0.58'
+    closure_score: '>=0.66'
+  preferred_signals:
+  - 从…到…
+  - 不止于
+  - 背后折射出
+  - 这启示我们
+  avoid_signals:
+  - 全文只写人物事迹
+  - 升华力度不足
+  - 个案与主题脱节
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id006
+    - multi_paragraph_unit
+    preferred_candidate_types: *id006
+  card_bias: 由小见大型标题
+  default_generation_archetype: multi_dimension
+  distractor_bias:
+  - 只写人物姓名/个案行为
+  - 空泛歌颂
+  - 跳到无关价值口号
+- card_id: title_material.value_commentary
+  display_name: 价值评议卡
+  selection_core: 文化/科技/社会现象评论中带价值归纳的文段
+  structures:
+  - 现象评论
+  - 例证+评议
+  - 事实+判断
+  required_signals:
+    value_judgement_strength: '>=0.72'
+    titleability: '>=0.68'
+    core_object_anchor_strength: '>=0.62'
+  preferred_signals:
+  - 可见
+  - 值得注意的是
+  - 这说明
+  - 其意义在于
+  avoid_signals:
+  - 没有明确立场
+  - 例子太散无法统一评价
+  - 价值判断过弱
+  candidate_contract:
+    raw_policy: whole_passage 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - whole_passage
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 评论式/判断式标题
+  default_generation_archetype: main_recovery
+  distractor_bias:
+  - 只做事实转述
+  - 只保留价值词不写对象
+  - 夸大为宏观命题
+- card_id: title_material.benefit_result
+  display_name: 结果归因卡
+  selection_core: 围绕某项措施、服务或机制展开，后文收束到多个正向结果，主旨落点是“该行为带来的综合收益”
+  structures:
+  - 行为-结果
+  - 措施-收益
+  - 解释-收束
+  - 递进归旨
+  required_signals:
+    analysis_to_conclusion_strength: '>=0.48'
+    benefit_result_count: '>=0.50'
+    benefit_result_strength: '>=0.72'
+    closure_score: '>=0.58'
+    value_judgement_strength: '>=0.30'
+  preferred_signals:
+  - 有助于
+  - 有利于
+  - 实现
+  - 提升
+  - 促进
+  - 带来
+  - 增强
+  - 多个结果共同指向同一行为
+  - 解释句服务于结果收束
+  avoid_signals:
+  - 单一结果撑全文
+  - 转折结构主导
+  - 问题诊断主导
+  - 只有价值判断没有结果链
+  - 并列维度发散且无共同行为锚点
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 或 closed_span 优先
+    allowed_candidate_types:
+    - multi_paragraph_unit
+    - closed_span
+    preferred_candidate_types:
+    - multi_paragraph_unit
+  card_bias: 综合收益型主旨
+  default_generation_archetype: main_recovery
+  distractor_bias:
+  - 只取一个结果
+  - 回到价值判断
+  - 只谈对象重要性
+  - 把解释句当主旨
+  - 把局部收益拔高为总主旨
+normalized_from: title_selection_intermediate_material_cards.yaml

@@ -1,0 +1,77 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: __FILL_ME__
+  display_name: __FILL_ME__
+  description: __FILL_ME__
+  mother_family_id: main_idea
+  business_subtype: __OPTIONAL__
+  enabled: true
+  source: textbook_business_card
+  tags: []
+
+feature_signature:
+  relation_type: __FILL_ME__
+  relation_focus: __FILL_ME__
+  typical_formats: []
+  explicit_markers:
+    cause_markers: []
+    conclusion_markers: []
+    variant_markers: []
+  structural_features:
+    conclusion_is_core: false
+    conclusion_position: any
+    sentence_position_hint: any
+    needs_multi_relation_analysis: false
+  distractor_features:
+    strong_modes: []
+    non_key_content_sources: []
+  extraction_hints:
+    require_explicit_marker: false
+    require_complete_meaning: true
+    min_sentence_count: 1
+    preferred_paragraph_window:
+      - 1
+
+retrieval_profile:
+  hard_filters:
+    logic_relations: []
+    require_explicit_marker: false
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres: []
+    preferred_material_structures: []
+    preferred_conclusion_position: []
+    preferred_markers: []
+  ranking_weights:
+    relation_match: 0.35
+    marker_match: 0.20
+    structural_match: 0.20
+    semantic_completeness: 0.15
+    readability: 0.10
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: true
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: __FILL_ME__
+  business_subtype: __OPTIONAL__
+  pattern_candidates: []
+  type_slots: {}
+  slot_strategy_map: {}
+  prompt_extras:
+    business_feature_card_id: __FILL_ME__
+    business_feature_card_label: __FILL_ME__
+    retrieval_mode: business_feature_card
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations: []
+    position_roles: []
+    material_structure_label: null
+  expected_business_fields:
+    feature_type: __FILL_ME__
+    conclusion_focus: false
+    conclusion_position: any
+    explicit_marker_group: []

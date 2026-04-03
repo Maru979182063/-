@@ -1,0 +1,9 @@
+version: "seg.v1"
+sentence_window:
+  min_sentences: 3
+  max_sentences: 6
+logical_refiner:
+  enabled: true
+  min_chars_for_llm: 70
+  review_max_spans: 12
+  merge_max_chars: 900

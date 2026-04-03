@@ -1,0 +1,197 @@
+schema_version: signal_layer.v1
+layer_id: title_selection_intermediate_signal_layer_v1
+business_family_id: title_selection
+layer_role: neutral_signal_profile
+description: 标题填入题的一期中间结构层。母卡/主族只做索引；真正用于命中子卡的是中性信号与派生信号。该层基于现有main_idea配置、标题题真题与文段选取/制作逻辑抽象而成。
+notes:
+- family不承担唯一真相判定，只负责召回与粗筛。
+- candidate允许多命中多个中间结构卡。
+- question card在消费阶段再决定采用哪种视角生成标题题。
+signals:
+- signal_id: document_genre
+  type: enum
+  description: 文章文体底色
+  allowed_values:
+  - 科普说明
+  - 评论议论
+  - 文化评论
+  - 政策评论
+  - 新闻特写
+  - 综合说明
+- signal_id: article_purpose_frame
+  type: enum
+  description: 文章写作任务
+  allowed_values:
+  - 介绍说明
+  - 问题判断
+  - 评论评议
+  - 收益归纳
+  - 认知纠偏
+  - 发展梳理
+  - 多维统摄
+- signal_id: discourse_shape
+  type: enum
+  description: 主结构骨架
+  allowed_values:
+  - 总分
+  - 分总
+  - 总分总
+  - 行为-结果归旨
+  - 转折归旨
+  - 并列展开
+  - 问题-分析-结论
+  - 对象说明
+  - 时间演进
+  - 案例升华
+  - 事实+评议
+- signal_id: core_object
+  type: string
+  description: 全文稳定中心对象/议题
+- signal_id: core_object_anchor_strength
+  type: float
+  description: 核心对象是否稳定、重复、可被标题锁定
+  range:
+  - 0
+  - 1
+- signal_id: object_scope_stability
+  type: float
+  description: 对象范围是否稳定不漂移
+  range:
+  - 0
+  - 1
+- signal_id: global_main_claim
+  type: string
+  description: 全文共同指向的主判断/主旨
+- signal_id: single_center_strength
+  type: float
+  description: 是否存在稳定单中心
+  range:
+  - 0
+  - 1
+- signal_id: closure_score
+  type: float
+  description: 材料闭合度与可独立成题程度
+  range:
+  - 0
+  - 1
+- signal_id: context_dependency
+  type: float
+  description: 对外部上下文依赖程度，越高越不适合直接入池
+  range:
+  - 0
+  - 1
+- signal_id: titleability
+  type: float
+  description: 能否被压缩为稳定标题
+  range:
+  - 0
+  - 1
+- signal_id: summary_strength
+  type: float
+  description: 总结回收/总括句强度
+  range:
+  - 0
+  - 1
+- signal_id: turning_focus_strength
+  type: float
+  description: 转折后重心是否显著
+  range:
+  - 0
+  - 1
+- signal_id: example_to_theme_strength
+  type: float
+  description: 案例/例证是否服务更高主题
+  range:
+  - 0
+  - 1
+- signal_id: value_judgement_strength
+  type: float
+  description: 作者评价/价值判断是否足够稳定
+  range:
+  - 0
+  - 1
+- signal_id: counterintuitive_strength
+  type: float
+  description: 是否存在显著反常识/纠偏点
+  range:
+  - 0
+  - 1
+- signal_id: timeline_strength
+  type: float
+  description: 时间演进主线是否清晰
+  range:
+  - 0
+  - 1
+- signal_id: multi_dimension_cohesion
+  type: float
+  description: 多维展开是否能被统一统摄
+  range:
+  - 0
+  - 1
+- signal_id: problem_signal_strength
+  type: float
+  description: 问题提出/问题意识强度
+  range:
+  - 0
+  - 1
+- signal_id: analysis_to_conclusion_strength
+  type: float
+  description: 分析是否稳定收束为判断
+  range:
+  - 0
+  - 1
+- signal_id: benefit_result_strength
+  type: float
+  description: 是否存在稳定的“行为/措施 -> 多个正向结果 -> 综合收益主旨”归因链
+  range:
+  - 0
+  - 1
+- signal_id: benefit_result_count
+  type: float
+  description: 文段中可稳定抽取并共同指向同一行为/措施的结果数量强度
+  range:
+  - 0
+  - 1
+- signal_id: title_namingness
+  type: float
+  description: 更像文章标题而非主旨复述
+  range:
+  - 0
+  - 1
+- signal_id: title_rhetoric_form
+  type: enum
+  description: 标题体式偏好
+  allowed_values:
+  - direct_label
+  - thematic
+  - judgement
+  - contrast
+  - question
+  - abstract
+derived_signals:
+- signal_id: family_affinity_topk
+  type: array
+  description: 标题题与其它家族的粗排序，不做唯一归属
+- signal_id: candidate_type
+  type: enum
+  description: 一期候选材料类型
+  allowed_values:
+  - whole_passage
+  - closed_span
+  - multi_paragraph_unit
+- signal_id: recommended_generation_archetype
+  type: enum
+  description: 问题侧五大生成原型之一
+  allowed_values:
+  - main_recovery
+  - turning_focus
+  - single_object
+  - multi_dimension
+  - counterintuitive
+- signal_id: recommended_material_cards
+  type: array
+  description: Top-N中间结构卡建议
+- signal_id: distractor_profile
+  type: object
+  description: 建议的错项距离/方向
+normalized_from: title_selection_signal_layer.yaml

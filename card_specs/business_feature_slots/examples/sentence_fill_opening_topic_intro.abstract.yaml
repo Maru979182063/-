@@ -1,0 +1,46 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_fill__opening_topic_intro__abstract
+  display_name: 语句填空-开头话题引入
+  description: 横线在开头，空句承担引入话题或提出对象的业务卡。
+  mother_family_id: sentence_fill
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句填空题
+    - 开头
+    - 话题引入
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres: [科普文, 评论文, 政策文, 宣传文]
+    preferred_material_structures: [综合说明, 观点-论证]
+    preferred_markers: [近年来, 如今, 在此背景下, 这意味着]
+  ranking_weights:
+    relation_match: 0.36
+    marker_match: 0.14
+    structural_match: 0.18
+    semantic_completeness: 0.16
+    readability: 0.16
+
+slot_projection:
+  question_type: sentence_fill
+  business_subtype: null
+  pattern_candidates: [opening_summary, bridge_transition]
+  type_slots:
+    blank_position: opening
+    function_type: opening_summary
+    logic_relation: transition
+    context_dependency: medium
+    bidirectional_validation: low
+    reference_dependency: low
+    abstraction_level: medium
+    distractor_modes: [function_mismatch, topic_shift, wrong_direction]
+    distractor_strength: medium
+  prompt_extras:
+    business_feature_card_id: sentence_fill__opening_topic_intro__abstract
+    business_feature_card_label: 语句填空-开头话题引入
+    business_core_rule: 空句负责提出后文要展开的话题或对象

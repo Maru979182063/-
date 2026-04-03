@@ -1,0 +1,121 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: parallel_comprehensive_summary__main_idea
+  display_name: 并列关系-全面概括
+  description: 适用于多方面并列展开、需要统一概括中心的文段。
+  mother_family_id: main_idea
+  business_subtype: center_understanding
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 并列关系
+    - 全面概括
+
+feature_signature:
+  relation_type: 并列关系
+  relation_focus: 全面概括
+  typical_formats:
+    - 一方面……另一方面……
+    - 同时……此外……
+  explicit_markers:
+    cause_markers: []
+    conclusion_markers:
+      - 同时
+      - 此外
+      - 另外
+      - 以及
+      - 首先
+      - 其次
+    variant_markers:
+      - 其一
+      - 其二
+  structural_features:
+    conclusion_is_core: false
+    conclusion_position: distributed
+    sentence_position_hint: parallel_blocks
+    needs_multi_relation_analysis: false
+  distractor_features:
+    strong_modes:
+      - undergeneralization
+      - scope_shift
+      - fabrication
+    non_key_content_sources:
+      - 单一并列分支
+      - 片面表达
+  extraction_hints:
+    require_explicit_marker: false
+    require_complete_meaning: true
+    min_sentence_count: 2
+    preferred_paragraph_window:
+      - 1
+      - 2
+      - 3
+
+retrieval_profile:
+  hard_filters:
+    logic_relations:
+      - 并列
+    require_explicit_marker: false
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 评论文
+      - 政策文
+    preferred_material_structures:
+      - 并列展开
+      - 总分
+    preferred_conclusion_position:
+      - distributed
+    preferred_markers:
+      - 同时
+      - 此外
+      - 另外
+  ranking_weights:
+    relation_match: 0.35
+    marker_match: 0.15
+    structural_match: 0.25
+    semantic_completeness: 0.15
+    readability: 0.10
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: true
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: main_idea
+  business_subtype: center_understanding
+  pattern_candidates:
+    - whole_passage_integration
+  type_slots:
+    structure_type: progressive
+    main_point_source: whole_passage
+    abstraction_level: medium
+    coverage_requirement: integrated
+    target_form: central_meaning
+    distractor_modes:
+      - scope_shift
+      - undergeneralization
+      - fabrication
+    distractor_strength: high
+    statement_visibility: low
+  prompt_extras:
+    business_feature_card_id: parallel_comprehensive_summary__main_idea
+    business_feature_card_label: 并列关系-全面概括
+    retrieval_mode: business_feature_card
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations:
+      - 并列
+    position_roles: []
+    material_structure_label: 并列展开
+  expected_business_fields:
+    feature_type: 并列关系
+    conclusion_focus: false
+    conclusion_position: distributed
+    explicit_marker_group:
+      - 同时
+      - 此外
+      - 另外

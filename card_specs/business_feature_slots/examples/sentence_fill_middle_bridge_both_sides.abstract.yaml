@@ -1,0 +1,46 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_fill__middle_bridge_both_sides__abstract
+  display_name: 语句填空-中间承上启下
+  description: 横线在中间，空句必须同时承前启后的业务卡。
+  mother_family_id: sentence_fill
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句填空题
+    - 中间
+    - 承上启下
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres: [科普文, 评论文, 政策文, 宣传文]
+    preferred_material_structures: [综合说明, 现象-分析, 观点-论证]
+    preferred_markers: [因此, 同时, 此外, 由此]
+  ranking_weights:
+    relation_match: 0.40
+    marker_match: 0.14
+    structural_match: 0.16
+    semantic_completeness: 0.15
+    readability: 0.15
+
+slot_projection:
+  question_type: sentence_fill
+  business_subtype: null
+  pattern_candidates: [bridge_transition]
+  type_slots:
+    blank_position: middle
+    function_type: bridge
+    logic_relation: continuation
+    context_dependency: high
+    bidirectional_validation: high
+    reference_dependency: medium
+    abstraction_level: medium
+    distractor_modes: [function_mismatch, weak_backward_link, weak_forward_link]
+    distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_fill__middle_bridge_both_sides__abstract
+    business_feature_card_label: 语句填空-中间承上启下
+    business_core_rule: 空句必须既能接前文又能引后文

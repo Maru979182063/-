@@ -1,0 +1,65 @@
+from datetime import datetime
+
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.clock import utc_now
+from app.infra.db.base import Base
+
+
+class MaterialSpanORM(Base):
+    __tablename__ = "material_spans"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), index=True)
+    candidate_span_id: Mapped[str] = mapped_column(ForeignKey("candidate_spans.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    normalized_text_hash: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    material_family_id: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    span_type: Mapped[str] = mapped_column(String)
+    length_bucket: Mapped[str] = mapped_column(String)
+    paragraph_count: Mapped[int] = mapped_column(Integer)
+    sentence_count: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String, index=True)
+    release_channel: Mapped[str] = mapped_column(String, index=True)
+    gray_ratio: Mapped[float] = mapped_column(Float, default=0.0)
+    gray_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    segmentation_version: Mapped[str] = mapped_column(String)
+    tag_version: Mapped[str] = mapped_column(String)
+    fit_version: Mapped[str] = mapped_column(String)
+    prompt_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    primary_family: Mapped[str | None] = mapped_column(String, nullable=True)
+    primary_subtype: Mapped[str | None] = mapped_column(String, nullable=True)
+    secondary_subtypes: Mapped[list] = mapped_column(JSON, default=list)
+    universal_profile: Mapped[dict] = mapped_column(JSON, default=dict)
+    family_scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    capability_scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    parallel_families: Mapped[list] = mapped_column(JSON, default=list)
+    structure_features: Mapped[dict] = mapped_column(JSON, default=dict)
+    family_profiles: Mapped[dict] = mapped_column(JSON, default=dict)
+    subtype_candidates: Mapped[list] = mapped_column(JSON, default=list)
+    secondary_candidates: Mapped[list] = mapped_column(JSON, default=list)
+    candidate_labels: Mapped[list] = mapped_column(JSON, default=list)
+    primary_label: Mapped[str | None] = mapped_column(String, nullable=True)
+    decision_trace: Mapped[dict] = mapped_column(JSON, default=dict)
+    primary_route: Mapped[dict] = mapped_column(JSON, default=dict)
+    reject_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    variants: Mapped[list] = mapped_column(JSON, default=list)
+    source: Mapped[dict] = mapped_column(JSON, default=dict)
+    source_tail: Mapped[str | None] = mapped_column(String, nullable=True)
+    integrity: Mapped[dict] = mapped_column(JSON, default=dict)
+    quality_flags: Mapped[list] = mapped_column(JSON, default=list)
+    knowledge_tags: Mapped[list] = mapped_column(JSON, default=list)
+    fit_scores: Mapped[dict] = mapped_column(JSON, default=dict)
+    feature_profile: Mapped[dict] = mapped_column(JSON, default=dict)
+    quality_score: Mapped[float] = mapped_column(Float, default=0.0)
+    v2_index_version: Mapped[str | None] = mapped_column(String, nullable=True)
+    v2_business_family_ids: Mapped[list] = mapped_column(JSON, default=list)
+    v2_index_payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    usage_count: Mapped[int] = mapped_column(Integer, default=0)
+    accept_count: Mapped[int] = mapped_column(Integer, default=0)
+    reject_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)

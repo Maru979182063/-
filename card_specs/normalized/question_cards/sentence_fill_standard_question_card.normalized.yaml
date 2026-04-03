@@ -1,0 +1,190 @@
+schema_version: question_card.v1
+card_id: question.sentence_fill.standard_v1
+card_type: question
+business_family_id: sentence_fill
+business_subtype_id: sentence_fill_selection
+runtime_binding:
+  question_type: sentence_fill
+  business_subtype: null
+display_name: 语句填空标准题卡
+description: 基于空位位置与上下文逻辑，为文段选择最合适的填入句。该卡消费中间结构材料卡，而不直接绑定单一主族。
+upstream_contract:
+  required_candidate_types:
+  - closed_span
+  - insertion_context_unit
+  - multi_paragraph_unit
+  - whole_passage
+  required_profiles:
+  - abstraction_level
+  - bidirectional_validation
+  - blank_position
+  - context_dependency
+  - function_type
+  - logic_relation
+  - reference_dependency
+  preferred_material_cards:
+  - fill_material.opening_summary
+  - fill_material.bridge_transition
+  - fill_material.middle_focus_shift
+  - fill_material.middle_explanation
+  - fill_material.ending_summary
+  - fill_material.ending_elevation
+  - fill_material.inserted_reference_match
+  - fill_material.comprehensive_multi_match
+base_slots:
+  blank_position: middle
+  function_type: bridge
+  logic_relation: continuation
+  context_dependency: medium
+  bidirectional_validation: medium
+  reference_dependency: low
+  abstraction_level: medium
+  distractor_modes:
+  - function_mismatch
+  - weak_forward_link
+  - topic_shift
+slot_extensions:
+  backward_link_required: true
+  forward_link_required: true
+  object_match_required: true
+  strongest_distractor_gap: small_or_medium
+  distractor_hierarchy_profile:
+  - nearest_function_miss
+  - mid_logic_break
+  - far_topic_shift
+generation_archetype_source: material_card.default_generation_archetype
+material_card_overrides:
+- material_card: fill_material.opening_summary
+  slot_overrides:
+    blank_position: opening
+    function_type: opening_summary
+    logic_relation: summary
+    abstraction_level: high
+- material_card: fill_material.bridge_transition
+  slot_overrides:
+    blank_position: middle
+    function_type: bridge
+    logic_relation: continuation
+    bidirectional_validation: high
+- material_card: fill_material.middle_focus_shift
+  slot_overrides:
+    blank_position: middle
+    function_type: middle_focus_shift
+    logic_relation: focus_shift
+    context_dependency: high
+- material_card: fill_material.middle_explanation
+  slot_overrides:
+    blank_position: middle
+    function_type: middle_explanation
+    logic_relation: explanation
+- material_card: fill_material.ending_summary
+  slot_overrides:
+    blank_position: ending
+    function_type: ending_summary
+    logic_relation: summary
+- material_card: fill_material.ending_elevation
+  slot_overrides:
+    blank_position: ending
+    function_type: ending_elevation
+    logic_relation: elevation
+    abstraction_level: high
+- material_card: fill_material.inserted_reference_match
+  slot_overrides:
+    blank_position: inserted
+    function_type: inserted_reference
+    logic_relation: reference_match
+    reference_dependency: high
+    bidirectional_validation: high
+- material_card: fill_material.comprehensive_multi_match
+  slot_overrides:
+    blank_position: mixed
+    function_type: comprehensive_match
+    logic_relation: multi_constraint
+    context_dependency: high
+    bidirectional_validation: high
+    reference_dependency: high
+generation_archetypes:
+  opening_summary:
+    source: 语句填空题配置文件 pattern opening_summary
+    processing_type: 后文信息整合→提炼总领句
+    correct_logic: 正确项必须统摄后文多个信息维度，而不是只抓一个局部点
+    analysis_framework:
+    - 提取后文主要信息维度
+    - 判断哪些表达能统领后文
+    - 控制总起句抽象层级
+    - 排除只覆盖单一维度的选项
+  bridge_transition:
+    source: 语句填空题配置文件 pattern bridge_transition
+    processing_type: 前文提出对象→空位承接→后文具体展开
+    correct_logic: 正确项必须同时满足承前与启后，不能只做到一边
+    analysis_framework:
+    - 确认前文已提出什么核心对象或话题
+    - 判断后文是解释作用、机制还是例证
+    - 让正确项完成“提出→展开”的过渡
+    - 检查是否既能接前文又能引后文
+  middle_focus_shift:
+    source: 语句填空题配置文件 pattern middle_focus_shift
+    processing_type: 总论铺开→空位聚焦→后文集中解释
+    correct_logic: 正确项必须承担“收束前文 + 指向后文焦点”的双重任务
+    analysis_framework:
+    - 识别前文宽口径总论
+    - 找出后文具体展开的关键因素
+    - 用空位把总论压到焦点上
+    - 排除只看似全面但不能引后文的选项
+  middle_explanation:
+    source: 语句填空题配置文件 pattern middle_explanation
+    processing_type: 抽象概念→解释句→具体展开
+    correct_logic: 正确项应把前文抽象表达具体化，为后文例证或说明搭桥
+    analysis_framework:
+    - 找出前文抛出的概念或判断
+    - 确认后文是在举例还是细化
+    - 判定空位应承担解释职责
+    - 排除总结项和案例项
+  ending_summary:
+    source: 语句填空题配置文件 pattern ending_summary
+    processing_type: 全段主线提炼→段尾收束
+    correct_logic: 正确项必须压缩前文主线，但不能泛化到失去对象和任务指向
+    analysis_framework:
+    - 找出全文在解决的核心任务
+    - 判断总结句必须保留的对象与动作
+    - 将主线压成一句结尾总结
+    - 排除看似高级但失焦的选项
+  ending_elevation:
+    source: 语句填空题配置文件 pattern ending_elevation
+    processing_type: 案例/实验→抽象观点回收
+    correct_logic: 正确项要把前文案例抽象为更高层的中心判断，而不是停留在案例事实层
+    analysis_framework:
+    - 提炼案例真正证明的观点
+    - 将案例意义拉回到全文论点
+    - 升华但不脱题
+    - 排除只围绕案例表层信息的选项
+  inserted_reference_match:
+    source: 语句填空题配置文件 pattern inserted_reference_match
+    processing_type: 找指代对象→匹配解释范围→验证后文
+    correct_logic: 正确项必须满足指代对象匹配、语义承接和后文引出三重条件
+    analysis_framework:
+    - 锁定代词、概念或主语所指
+    - 判断该句能否同时卡住前后文
+    - 验证语义承接是否精确
+    - 排除只能承前或只能启后的项
+  comprehensive_multi_match:
+    source: 语句填空题配置文件 pattern comprehensive_multi_match
+    processing_type: 同时匹配承接、指代、逻辑关系与空位功能
+    correct_logic: 正确项必须在多条约束下同时成立，不能只满足单一维度
+    analysis_framework:
+    - 看是否存在明确指代或主语限制
+    - 看是否承前启后或完成指定结构功能
+    - 看是否适合该空位位置
+    - 只有同时满足多维约束的选项才成立
+validator_contract:
+  extension_rules:
+  - 正确项必须明确满足空位的段落功能，不得仅靠表面同话题通顺入选。
+  - 至少1个错误项与正确项共享对象域，但在位置、功能、承接方向或指代关系上失效。
+  - 若空位位于段中，解析必须显式做前后双向验证；若为空位插入型，必须显式说明指代对象。
+  - 材料不得含网页残留、半截枚举或强上下文依赖句；尾句类材料不得用未收束的半截句出题。
+  - 解析必须指出空位位置功能、前后逻辑关系、错项错因三层。
+normalized_from: sentence_fill_standard_question_card.yaml
+normalization_notes:
+- required_candidate_types expanded to cover all preferred material cards
+- required_profiles expanded to include signals required by preferred material cards
+- generation_archetype duplication removed; question card now follows material_card.default_generation_archetype

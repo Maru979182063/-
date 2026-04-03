@@ -1,0 +1,163 @@
+schema_version: question_card.v1
+card_id: question.sentence_order.standard_v1
+card_type: question
+business_family_id: sentence_order
+business_subtype_id: sentence_order_selection
+runtime_binding:
+  question_type: sentence_order
+  business_subtype: null
+display_name: 语句排序标准题卡
+description: 基于句群接口关系，为语句排序题选择唯一正确的句序。该卡消费中间结构材料卡，不直接绑定单一主族；核心看首句合法性、中段局部捆绑、尾句收束与板块顺序。
+upstream_contract:
+  required_candidate_types:
+  - sentence_block_group
+  required_profiles:
+  - block_order_complexity
+  - binding_pair_count
+  - closing_anchor_type
+  - closing_signal_strength
+  - context_closure_score
+  - discourse_progression_strength
+  - exchange_risk
+  - function_overlap_score
+  - local_binding_strength
+  - middle_structure_type
+  - multi_path_risk
+  - opening_anchor_type
+  - opening_signal_strength
+  - sequence_integrity
+  - unique_opener_score
+  preferred_material_cards:
+  - order_material.dual_anchor_lock
+  - order_material.carry_parallel_expand
+  - order_material.viewpoint_reason_action
+  - order_material.problem_solution_case_blocks
+base_slots:
+  opening_anchor_type: explicit_topic
+  opening_signal_strength: medium
+  middle_structure_type: local_binding
+  local_binding_strength: medium
+  closing_anchor_type: conclusion
+  closing_signal_strength: medium
+  block_order_complexity: medium
+  distractor_modes:
+  - wrong_opening
+  - local_binding_break
+  - wrong_closing
+  distractor_strength: medium
+slot_extensions:
+  fixed_sortable_unit_count: 6
+  preserve_unit_count: true
+  first_sentence_legality_required: true
+  unique_opener_required: true
+  local_binding_min: 0.56
+  min_binding_pair_count: 2
+  sequence_integrity_min: 0.6
+  max_exchange_risk: 0.34
+  max_multi_path_risk: 0.36
+  max_function_overlap_score: 0.42
+  min_discourse_progression_strength: 0.58
+  min_context_closure_score: 0.6
+  anchor_pair_mode: opening_and_or_closing
+  block_group_unique_sequence_required: true
+  block_group_primary_only: true
+  strongest_distractor_gap: small_or_medium
+  distractor_hierarchy_profile:
+  - nearest_miss
+  - mid_partial_valid
+  - far_off
+generation_archetype_source: material_card.default_generation_archetype
+material_card_overrides:
+- material_card: order_material.dual_anchor_lock
+  slot_overrides:
+    opening_anchor_type: explicit_topic
+    opening_signal_strength: high
+    middle_structure_type: local_binding
+    closing_anchor_type: conclusion
+    closing_signal_strength: high
+- material_card: order_material.carry_parallel_expand
+  slot_overrides:
+    opening_anchor_type: upper_context_link
+    middle_structure_type: parallel_expansion
+    closing_anchor_type: summary
+    block_order_complexity: high
+- material_card: order_material.viewpoint_reason_action
+  slot_overrides:
+    opening_anchor_type: viewpoint_opening
+    middle_structure_type: cause_effect_chain
+    closing_anchor_type: call_to_action
+    block_order_complexity: medium
+- material_card: order_material.problem_solution_case_blocks
+  slot_overrides:
+    opening_anchor_type: problem_opening
+    middle_structure_type: problem_solution_blocks
+    closing_anchor_type: case_support
+    block_order_complexity: high
+- material_card: order_material.phrase_order_variant
+  slot_overrides:
+    opening_anchor_type: none
+    opening_signal_strength: none
+    middle_structure_type: mixed_layers
+    closing_anchor_type: none
+    closing_signal_strength: none
+    block_order_complexity: high
+generation_archetypes:
+  dual_anchor_lock:
+    source: 语句排序题配置文件 pattern dual_anchor_lock
+    processing_type: 首句判断+尾句判断+局部捆绑
+    correct_logic: 正确顺序必须同时满足首句合法、尾句可收束、中段局部关系不断裂。
+    analysis_framework:
+    - 先排除不能作首句的句子
+    - 识别结论/总结尾句
+    - 建立局部紧邻关系
+    - 用首尾锚点锁定整体顺序
+  carry_parallel_expand:
+    source: 语句排序题配置文件 pattern carry_parallel_expand
+    processing_type: 承接上文+并列关系排序
+    correct_logic: 正确顺序应体现承接→并列/补充→总结的递进过程。
+    analysis_framework:
+    - 识别真正承接上文的话头句
+    - 理清并列项接口与次序
+    - 识别补充链条
+    - 将总结句放在收束位置
+  viewpoint_reason_action:
+    source: 语句排序题配置文件 pattern viewpoint_reason_action
+    processing_type: 观点→原因/条件→对策/号召
+    correct_logic: 正确顺序必须先立观点，再补因果或条件，最后落到行动或策略。
+    analysis_framework:
+    - 定位总领观点句
+    - 排出原因链与让步/条件关系
+    - 将行动句置于逻辑终点
+    - 排除功能顺序错置项
+  problem_solution_case_blocks:
+    source: 语句排序题配置文件 pattern problem_solution_case_blocks
+    processing_type: 问题块→对策块→案例/补充块
+    correct_logic: 正确顺序必须满足板块级逻辑推进，局部通顺不能替代整体顺序正确。
+    analysis_framework:
+    - 识别问题块/对策块/案例块
+    - 先锁问题开头
+    - 再排块顺序
+    - 最后校验块内顺序
+  phrase_order_variant:
+    source: 语句排序题配置文件 pattern phrase_order_variant
+    processing_type: 短语逻辑顺序判断
+    correct_logic: 正确项应体现自然动作链、固定搭配链或价值排序，而不是表面语义相关。
+    analysis_framework:
+    - 识别动作或价值链条
+    - 比较选项内部短语顺序
+    - 排除伪通顺表达
+validator_contract:
+  extension_rules:
+  - 语句排序标准母卡统一按6句排序单元制作；若材料不能稳定提供6个可排序句子，则应在生成前淘汰，不得改做3句、4句或7句排序。
+  - 正确顺序必须能解释首句为何可起、尾句为何可收、中段为何能接，不得只给结果不讲接口。
+  - 至少1个错误项应保留局部顺序正确，但破坏首句、尾句或关键捆绑关系。
+  - 若材料存在明显的上文依赖、转折后半句开头、代词指代不明等非首句信号，解析必须显式指出。
+  - 若尾句带有‘因此/所以/总之/可见/无论如何’等收束信号，正确项应优先把该句置后。
+  - 变体排序题需显式说明其不依赖首尾锚点，而依赖固定搭配、语义流程或价值排序。
+  - block-group 排序题必须优先保证唯一较优序列，不能只证明“能够解释出一种顺序”。
+normalized_from: sentence_order_standard_question_card.yaml
+normalization_notes:
+- required_candidate_types expanded to cover all preferred material cards
+- required_profiles expanded to include signals required by preferred material cards
+- generation_archetype duplication removed; question card now follows material_card.default_generation_archetype
+- sentence_block_group is now the primary entry; phrase_or_clause_group should only be used by narrower phrase variants

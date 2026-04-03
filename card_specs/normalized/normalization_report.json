@@ -1,0 +1,150 @@
+{
+  "normalized_root": "C:\\Users\\Maru\\Documents\\agent\\card_specs\\normalized",
+  "files": [
+    {
+      "source_file": "title_selection_signal_layer.yaml",
+      "output_file": "signal_layers/title_selection_signal_layer.normalized.yaml",
+      "schema_version": "signal_layer.v1",
+      "business_family_id": "title_selection",
+      "signal_count": 22,
+      "derived_signal_count": 5
+    },
+    {
+      "source_file": "title_selection_intermediate_material_cards.yaml",
+      "output_file": "material_cards/title_selection_intermediate_material_cards.normalized.yaml",
+      "schema_version": "material_card_registry.v1",
+      "business_family_id": "title_selection",
+      "card_count": 10
+    },
+    {
+      "source_file": "title_selection_standard_question_card.yaml",
+      "output_file": "question_cards/title_selection_standard_question_card.normalized.yaml",
+      "schema_version": "question_card.v1",
+      "business_family_id": "title_selection",
+      "runtime_binding": {
+        "question_type": "main_idea",
+        "business_subtype": "title_selection"
+      },
+      "required_candidate_types": [
+        "closed_span",
+        "multi_paragraph_unit",
+        "whole_passage"
+      ],
+      "required_profiles_count": 17,
+      "normalization_notes": [
+        "business_family_id normalized from legacy family_id=main_idea to title_selection",
+        "required_candidate_types expanded to cover all preferred material cards",
+        "required_profiles expanded to include signals required by preferred material cards",
+        "generation_archetype duplication removed; question card now follows material_card.default_generation_archetype"
+      ]
+    },
+    {
+      "source_file": "continuation_signal_layer.yaml",
+      "output_file": "signal_layers/continuation_signal_layer.normalized.yaml",
+      "schema_version": "signal_layer.v1",
+      "business_family_id": "continuation",
+      "signal_count": 22,
+      "derived_signal_count": 5
+    },
+    {
+      "source_file": "continuation_intermediate_material_cards.yaml",
+      "output_file": "material_cards/continuation_intermediate_material_cards.normalized.yaml",
+      "schema_version": "material_card_registry.v1",
+      "business_family_id": "continuation",
+      "card_count": 10
+    },
+    {
+      "source_file": "continuation_standard_question_card.yaml",
+      "output_file": "question_cards/continuation_standard_question_card.normalized.yaml",
+      "schema_version": "question_card.v1",
+      "business_family_id": "continuation",
+      "runtime_binding": {
+        "question_type": "continuation",
+        "business_subtype": null
+      },
+      "required_candidate_types": [
+        "closed_span",
+        "multi_paragraph_unit",
+        "whole_passage"
+      ],
+      "required_profiles_count": 16,
+      "normalization_notes": [
+        "required_candidate_types expanded to cover all preferred material cards",
+        "required_profiles expanded to include signals required by preferred material cards",
+        "generation_archetype duplication removed; question card now follows material_card.default_generation_archetype"
+      ]
+    },
+    {
+      "source_file": "sentence_order_signal_layer.yaml",
+      "output_file": "signal_layers/sentence_order_signal_layer.normalized.yaml",
+      "schema_version": "signal_layer.v1",
+      "business_family_id": "sentence_order",
+      "signal_count": 13,
+      "derived_signal_count": 5
+    },
+    {
+      "source_file": "sentence_order_intermediate_material_cards.yaml",
+      "output_file": "material_cards/sentence_order_intermediate_material_cards.normalized.yaml",
+      "schema_version": "material_card_registry.v1",
+      "business_family_id": "sentence_order",
+      "card_count": 5
+    },
+    {
+      "source_file": "sentence_order_standard_question_card.yaml",
+      "output_file": "question_cards/sentence_order_standard_question_card.normalized.yaml",
+      "schema_version": "question_card.v1",
+      "business_family_id": "sentence_order",
+      "runtime_binding": {
+        "question_type": "sentence_order",
+        "business_subtype": null
+      },
+      "required_candidate_types": [
+        "phrase_or_clause_group",
+        "sentence_block_group"
+      ],
+      "required_profiles_count": 8,
+      "normalization_notes": [
+        "required_candidate_types expanded to cover all preferred material cards",
+        "required_profiles expanded to include signals required by preferred material cards",
+        "generation_archetype duplication removed; question card now follows material_card.default_generation_archetype"
+      ]
+    },
+    {
+      "source_file": "sentence_fill_signal_layer.yaml",
+      "output_file": "signal_layers/sentence_fill_signal_layer.normalized.yaml",
+      "schema_version": "signal_layer.v1",
+      "business_family_id": "sentence_fill",
+      "signal_count": 16,
+      "derived_signal_count": 0
+    },
+    {
+      "source_file": "sentence_fill_intermediate_material_cards.yaml",
+      "output_file": "material_cards/sentence_fill_intermediate_material_cards.normalized.yaml",
+      "schema_version": "material_card_registry.v1",
+      "business_family_id": "sentence_fill",
+      "card_count": 8
+    },
+    {
+      "source_file": "sentence_fill_standard_question_card.yaml",
+      "output_file": "question_cards/sentence_fill_standard_question_card.normalized.yaml",
+      "schema_version": "question_card.v1",
+      "business_family_id": "sentence_fill",
+      "runtime_binding": {
+        "question_type": "sentence_fill",
+        "business_subtype": null
+      },
+      "required_candidate_types": [
+        "closed_span",
+        "insertion_context_unit",
+        "multi_paragraph_unit",
+        "whole_passage"
+      ],
+      "required_profiles_count": 7,
+      "normalization_notes": [
+        "required_candidate_types expanded to cover all preferred material cards",
+        "required_profiles expanded to include signals required by preferred material cards",
+        "generation_archetype duplication removed; question card now follows material_card.default_generation_archetype"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_order__head_tail_lock__abstract
+  display_name: 语句排序-首尾句锁定
+  description: 先判断首句与尾句合法性，再锁定整体顺序的业务卡。
+  mother_family_id: sentence_order
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句排序题
+    - 首句
+    - 尾句
+    - 总结句
+
+feature_signature:
+  relation_type: 首尾锁定
+  relation_focus: 确定首句与尾句
+  typical_formats:
+    - 将以上几个句子重新排列，语序正确的是……
+    - 将以下几个句子重新排列，语序正确的是……
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 说明文
+    preferred_material_structures:
+      - 观点-论证
+      - 现象-分析
+      - 问题-对策
+    preferred_markers:
+      - 因此
+      - 所以
+      - 看来
+      - 应当
+  ranking_weights:
+    relation_match: 0.26
+    marker_match: 0.15
+    structural_match: 0.29
+    semantic_completeness: 0.15
+    readability: 0.10
+    unique_opener_score: 0.05
+
+slot_projection:
+  question_type: sentence_order
+  business_subtype: null
+  pattern_candidates:
+    - dual_anchor_lock
+  type_slots:
+    opening_anchor_type: explicit_topic
+    opening_signal_strength: high
+    middle_structure_type: local_binding
+    local_binding_strength: medium
+    closing_anchor_type: conclusion
+    closing_signal_strength: high
+    block_order_complexity: medium
+    distractor_modes:
+      - wrong_opening
+      - wrong_closing
+      - local_binding_break
+    distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_order__head_tail_lock__abstract
+    business_feature_card_label: 语句排序-首尾句锁定
+    business_core_rule: 先定首尾句，再补中段顺序

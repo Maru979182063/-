@@ -1,0 +1,70 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_order__deterministic_binding__abstract
+  display_name: 语句排序-确定性捆绑
+  description: 依靠指代词、转折词、并列词等局部强接口来判断句群顺序的业务卡。
+  mother_family_id: sentence_order
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句排序题
+    - 捆绑
+    - 指代
+    - 关联词
+
+feature_signature:
+  relation_type: 确定性捆绑
+  relation_focus: 识别局部句间强关联
+  typical_formats:
+    - 将以上几个句子重新排列，语序正确的是……
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 说明文
+    preferred_material_structures:
+      - 并列推进
+      - 观点-论证
+      - 问题-对策
+    preferred_markers:
+      - 这
+      - 那
+      - 但是
+      - 然而
+      - 同时
+      - 此外
+  ranking_weights:
+    relation_match: 0.28
+    marker_match: 0.18
+    structural_match: 0.24
+    semantic_completeness: 0.15
+    readability: 0.08
+    binding_pair_count: 0.07
+
+slot_projection:
+  question_type: sentence_order
+  business_subtype: null
+  pattern_candidates:
+    - dual_anchor_lock
+    - carry_parallel_expand
+  type_slots:
+    opening_anchor_type: explicit_topic
+    opening_signal_strength: medium
+    middle_structure_type: local_binding
+    local_binding_strength: high
+    closing_anchor_type: conclusion
+    closing_signal_strength: medium
+    block_order_complexity: medium
+    distractor_modes:
+      - local_binding_break
+      - connector_mislead
+      - wrong_opening
+    distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_order__deterministic_binding__abstract
+    business_feature_card_label: 语句排序-确定性捆绑
+    business_core_rule: 优先找指代词、转折词、并列词形成的局部捆绑

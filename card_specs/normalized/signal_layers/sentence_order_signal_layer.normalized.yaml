@@ -1,0 +1,174 @@
+schema_version: signal_layer.v1
+layer_id: sentence_order_signal_layer_v1
+business_family_id: sentence_order
+layer_role: neutral_signal_profile
+description: 排序题的中间层不直接判断唯一主族，而是抽取句群接口信号：谁可起、谁可收、哪些句子必须局部捆绑、是否存在板块顺序。
+signals:
+- signal_id: opening_anchor_type
+  type: enum
+  description: 首句合法性的功能类型
+  allowed_values:
+  - explicit_topic
+  - upper_context_link
+  - viewpoint_opening
+  - problem_opening
+  - weak_opening
+  - none
+- signal_id: opening_signal_strength
+  type: float
+  description: 首句锚点强度，越高越容易先锁开头
+  range:
+  - 0
+  - 1
+- signal_id: non_opening_penalty
+  type: float
+  description: 某句不宜作首句的程度，如代词依赖、转折后半句、解释句等
+  range:
+  - 0
+  - 1
+- signal_id: middle_structure_type
+  type: enum
+  description: 中段主要关系类型
+  allowed_values:
+  - local_binding
+  - parallel_expansion
+  - cause_effect_chain
+  - problem_solution_blocks
+  - mixed_layers
+- signal_id: local_binding_strength
+  type: float
+  description: 局部两两捆绑或小链条的清晰度
+  range:
+  - 0
+  - 1
+- signal_id: connector_signal_strength
+  type: float
+  description: 显性逻辑连接词对顺序推导的帮助程度
+  range:
+  - 0
+  - 1
+- signal_id: closing_anchor_type
+  type: enum
+  description: 尾句功能类型
+  allowed_values:
+  - conclusion
+  - summary
+  - call_to_action
+  - case_support
+  - none
+- signal_id: closing_signal_strength
+  type: float
+  description: 尾句收束性强度
+  range:
+  - 0
+  - 1
+- signal_id: block_order_complexity
+  type: float
+  description: 是否需要板块级排序而非单句局部接口
+  range:
+  - 0
+  - 1
+- signal_id: sequence_integrity
+  type: float
+  description: 整体顺序是否能闭合且解释充分
+  range:
+  - 0
+  - 1
+- signal_id: unique_opener_score
+  type: float
+  description: 是否存在明显强于其它句的唯一首句候选
+  range:
+  - 0
+  - 1
+- signal_id: binding_pair_count
+  type: float
+  description: 明确局部捆绑对数量，至少应能锁住两组局部关系
+  range:
+  - 0
+  - 4
+- signal_id: exchange_risk
+  type: float
+  description: 交换部分句子后仍保持高通顺性的风险，越高越不适合排序
+  range:
+  - 0
+  - 1
+- signal_id: function_overlap_score
+  type: float
+  description: 多句承担相近功能角色的重叠风险，越高越容易出现可替换句
+  range:
+  - 0
+  - 1
+- signal_id: multi_path_risk
+  type: float
+  description: 是否存在多条近似合理排序路径，越高越缺乏唯一较优序列
+  range:
+  - 0
+  - 1
+- signal_id: discourse_progression_strength
+  type: float
+  description: 提出→展开→收束的篇章推进强度
+  range:
+  - 0
+  - 1
+- signal_id: context_closure_score
+  type: float
+  description: 句群是否形成闭合文脉，而非松散摘句
+  range:
+  - 0
+  - 1
+- signal_id: temporal_order_strength
+  type: float
+  description: 时间推进线索强度，适用于时间脉络型排序
+  range:
+  - 0
+  - 1
+- signal_id: action_sequence_irreversibility
+  type: float
+  description: 动作或步骤顺序是否不可逆，越高越不应交换
+  range:
+  - 0
+  - 1
+- signal_id: context_dependency
+  type: float
+  description: 对上一段或外部语境依赖程度
+  range:
+  - 0
+  - 1
+- signal_id: tail_settlement_strength
+  type: float
+  description: 尾句是否明显承担总结、结论、号召或落点功能
+  range:
+  - 0
+  - 1
+- signal_id: phrase_order_salience
+  type: float
+  description: 是否更像句内/短语内部排序题
+  range:
+  - 0
+  - 1
+derived_signals:
+- signal_id: family_affinity_topk
+  type: array
+  description: 排序题与其它家族的粗排序，不做唯一归属
+- signal_id: candidate_type
+  type: enum
+  description: 一期候选材料类型
+  allowed_values:
+  - sentence_block_group
+  - phrase_or_clause_group
+- signal_id: recommended_generation_archetype
+  type: enum
+  description: 问题侧五大生成原型之一
+  allowed_values:
+  - dual_anchor_lock
+  - carry_parallel_expand
+  - viewpoint_reason_action
+  - problem_solution_case_blocks
+  - phrase_order_variant
+- signal_id: recommended_material_cards
+  type: array
+  description: Top-N中间结构卡建议
+- signal_id: distractor_profile
+  type: object
+  description: 建议的错误项破坏方向
+normalized_from: sentence_order_signal_layer.yaml

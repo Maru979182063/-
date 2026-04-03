@@ -1,0 +1,72 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_order__discourse_logic__abstract
+  display_name: 语句排序-行文逻辑
+  description: 依靠观点+解释、提问+回答、问题+对策等篇章推进关系来排序的业务卡。
+  mother_family_id: sentence_order
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句排序题
+    - 行文逻辑
+    - 观点解释
+    - 问题对策
+
+feature_signature:
+  relation_type: 行文逻辑
+  relation_focus: 判断板块推进和篇章顺序
+  typical_formats:
+    - 将以上几个句子重新排列，语序正确的是……
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 评论文
+    preferred_material_structures:
+      - 观点-论证
+      - 问题-对策
+      - 现象-分析
+      - 过程说明
+    preferred_markers:
+      - 因此
+      - 所以
+      - 应当
+      - 为什么
+      - 如何
+  ranking_weights:
+    relation_match: 0.28
+    marker_match: 0.14
+    structural_match: 0.26
+    semantic_completeness: 0.15
+    readability: 0.07
+    discourse_progression_strength: 0.06
+    context_closure_score: 0.04
+
+slot_projection:
+  question_type: sentence_order
+  business_subtype: null
+  pattern_candidates:
+    - viewpoint_reason_action
+    - problem_solution_case_blocks
+    - dual_anchor_lock
+  type_slots:
+    opening_anchor_type: viewpoint_opening
+    opening_signal_strength: high
+    middle_structure_type: cause_effect_chain
+    local_binding_strength: medium
+    closing_anchor_type: conclusion
+    closing_signal_strength: medium
+    block_order_complexity: high
+    distractor_modes:
+      - block_swap
+      - wrong_opening
+      - action_fronting
+    distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_order__discourse_logic__abstract
+    business_feature_card_label: 语句排序-行文逻辑
+    business_core_rule: 先判断观点、解释、问题、对策等板块顺序

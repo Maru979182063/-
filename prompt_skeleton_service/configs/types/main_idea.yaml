@@ -1,0 +1,581 @@
+type_id: main_idea
+display_name: 主旨/中心/标题/结构概括题
+enabled: true
+aliases:
+  - 主旨概括
+  - 中心理解
+  - 选择标题
+  - 结构概括
+  - 局部段意概括
+
+task_definition: >
+  基于给定语段内容，为主旨类题目生成稳定的 prompt 骨架。
+  核心任务是识别文段的中心意义、表达任务或最恰当的标题指向，
+  而不是复述局部信息。正确项需要覆盖核心语义关系并保持恰当抽象；
+  错误项应在同话题下制造局部正确、层级错位、范围偏移、功能误判或无中生有等干扰。
+
+default_pattern_id: single_claim_capture
+
+difficulty_target_profiles:
+  easy:
+    complexity: { min: 0.18, max: 0.42 }
+    ambiguity: { min: 0.18, max: 0.38 }
+    reasoning_depth: { min: 0.20, max: 0.42 }
+    distractor_similarity: { min: 0.25, max: 0.55 }
+  medium:
+    complexity: { min: 0.38, max: 0.62 }
+    ambiguity: { min: 0.32, max: 0.58 }
+    reasoning_depth: { min: 0.38, max: 0.62 }
+    distractor_similarity: { min: 0.45, max: 0.72 }
+  hard:
+    complexity: { min: 0.56, max: 0.84 }
+    ambiguity: { min: 0.48, max: 0.78 }
+    reasoning_depth: { min: 0.55, max: 0.84 }
+    distractor_similarity: { min: 0.62, max: 0.90 }
+
+skeleton:
+  anchor_type: whole_passage_structure
+  operation_type: integrate
+  target_type: core_meaning
+
+slot_schema:
+  structure_type:
+    type: string
+    required: false
+    default: turning
+    allowed:
+      - explicit_single_center
+      - turning
+      - progressive
+      - contrast
+      - multi_paragraph_hidden
+      - local_paragraph
+    description: 文段结构类型
+
+  main_point_source:
+    type: string
+    required: false
+    default: whole_passage
+    allowed:
+      - whole_passage
+      - conclusion_sentence
+      - tail_sentence
+      - local_paragraph
+    description: 核心信息来源位置
+
+  abstraction_level:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 正确项抽象程度
+
+  coverage_requirement:
+    type: string
+    required: false
+    default: integrated
+    allowed:
+      - close_rephrase
+      - integrated
+      - abstract_generalization
+    description: 正确项覆盖要求
+
+  target_form:
+    type: string
+    required: false
+    default: central_meaning
+    allowed:
+      - central_meaning
+      - article_task
+      - title_label
+      - structure_summary
+      - local_paragraph_meaning
+    description: 目标输出形式
+
+  title_style:
+    type: string
+    required: false
+    default: neutral
+    allowed:
+      - neutral
+      - direct_label
+      - thematic
+      - rhetorical
+      - abstract
+    description: 标题类题目的标题风格，仅选择标题时使用
+
+  distractor_modes:
+    type: array
+    required: false
+    default:
+      - middle_conclusion
+      - example_fragment
+      - scope_shift
+    allowed:
+      - middle_conclusion
+      - example_fragment
+      - scope_shift
+      - overgeneralization
+      - undergeneralization
+      - topic_shift
+      - fabrication
+      - function_misread
+      - title_too_wide
+      - title_too_narrow
+      - catchy_but_offcore
+    description: 错误项模式
+
+  distractor_strength:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 干扰项强度
+
+  statement_visibility:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - high
+      - medium
+      - low
+    description: 中心是否显性
+
+default_slots:
+  structure_type: turning
+  main_point_source: whole_passage
+  abstraction_level: medium
+  coverage_requirement: integrated
+  target_form: central_meaning
+  title_style: neutral
+  distractor_modes:
+    - middle_conclusion
+    - example_fragment
+    - scope_shift
+  distractor_strength: high
+  statement_visibility: medium
+
+fewshot_policy:
+  enabled: true
+  bind_to_difficulty: false
+  max_examples: 1
+  mode: structure_only
+
+default_fewshot:
+  title: 主旨类题目结构示例
+  content: >
+    示例只用于提示“正确项应抓住全文中心意义或文章任务，错误项常表现为局部信息、
+    范围失衡、功能误判或话题偏移”，不用于绑定具体难度。
+
+patterns:
+  - pattern_id: single_claim_capture
+    pattern_name: 显性单中心主旨型
+    enabled: true
+    match_rules:
+      structure_type:
+        - explicit_single_center
+      main_point_source:
+        - conclusion_sentence
+        - tail_sentence
+      abstraction_level:
+        - low
+      statement_visibility:
+        - high
+
+    control_logic:
+      difficulty_source: 选项
+      option_confusion: 中
+      control_levers:
+        passage: 选主旨较显性、单中心、结论较明确的材料
+        correct_option: 尽量贴近原文结论句，对中心意思做轻度改写
+        wrong_options:
+          - 1个明显无关项
+          - 2个局部正确但非中心项
+      special_fields:
+        reverse_inference_key: 先找结论句或尾句，再判断哪个选项最接近全文中心而非局部内容
+
+    generation_logic:
+      generation_core: 显性单中心主旨题制作
+      processing_type: 结论句提炼
+      correct_logic: 正确项应贴近原文主旨句，但不能机械照抄，需保持中心性高于局部信息
+      high_freq_traps:
+        - 局部信息替代中心
+        - 话题相关但重心错误
+        - 无中生有
+      distractor_pattern: 使用1个无关项+2个局部正确项形成基础干扰
+      analysis_steps:
+        step1_定位主旨句: 找到显性的结论句或尾句
+        step2_确认中心: 判断其是否统摄全文
+        step3_改写正确项: 轻度整合改写，不改变中心方向
+        step4_构造干扰项: 用局部信息和相关错位信息构造错误项
+
+    difficulty_rules:
+      complexity:
+        base: 0.28
+      ambiguity:
+        by_slot:
+          statement_visibility:
+            high: 0.24
+            medium: 0.36
+            low: 0.48
+      reasoning_depth:
+        by_slot:
+          abstraction_level:
+            low: 0.28
+            medium: 0.42
+            high: 0.58
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.30
+            medium: 0.48
+            high: 0.66
+
+  - pattern_id: conclusion_sentence_refinement
+    pattern_name: 结论句提炼型
+    enabled: true
+    match_rules:
+      main_point_source:
+        - conclusion_sentence
+        - tail_sentence
+      abstraction_level:
+        - medium
+      structure_type:
+        - turning
+        - progressive
+      statement_visibility:
+        - medium
+
+    control_logic:
+      difficulty_source: 选项+主旨抽象
+      option_confusion: 中高
+      control_levers:
+        passage: 选有转折或递进、结论集中在后段、需要从结论句再提炼一层的材料
+        correct_option: 对结论句做提炼，不直接复现原文
+        wrong_options:
+          - 1个中间结论项
+          - 1个局部例子项
+          - 1个范围偏移项
+      special_fields:
+        reverse_inference_key: 不是直接找尾句同义复现，而是判断尾句是否代表全文中心并再上提一层
+
+    generation_logic:
+      generation_core: 结论句提炼型主旨题制作
+      processing_type: 结论句提炼
+      correct_logic: 正确项来源于结论句，但要保持比原句更稳的概括层级，能覆盖全文而非只覆盖尾句
+      high_freq_traps:
+        - 举例当主旨
+        - 中间结论干扰
+        - 范围扩大或缩小
+        - 以偏概全
+      distractor_pattern: 在同一话题下设置结论句局部复现项、例子项和范围失衡项
+      analysis_steps:
+        step1_识别后段结论: 找出文段后半部分结论表达
+        step2_判断统摄性: 确认该结论能否代表全文
+        step3_抽象提升: 将结论提升一层形成正确项
+        step4_设置干扰: 制造局部正确但层级不够的干扰项
+
+    difficulty_rules:
+      complexity:
+        base: 0.42
+      ambiguity:
+        by_slot:
+          structure_type:
+            turning: 0.42
+            progressive: 0.48
+      reasoning_depth:
+        by_slot:
+          abstraction_level:
+            medium: 0.52
+            high: 0.66
+      distractor_similarity:
+        by_text:
+          option_confusion:
+            中: 0.48
+            中高: 0.68
+            高: 0.82
+
+  - pattern_id: whole_passage_integration
+    pattern_name: 全文整合概括型
+    enabled: true
+    match_rules:
+      main_point_source:
+        - whole_passage
+      coverage_requirement:
+        - integrated
+      structure_type:
+        - turning
+        - progressive
+        - contrast
+
+    control_logic:
+      difficulty_source: 文段整合+选项
+      option_confusion: 中
+      control_levers:
+        passage: 选有转折、递进或对比关系，需要跨句整合才能得出主旨的材料
+        correct_option: 对原文主旨做一层整合改写
+        wrong_options:
+          - 1个中间结论项
+          - 1个局部例子项
+          - 1个范围偏移项
+      special_fields:
+        reverse_inference_key: 先判断全文主线，再看哪个选项真正覆盖多个关键信息块
+
+    generation_logic:
+      generation_core: 全文整合型主旨题制作
+      processing_type: 整合概括
+      correct_logic: 正确项必须覆盖文段核心关系，不能只抓单句结论或单个例子
+      high_freq_traps:
+        - 中间结论干扰
+        - 以偏概全
+        - 无中生有
+        - 例子替代主旨
+      distractor_pattern: 用局部正确项、分论点项和层级偏移项围绕同一话题构造干扰
+      analysis_steps:
+        step1_拆分信息块: 提取文段中的关键语义块
+        step2_确定主线: 找出各信息块之间的核心关系
+        step3_整合中心: 用更高层表达合并主线
+        step4_压制局部项: 排除只覆盖一部分内容的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.50
+      ambiguity:
+        by_slot:
+          statement_visibility:
+            high: 0.34
+            medium: 0.48
+            low: 0.62
+      reasoning_depth:
+        by_slot:
+          coverage_requirement:
+            integrated: 0.55
+            abstract_generalization: 0.68
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.62
+            high: 0.78
+
+  - pattern_id: hidden_thesis_abstraction
+    pattern_name: 隐含主旨抽象型
+    enabled: true
+    match_rules:
+      structure_type:
+        - multi_paragraph_hidden
+      main_point_source:
+        - whole_passage
+      abstraction_level:
+        - high
+      coverage_requirement:
+        - abstract_generalization
+      statement_visibility:
+        - low
+
+    control_logic:
+      difficulty_source: 选项+主旨抽象
+      option_confusion: 高
+      control_levers:
+        passage: 选多段铺陈、主旨隐含、需要抽象归纳的材料
+        correct_option: 提升抽象度，不直接复现原文
+        wrong_options:
+          - 1个中间结论项
+          - 1个例子或分论点项
+          - 1个与主题相关但层级错误项
+      special_fields:
+        reverse_inference_key: 正确项通常不是文中原句，而是对多段材料共同指向的抽象表达
+
+    generation_logic:
+      generation_core: 隐含主旨抽象型主旨题制作
+      processing_type: 抽象概括
+      correct_logic: 正确项必须从多段铺陈中抽出共通指向，抽象程度高于原文表层表达
+      high_freq_traps:
+        - 中间结论干扰
+        - 举例当主旨
+        - 范围扩大或缩小
+        - 无中生有
+        - 话题偏移
+      distractor_pattern: 用相关但抽象层级错误的选项制造高干扰，同时混入中间结论项和分论点项
+      analysis_steps:
+        step1_识别多段共核: 从多段内容中寻找共同指向
+        step2_剥离表层话题: 去除例子、分论点和中间结论
+        step3_提升抽象层级: 用更上位概念重组主旨
+        step4_构造高相似干扰: 保留话题相关性但故意错位层级或范围
+
+    difficulty_rules:
+      complexity:
+        base: 0.68
+      ambiguity:
+        by_slot:
+          statement_visibility:
+            low: 0.74
+            medium: 0.58
+      reasoning_depth:
+        by_slot:
+          abstraction_level:
+            high: 0.78
+            medium: 0.60
+      distractor_similarity:
+        by_text:
+          option_confusion:
+            中高: 0.74
+            高: 0.88
+
+business_subtypes:
+  - subtype_id: main_idea_general
+    display_name: 主旨概括
+    description: 抓全文主旨与中心表达，允许较宽口径的概括。
+    preferred_patterns:
+      - whole_passage_integration
+      - hidden_thesis_abstraction
+    default_slot_overrides:
+      main_point_source: whole_passage
+      coverage_requirement: integrated
+      abstraction_level: medium
+      target_form: central_meaning
+      statement_visibility: medium
+
+  - subtype_id: center_understanding
+    display_name: 中心理解
+    description: 抓文章围绕的中心对象及其表达任务，答案常体现“对象 + 文章在说明/解释/论证什么”。
+    preferred_patterns:
+      - single_claim_capture
+      - whole_passage_integration
+      - conclusion_sentence_refinement
+    default_slot_overrides:
+      main_point_source: whole_passage
+      coverage_requirement: integrated
+      abstraction_level: medium
+      target_form: article_task
+      statement_visibility: high
+      distractor_modes:
+        - function_misread
+        - topic_shift
+        - overgeneralization
+    fewshot_policy:
+      enabled: true
+      bind_to_difficulty: false
+      max_examples: 1
+      mode: structure_only
+    fewshot_examples:
+      - title: 中心理解题示例-对象加任务型
+        preferred_patterns:
+          - single_claim_capture
+          - conclusion_sentence_refinement
+        fit_slots:
+          target_form: article_task
+          statement_visibility: high
+          abstraction_level: medium
+        input_brief: >
+          文段先指出数学模型成功预测厄尔尼诺，随后解释该模型如何通过海面变化、
+          罗斯比波与Kelvin波的往复作用说明暖冷周期转变。
+        question_brief: 该文章的主旨是（ ）。
+        options_brief:
+          - 解释数学模型对厄尔尼诺现象预测的原理
+          - 引发人们对厄尔尼诺现象的探究
+          - 向人们证明科学的伟大
+          - 给人们普及一种地理知识
+        answer: 解释数学模型对厄尔尼诺现象预测的原理
+        rationale_brief: >
+          正确项同时保留中心对象“数学模型/厄尔尼诺”和文章任务“解释预测原理”，
+          错项常表现为价值拔高、功能误判或偏离核心对象。
+
+  - subtype_id: title_selection
+    display_name: 选择标题
+    description: 为文段选择最能统领中心对象与表达任务的标题，强调标题的覆盖性、凝练性与贴题度。
+    preferred_patterns:
+      - whole_passage_integration
+      - single_claim_capture
+      - hidden_thesis_abstraction
+    default_slot_overrides:
+      main_point_source: whole_passage
+      coverage_requirement: integrated
+      abstraction_level: medium
+      target_form: title_label
+      title_style: thematic
+      statement_visibility: medium
+      distractor_modes:
+        - title_too_wide
+        - title_too_narrow
+        - catchy_but_offcore
+    fewshot_policy:
+      enabled: true
+      bind_to_difficulty: false
+      max_examples: 1
+      mode: structure_only
+    fewshot_examples:
+      - title: 选择标题题示例1-主题统领型
+        preferred_patterns:
+          - whole_passage_integration
+        fit_slots:
+          title_style: thematic
+          statement_visibility: medium
+          abstraction_level: medium
+        input_brief: >
+          文段围绕“闽台关系档案”展开，从时间、内容与精神三个维度说明其记录迁台历史、
+          反映两岸真实面貌、承载共同文化认同与家国情怀，核心在于这些档案是两岸关系与
+          历史归属的重要见证。
+        question_brief: 最适合本篇文章的标题是（ ）。
+        options_brief:
+          - 两岸同属一个中国的历史见证
+          - 闽台两岸同胞血脉相连
+          - 全方位解读历史文化宝藏
+          - 多措并举守护两岸共同记忆
+        answer: 两岸同属一个中国的历史见证
+        rationale_brief: >
+          正确标题既保留中心对象“闽台关系档案”，又概括其核心功能“历史见证”；
+          错项常表现为只抓局部关系、概括过宽或引入文段未强调的行动导向。
+
+      - title: 选择标题题示例2-直陈标签型
+        preferred_patterns:
+          - single_claim_capture
+        fit_slots:
+          title_style: direct_label
+          statement_visibility: high
+          abstraction_level: low
+        input_brief: >
+          文段围绕“健康饮食痴迷症”进行介绍，先提出“过度重视健康饮食也会危害健康”，
+          再具体说明其表现、危害、成因与治疗方向，整体写作目的是做反常识科普说明。
+        question_brief: 最能概括这段文字的标题是（ ）。
+        options_brief:
+          - 痴迷健康饮食也是一种病
+          - 健康饮食痴迷症的危害
+          - 饮食习惯影响心理健康
+          - 健康饮食痴迷症需要心理治疗
+        answer: 痴迷健康饮食也是一种病
+        rationale_brief: >
+          正确标题要覆盖全文介绍对象及核心判断，体现“反常识式总标签”；
+          错项常表现为只抓危害、只抓治疗，或把文章缩成某个局部维度。
+
+  - subtype_id: structure_summary
+    display_name: 结构概括
+    description: 抓文段在整体推进中的结构关系，答案偏向“全文如何组织中心内容”。
+    preferred_patterns:
+      - whole_passage_integration
+      - hidden_thesis_abstraction
+    default_slot_overrides:
+      main_point_source: whole_passage
+      coverage_requirement: integrated
+      abstraction_level: high
+      target_form: structure_summary
+      statement_visibility: medium
+
+  - subtype_id: local_paragraph_summary
+    display_name: 局部段意概括
+    description: 抓局部段落的中心内容，而非全文主旨。
+    preferred_patterns:
+      - single_claim_capture
+      - conclusion_sentence_refinement
+    default_slot_overrides:
+      main_point_source: local_paragraph
+      coverage_requirement: close_rephrase
+      abstraction_level: low
+      target_form: local_paragraph_meaning
+      statement_visibility: high

@@ -1,0 +1,20 @@
+version: "fit.v1"
+fit_scores:
+  主旨概括:
+    weights:
+      single_center_strength: 0.3
+      summary_strength: 0.25
+      distractor_space: 0.15
+      independence_score: 0.3
+  中心理解:
+    weights:
+      single_center_strength: 0.35
+      explanation_strength: 0.2
+      independence_score: 0.25
+      question_worthiness_score: 0.2
+  语句排序-首尾锚点型:
+    weights:
+      ordering_anchor_strength: 0.45
+      transition_strength: 0.25
+      independence_score: 0.15
+      story_completeness_strength: 0.15

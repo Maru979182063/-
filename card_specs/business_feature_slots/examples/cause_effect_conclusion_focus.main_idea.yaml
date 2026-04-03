@@ -1,0 +1,134 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: cause_effect__conclusion_focus__main_idea
+  display_name: 因果关系-结论是重点
+  description: 适用于抓取显式因果关系且结论句承担中心信息的文段，优先服务主旨/中心理解类题。
+  mother_family_id: main_idea
+  business_subtype: center_understanding
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 因果关系
+    - 结论句
+    - 标志词显式
+    - 结论重点
+
+feature_signature:
+  relation_type: 因果关系
+  relation_focus: 结论是重点
+  typical_formats:
+    - 因为……所以……
+    - 由于……因此……
+  explicit_markers:
+    cause_markers:
+      - 因为
+      - 由于
+    conclusion_markers:
+      - 所以
+      - 因此
+      - 因而
+      - 故而
+      - 于是
+      - 可见
+      - 看来
+    variant_markers:
+      - 在这种情况下
+      - 可以说
+      - 换言之
+  structural_features:
+    conclusion_is_core: true
+    conclusion_position: tail_or_late
+    sentence_position_hint: end_of_paragraph
+    needs_multi_relation_analysis: false
+  distractor_features:
+    strong_modes:
+      - middle_conclusion
+      - scope_shift
+      - fabrication
+    non_key_content_sources:
+      - 结论前内容
+      - 围绕解释说明的表达
+  extraction_hints:
+    require_explicit_marker: true
+    require_complete_meaning: true
+    min_sentence_count: 2
+    preferred_paragraph_window:
+      - 1
+      - 2
+
+retrieval_profile:
+  hard_filters:
+    logic_relations:
+      - 因果
+    require_explicit_marker: true
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 评论文
+      - 宣传文
+      - 政策文
+    preferred_material_structures:
+      - 现象-分析
+      - 观点-论证
+      - 背景-核心结论
+    preferred_conclusion_position:
+      - tail_or_late
+    preferred_markers:
+      - 所以
+      - 因此
+      - 可见
+  ranking_weights:
+    relation_match: 0.30
+    marker_match: 0.25
+    structural_match: 0.20
+    semantic_completeness: 0.15
+    readability: 0.10
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: true
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: main_idea
+  business_subtype: center_understanding
+  pattern_candidates:
+    - conclusion_sentence_refinement
+    - whole_passage_integration
+  type_slots:
+    structure_type: progressive
+    main_point_source: conclusion_sentence
+    abstraction_level: medium
+    coverage_requirement: integrated
+    target_form: central_meaning
+    distractor_modes:
+      - middle_conclusion
+      - scope_shift
+      - fabrication
+    distractor_strength: high
+    statement_visibility: medium
+  prompt_extras:
+    business_feature_card_id: cause_effect__conclusion_focus__main_idea
+    business_feature_card_label: 因果关系-结论是重点
+    retrieval_mode: business_feature_card
+    required_review_overrides:
+      must_keep_conclusion_focus: true
+      must_preserve_cause_effect_relation: true
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations:
+      - 因果
+    position_roles:
+      - 尾段总结
+    material_structure_label: 现象-分析
+  expected_business_fields:
+    feature_type: 因果关系
+    conclusion_focus: true
+    conclusion_position: tail_or_late
+    explicit_marker_group:
+      - 因为
+      - 所以
+      - 由于
+      - 因此

@@ -1,0 +1,284 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_fill__position_function__abstract
+  display_name: 语句填空-位置功能判断
+  description: 按横线位置、句子功能、句内句际关系来判断最合适填句的教材型业务卡。
+  mother_family_id: sentence_fill
+  enabled: false
+  source: textbook_business_card
+  tags:
+    - 语句填空题
+    - 横线位置
+    - 功能判断
+    - 承上启下
+
+feature_signature:
+  relation_type: 位置功能匹配
+  relation_focus: 横线句必须与所在位置的功能一致
+  typical_formats:
+    - 填入画横线部分最恰当的一句是……
+    - 填入画横线部分最恰当的一项是……
+  business_axes:
+    - blank_position
+    - blank_unit_type
+    - function_type
+    - logic_relation
+    - topic_consistency
+  solving_focus:
+    clause_level: 横线为分句时，优先判断句内衔接是否自然
+    sentence_level: 横线为完整句时，优先判断句子之间的关系与话题一致性
+  position_function_map:
+    opening:
+      - summarize_following_text
+      - topic_introduction
+    middle:
+      - carry_previous
+      - lead_next
+      - bridge_both_sides
+    ending:
+      - summarize_previous_text
+      - propose_countermeasure
+  structural_features:
+    best_middle_case: bridge_both_sides
+    opening_prefers_topic_set_up: true
+    ending_prefers_closure_or_action: true
+  distractor_features:
+    strong_modes:
+      - function_mismatch
+      - weak_backward_link
+      - weak_forward_link
+      - topic_shift
+    non_key_content_sources:
+      - 只承前不启后
+      - 只启后不承前
+      - 只做局部解释但不符合位置功能
+  extraction_hints:
+    require_explicit_marker: false
+    require_complete_meaning: true
+    min_sentence_count: 2
+    preferred_paragraph_window:
+      - 1
+      - 2
+
+retrieval_profile:
+  hard_filters:
+    require_explicit_marker: false
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 评论文
+      - 政策文
+      - 宣传文
+    preferred_material_structures:
+      - 综合说明
+      - 现象-分析
+      - 观点-论证
+    preferred_conclusion_position: []
+    preferred_markers:
+      - 同时
+      - 此外
+      - 因此
+      - 所以
+      - 首先
+      - 最后
+  ranking_weights:
+    relation_match: 0.25
+    marker_match: 0.15
+    structural_match: 0.20
+    semantic_completeness: 0.20
+    readability: 0.20
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: false
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: sentence_fill
+  business_subtype: null
+  pattern_candidates:
+    - opening_summary
+    - bridge_transition
+    - middle_explanation
+    - middle_focus_shift
+    - ending_summary
+  type_slots:
+    blank_position: middle
+    function_type: bridge
+    logic_relation: continuation
+    context_dependency: medium
+    bidirectional_validation: medium
+    reference_dependency: low
+    abstraction_level: medium
+    distractor_modes:
+      - function_mismatch
+      - weak_forward_link
+      - topic_shift
+    distractor_strength: high
+  slot_strategy_map:
+    opening_summary:
+      when:
+        blank_position: opening
+        business_function: summarize_following_text
+      pattern_candidates:
+        - opening_summary
+      type_slots:
+        blank_position: opening
+        function_type: opening_summary
+        logic_relation: summary
+        context_dependency: medium
+        bidirectional_validation: low
+        reference_dependency: low
+        abstraction_level: medium
+        distractor_modes:
+          - function_mismatch
+          - overgeneralization
+          - undergeneralization
+        distractor_strength: medium
+    opening_topic_intro:
+      when:
+        blank_position: opening
+        business_function: topic_introduction
+      pattern_candidates:
+        - opening_summary
+        - bridge_transition
+      type_slots:
+        blank_position: opening
+        function_type: opening_summary
+        logic_relation: transition
+        context_dependency: medium
+        bidirectional_validation: low
+        reference_dependency: low
+        abstraction_level: medium
+        distractor_modes:
+          - function_mismatch
+          - topic_shift
+          - wrong_direction
+        distractor_strength: medium
+    middle_carry_previous:
+      when:
+        blank_position: middle
+        business_function: carry_previous
+      pattern_candidates:
+        - middle_explanation
+      type_slots:
+        blank_position: middle
+        function_type: middle_explanation
+        logic_relation: explanation
+        context_dependency: medium
+        bidirectional_validation: low
+        reference_dependency: medium
+        abstraction_level: low
+        distractor_modes:
+          - weak_backward_link
+          - function_mismatch
+          - role_mismatch
+        distractor_strength: high
+    middle_lead_next:
+      when:
+        blank_position: middle
+        business_function: lead_next
+      pattern_candidates:
+        - bridge_transition
+        - middle_focus_shift
+      type_slots:
+        blank_position: middle
+        function_type: bridge
+        logic_relation: transition
+        context_dependency: medium
+        bidirectional_validation: low
+        reference_dependency: low
+        abstraction_level: medium
+        distractor_modes:
+          - weak_forward_link
+          - wrong_direction
+          - topic_shift
+        distractor_strength: high
+    middle_bridge_both_sides:
+      when:
+        blank_position: middle
+        business_function: bridge_both_sides
+      pattern_candidates:
+        - bridge_transition
+      type_slots:
+        blank_position: middle
+        function_type: bridge
+        logic_relation: continuation
+        context_dependency: high
+        bidirectional_validation: high
+        reference_dependency: medium
+        abstraction_level: medium
+        distractor_modes:
+          - function_mismatch
+          - weak_backward_link
+          - weak_forward_link
+        distractor_strength: high
+    ending_summary:
+      when:
+        blank_position: ending
+        business_function: summarize_previous_text
+      pattern_candidates:
+        - ending_summary
+      type_slots:
+        blank_position: ending
+        function_type: ending_summary
+        logic_relation: summary
+        context_dependency: low
+        bidirectional_validation: low
+        reference_dependency: low
+        abstraction_level: medium
+        distractor_modes:
+          - function_mismatch
+          - overgeneralization
+          - topic_shift
+        distractor_strength: medium
+    ending_countermeasure:
+      when:
+        blank_position: ending
+        business_function: propose_countermeasure
+      pattern_candidates:
+        - ending_summary
+      type_slots:
+        blank_position: ending
+        function_type: ending_summary
+        logic_relation: summary
+        context_dependency: low
+        bidirectional_validation: low
+        reference_dependency: low
+        abstraction_level: medium
+        distractor_modes:
+          - function_mismatch
+          - wrong_direction
+          - topic_shift
+        distractor_strength: high
+      prompt_extras:
+        ending_business_action: countermeasure
+  prompt_extras:
+    business_feature_card_id: sentence_fill__position_function__abstract
+    business_feature_card_label: 语句填空-位置功能判断
+    retrieval_mode: business_feature_card
+    business_core_rule: 先定横线位置，再定句子功能，再看话题一致
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations:
+      - 承接
+      - 因果
+      - 转折
+    position_roles:
+      - 开头总领
+      - 中间解释位
+      - 尾段总结
+    material_structure_label: 综合说明
+  expected_business_fields:
+    feature_type: 位置功能匹配
+    conclusion_focus: false
+    conclusion_position: any
+    explicit_marker_group:
+      - 同时
+      - 此外
+      - 因此
+      - 所以
+      - 首先
+      - 最后

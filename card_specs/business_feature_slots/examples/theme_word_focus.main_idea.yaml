@@ -1,0 +1,110 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: theme_word_focus__main_idea
+  display_name: 主题词-全文围绕同一话题
+  description: 适用于全文多句都围绕稳定主题词展开、正确项应包含主题词的文段。
+  mother_family_id: main_idea
+  business_subtype: center_understanding
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 主题词
+    - 话题一致
+
+feature_signature:
+  relation_type: 主题词
+  relation_focus: 每句话都围绕相同话题
+  typical_formats: []
+  explicit_markers:
+    cause_markers: []
+    conclusion_markers: []
+    variant_markers:
+      - 围绕
+      - 核心
+      - 主线
+      - 主题
+  structural_features:
+    conclusion_is_core: false
+    conclusion_position: distributed
+    sentence_position_hint: repeated_theme_words
+    needs_multi_relation_analysis: false
+  distractor_features:
+    strong_modes:
+      - topic_shift
+      - overgeneralization
+      - undergeneralization
+    non_key_content_sources:
+      - 主题词偷换
+      - 范围扩大或缩小
+  extraction_hints:
+    require_explicit_marker: false
+    require_complete_meaning: true
+    min_sentence_count: 2
+    preferred_paragraph_window:
+      - 1
+      - 2
+      - 3
+
+retrieval_profile:
+  hard_filters:
+    logic_relations: []
+    require_explicit_marker: false
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 评论文
+      - 宣传文
+      - 政策文
+    preferred_material_structures:
+      - 总分
+      - 观点-论证
+      - 并列展开
+    preferred_conclusion_position:
+      - distributed
+    preferred_markers: []
+  ranking_weights:
+    relation_match: 0.20
+    marker_match: 0.05
+    structural_match: 0.20
+    semantic_completeness: 0.20
+    readability: 0.10
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: true
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: main_idea
+  business_subtype: center_understanding
+  pattern_candidates:
+    - single_claim_capture
+    - whole_passage_integration
+  type_slots:
+    structure_type: explicit_single_center
+    main_point_source: whole_passage
+    abstraction_level: medium
+    coverage_requirement: integrated
+    target_form: central_meaning
+    distractor_modes:
+      - topic_shift
+      - overgeneralization
+      - undergeneralization
+    distractor_strength: high
+    statement_visibility: medium
+  prompt_extras:
+    business_feature_card_id: theme_word_focus__main_idea
+    business_feature_card_label: 主题词-全文围绕同一话题
+    retrieval_mode: business_feature_card
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations: []
+    position_roles: []
+    material_structure_label: 总分
+  expected_business_fields:
+    feature_type: 主题词
+    conclusion_focus: false
+    conclusion_position: distributed
+    explicit_marker_group: []

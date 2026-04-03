@@ -1,0 +1,187 @@
+schema_version: question_card.v1
+card_id: question.title_selection.standard_v1
+card_type: question
+business_family_id: title_selection
+business_subtype_id: title_selection
+runtime_binding:
+  question_type: main_idea
+  business_subtype: title_selection
+display_name: 标题填入标准题卡
+description: 基于整篇/闭合材料，为文段选择最能统领核心对象与表达任务的标题。该卡消费中间结构材料卡，而不直接绑定单一主族。
+upstream_contract:
+  required_candidate_types:
+  - closed_span
+  - multi_paragraph_unit
+  - whole_passage
+  required_profiles:
+  - analysis_to_conclusion_strength
+  - benefit_result_count
+  - benefit_result_strength
+  - closure_score
+  - context_dependency
+  - core_object
+  - core_object_anchor_strength
+  - counterintuitive_strength
+  - example_to_theme_strength
+  - global_main_claim
+  - multi_dimension_cohesion
+  - object_scope_stability
+  - problem_signal_strength
+  - single_center_strength
+  - summary_strength
+  - timeline_strength
+  - titleability
+  - turning_focus_strength
+  - value_judgement_strength
+  preferred_material_cards:
+  - title_material.plain_main_recovery
+  - title_material.example_then_recovery
+  - title_material.turning_focus
+  - title_material.multi_dimension_unification
+  - title_material.single_object_exposition
+  - title_material.problem_essence_judgement
+  - title_material.counterintuitive_reversal
+  - title_material.development_timeline
+  - title_material.case_to_theme_elevation
+  - title_material.benefit_result
+  - title_material.value_commentary
+base_slots:
+  structure_type: turning
+  main_point_source: whole_passage
+  abstraction_level: medium
+  coverage_requirement: integrated
+  target_form: title_label
+  title_style: thematic
+  distractor_modes:
+  - title_too_wide
+  - title_too_narrow
+  - catchy_but_offcore
+  distractor_strength: medium
+  statement_visibility: medium
+slot_extensions:
+  core_object_anchor_required: true
+  title_namingness_min: 0.65
+  object_scope_stability_min: 0.6
+  strongest_distractor_gap: small_or_medium
+  distractor_hierarchy_profile:
+  - nearest_miss
+  - mid_local
+  - far_off
+generation_archetype_source: material_card.default_generation_archetype
+material_card_overrides:
+- material_card: title_material.plain_main_recovery
+  slot_overrides:
+    title_style: direct_label
+    statement_visibility: high
+    abstraction_level: low
+- material_card: title_material.example_then_recovery
+  slot_overrides:
+    title_style: thematic
+    statement_visibility: medium
+    abstraction_level: medium
+- material_card: title_material.turning_focus
+  slot_overrides:
+    structure_type: turning
+    statement_visibility: medium
+    title_style: thematic
+- material_card: title_material.multi_dimension_unification
+  slot_overrides:
+    structure_type: progressive
+    coverage_requirement: integrated
+    abstraction_level: medium
+- material_card: title_material.single_object_exposition
+  slot_overrides:
+    title_style: direct_label
+    statement_visibility: high
+    abstraction_level: low
+- material_card: title_material.problem_essence_judgement
+  slot_overrides:
+    title_style: abstract
+    statement_visibility: medium
+    abstraction_level: medium
+- material_card: title_material.counterintuitive_reversal
+  slot_overrides:
+    title_style: rhetorical
+    statement_visibility: high
+    abstraction_level: low
+- material_card: title_material.development_timeline
+  slot_overrides:
+    title_style: thematic
+    statement_visibility: medium
+    abstraction_level: medium
+- material_card: title_material.case_to_theme_elevation
+  slot_overrides:
+    title_style: thematic
+    statement_visibility: medium
+    abstraction_level: medium
+- material_card: title_material.value_commentary
+  slot_overrides:
+    title_style: abstract
+    statement_visibility: medium
+    abstraction_level: medium
+- material_card: title_material.benefit_result
+  slot_overrides:
+    structure_type: progressive
+    coverage_requirement: integrated
+    title_style: thematic
+    statement_visibility: medium
+    abstraction_level: medium
+generation_archetypes:
+  main_recovery:
+    source: 题目控制逻辑.jsonl index 1/6
+    processing_type: 例子铺陈→主旨回收
+    correct_logic: 从末段或总结句抽象核心主旨并命名标题
+    analysis_framework:
+    - 找主旨句
+    - 判断是否有总结
+    - 抽象核心概念
+    - 对比选项覆盖范围
+  turning_focus:
+    source: 题目控制逻辑.jsonl index 2/7
+    processing_type: 铺垫→转折→核心结论
+    correct_logic: 标题落在转折后真正重点
+    analysis_framework:
+    - 定位转折词
+    - 划分前后
+    - 判断重心
+    - 选后半结论
+  single_object:
+    source: 题目控制逻辑.jsonl index 3/8
+    processing_type: 围绕单一对象展开
+    correct_logic: 标题锁定核心对象+关键属性
+    analysis_framework:
+    - 识别核心对象
+    - 统计重复词
+    - 提炼属性
+    - 排除非主体
+  multi_dimension:
+    source: 题目控制逻辑.jsonl index 4/9
+    processing_type: 多维展开→统一抽象
+    correct_logic: 标题需覆盖共同主题
+    analysis_framework:
+    - 列出各维度
+    - 找共同点
+    - 统一抽象
+    - 验证覆盖范围
+  counterintuitive:
+    source: 题目控制逻辑.jsonl index 5/10
+    processing_type: 常识→反转→解释
+    correct_logic: 标题直接体现反常识结论
+    analysis_framework:
+    - 找反转点
+    - 确认主旨
+    - 强化表达
+    - 排除弱选项
+validator_contract:
+  extension_rules:
+  - 正确标题必须包含核心对象或其稳定上位替代表达
+  - 正确标题不得只是过程链复述；优先命名式/判断式标题
+  - 至少1个错误项与正确项共享对象域，但层级/范围/重心有误
+  - 网页残留、版次信息、分享文案不得进入标题题材料
+  - 解析必须显式指出“对象”“主旨判断”“错项错因”三层
+normalized_from: title_selection_standard_question_card.yaml
+normalization_notes:
+- business_family_id normalized from legacy family_id=main_idea to title_selection
+- required_candidate_types expanded to cover all preferred material cards
+- required_profiles expanded to include signals required by preferred material cards
+- generation_archetype duplication removed; question card now follows material_card.default_generation_archetype

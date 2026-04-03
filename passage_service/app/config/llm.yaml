@@ -1,0 +1,15 @@
+provider: "openai_responses"
+enabled: true
+
+models:
+  universal_tagger: "gpt-4o-mini"
+  family_tagger: "gpt-4.1-mini"
+  candidate_planner_v2: "gpt-4o-mini"
+  logical_segment_refiner: "gpt-4o-mini"
+  integrity_gate: "gpt-4o-mini"
+
+batch:
+  universal_batch_size: 8
+
+timeouts:
+  request_seconds: 45

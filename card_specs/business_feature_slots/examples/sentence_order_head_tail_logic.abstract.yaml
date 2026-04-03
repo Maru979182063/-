@@ -1,0 +1,321 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_order__head_tail_logic__abstract
+  display_name: 语句排序-首尾句与捆绑逻辑
+  description: 按首句、尾句、捆绑关系和顺序逻辑来判断句群排序的教材型业务卡。
+  mother_family_id: sentence_order
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句排序题
+    - 首句尾句
+    - 指代词
+    - 关联词
+    - 行文逻辑
+
+feature_signature:
+  relation_type: 首尾锁定与句群重排
+  relation_focus: 先定首尾，再定捆绑，再定整体顺序
+  typical_formats:
+    - 将以上几个句子重新排列，语序正确的是……
+    - 将以下几个句子重新排列，语序正确的是……
+  business_axes:
+    - opening_sentence_validity
+    - closing_sentence_validity
+    - referential_binding
+    - connector_binding
+    - block_order_logic
+  solving_focus:
+    opening_positive_cues:
+      - 下定义
+      - 就是
+      - 是指
+      - 明确提出对象或观点
+    opening_negative_cues:
+      - 指代不清的代词
+      - 关联词的后半部分
+      - 例如/比如/就像等举例句
+    closing_cues:
+      - 因此
+      - 所以
+      - 看来
+      - 这……
+      - 对策句
+    binding_cues:
+      pronouns:
+        - 这
+        - 那
+        - 他
+        - 其
+        - 该
+        - 此
+        - 这些
+        - 他们
+      turning:
+        - 虽然
+        - 但是
+        - 可是
+        - 然而
+        - 不过
+        - 却
+      parallel:
+        - 同时
+        - 同样
+        - 此外
+        - 也
+    order_rules:
+      textual_logic:
+        - 观点+解释说明
+        - 提问+回答
+        - 问题+对策
+      everyday_logic:
+        - 时间脉络
+        - 行动顺序
+  structural_features:
+    opening_first: true
+    closing_last: true
+    local_binding_is_required: true
+    block_logic_may_override_local_fluency: true
+  distractor_features:
+    strong_modes:
+      - wrong_opening
+      - wrong_closing
+      - local_binding_break
+      - connector_mislead
+      - block_swap
+    non_key_content_sources:
+      - 能局部读通但整体顺序错误
+      - 首句合法性错误
+      - 尾句收束错误
+  extraction_hints:
+    require_explicit_marker: false
+    require_complete_meaning: true
+    min_sentence_count: 4
+    preferred_paragraph_window:
+      - 1
+
+retrieval_profile:
+  hard_filters:
+    require_explicit_marker: false
+    require_complete_unit: true
+    require_sentence_block_group: true
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 说明文
+    preferred_material_structures:
+      - 问题-对策
+      - 现象-分析
+      - 观点-论证
+      - 时间推进
+      - 过程说明
+    preferred_conclusion_position: []
+    preferred_markers:
+      - 因此
+      - 所以
+      - 看来
+      - 但是
+      - 然而
+      - 同时
+      - 此外
+  ranking_weights:
+    relation_match: 0.18
+    marker_match: 0.12
+    structural_match: 0.30
+    semantic_completeness: 0.10
+    readability: 0.10
+    discourse_progression_strength: 0.10
+    context_closure_score: 0.06
+    unique_opener_score: 0.04
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: true
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: sentence_order
+  business_subtype: null
+  pattern_candidates:
+    - dual_anchor_lock
+    - carry_parallel_expand
+    - viewpoint_reason_action
+    - problem_solution_case_blocks
+  type_slots:
+    opening_anchor_type: explicit_topic
+    opening_signal_strength: medium
+    middle_structure_type: local_binding
+    local_binding_strength: medium
+    closing_anchor_type: conclusion
+    closing_signal_strength: medium
+    block_order_complexity: medium
+    distractor_modes:
+      - wrong_opening
+      - local_binding_break
+      - wrong_closing
+    distractor_strength: high
+  slot_strategy_map:
+    head_tail_lock:
+      when:
+        opening_rule: explicit_opening
+        closing_rule: summary_or_conclusion
+      pattern_candidates:
+        - dual_anchor_lock
+      type_slots:
+        opening_anchor_type: explicit_topic
+        opening_signal_strength: high
+        middle_structure_type: local_binding
+        local_binding_strength: medium
+        closing_anchor_type: conclusion
+        closing_signal_strength: high
+        block_order_complexity: medium
+        distractor_modes:
+          - wrong_opening
+          - wrong_closing
+          - local_binding_break
+        distractor_strength: high
+    definition_opening:
+      when:
+        opening_positive_cue: definition_sentence
+      pattern_candidates:
+        - dual_anchor_lock
+      type_slots:
+        opening_anchor_type: explicit_topic
+        opening_signal_strength: high
+        middle_structure_type: local_binding
+        local_binding_strength: medium
+        closing_anchor_type: conclusion
+        closing_signal_strength: medium
+        block_order_complexity: medium
+        distractor_modes:
+          - wrong_opening
+          - connector_mislead
+          - wrong_closing
+        distractor_strength: medium
+      prompt_extras:
+        opening_positive_cue: definition_sentence
+    viewpoint_then_explanation:
+      when:
+        order_rule: viewpoint_plus_explanation
+      pattern_candidates:
+        - viewpoint_reason_action
+        - dual_anchor_lock
+      type_slots:
+        opening_anchor_type: viewpoint_opening
+        opening_signal_strength: high
+        middle_structure_type: cause_effect_chain
+        local_binding_strength: high
+        closing_anchor_type: conclusion
+        closing_signal_strength: medium
+        block_order_complexity: medium
+        distractor_modes:
+          - wrong_opening
+          - local_binding_break
+          - reason_fronting
+        distractor_strength: high
+    problem_solution_chain:
+      when:
+        order_rule: problem_plus_solution
+      pattern_candidates:
+        - problem_solution_case_blocks
+      type_slots:
+        opening_anchor_type: problem_opening
+        opening_signal_strength: high
+        middle_structure_type: problem_solution_blocks
+        local_binding_strength: high
+        closing_anchor_type: case_support
+        closing_signal_strength: medium
+        block_order_complexity: high
+        distractor_modes:
+          - block_swap
+          - wrong_opening
+          - action_fronting
+        distractor_strength: high
+    pronoun_binding:
+      when:
+        binding_rule: pronoun_reference
+      pattern_candidates:
+        - dual_anchor_lock
+        - carry_parallel_expand
+      type_slots:
+        opening_anchor_type: explicit_topic
+        opening_signal_strength: medium
+        middle_structure_type: local_binding
+        local_binding_strength: high
+        closing_anchor_type: conclusion
+        closing_signal_strength: medium
+        block_order_complexity: medium
+        distractor_modes:
+          - local_binding_break
+          - connector_mislead
+          - wrong_opening
+        distractor_strength: high
+      prompt_extras:
+        binding_priority: pronoun_reference
+    turning_binding:
+      when:
+        binding_rule: turning_connector
+      pattern_candidates:
+        - dual_anchor_lock
+      type_slots:
+        opening_anchor_type: explicit_topic
+        opening_signal_strength: medium
+        middle_structure_type: mixed_layers
+        local_binding_strength: high
+        closing_anchor_type: conclusion
+        closing_signal_strength: medium
+        block_order_complexity: medium
+        distractor_modes:
+          - connector_mislead
+          - local_binding_break
+          - wrong_closing
+        distractor_strength: high
+      prompt_extras:
+        connector_family: turning
+    parallel_binding:
+      when:
+        binding_rule: parallel_connector
+      pattern_candidates:
+        - carry_parallel_expand
+      type_slots:
+        opening_anchor_type: upper_context_link
+        opening_signal_strength: medium
+        middle_structure_type: parallel_expansion
+        local_binding_strength: medium
+        closing_anchor_type: summary
+        closing_signal_strength: medium
+        block_order_complexity: high
+        distractor_modes:
+          - parallel_misorder
+          - connector_mislead
+          - summary_misplace
+        distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_order__head_tail_logic__abstract
+    business_feature_card_label: 语句排序-首尾句与捆绑逻辑
+    retrieval_mode: business_feature_card
+    business_core_rule: 先定首尾，再定捆绑，再定整体顺序
+    canonical_orderability_card: true
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations:
+      - 并列/递进
+      - 因果
+      - 承接
+    position_roles:
+      - 开头总领
+      - 尾段总结
+    material_structure_label: 并列推进
+  expected_business_fields:
+    feature_type: 首尾锁定与句群重排
+    conclusion_focus: false
+    conclusion_position: tail_or_late
+    explicit_marker_group:
+      - 因此
+      - 所以
+      - 看来
+      - 但是
+      - 然而
+      - 同时
+      - 此外

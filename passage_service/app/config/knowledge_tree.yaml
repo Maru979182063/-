@@ -1,0 +1,17 @@
+version: "tag.v1"
+nodes:
+  - id: "kp_root"
+    name: "知识点根"
+    children:
+      - id: "kp_summary"
+        name: "概括理解"
+        tagger_plugin: "llm_feature_tagger"
+        controller_plugin: "noop_controller"
+        builder_plugin: "noop_builder"
+        metadata:
+          aliases: ["总之", "可见", "因此"]
+      - id: "kp_transition"
+        name: "衔接转折"
+        tagger_plugin: "keyword_tagger"
+        metadata:
+          aliases: ["但是", "然而", "不过"]

@@ -1,0 +1,223 @@
+schema_version: question_card.v1
+card_id: question.continuation.standard_v1
+card_type: question
+business_family_id: continuation
+business_subtype_id: continuation_selection
+runtime_binding:
+  question_type: continuation
+  business_subtype: null
+display_name: 接语选择标准题卡
+description: 基于尾句落点与前文线索，为文段选择最自然的下文展开方向。该卡消费中间结构材料卡，而不直接绑定单一主族。
+upstream_contract:
+  required_candidate_types:
+  - closed_span
+  - multi_paragraph_unit
+  - whole_passage
+  required_profiles:
+  - anchor_clarity
+  - branch_focus_strength
+  - case_macro_shift_strength
+  - context_dependency
+  - continuation_openness
+  - direction_uniqueness
+  - ending_function
+  - judgement_signal_strength
+  - mechanism_signal_strength
+  - method_signal_strength
+  - problem_signal_strength
+  - summary_strength
+  - tail_anchor
+  - tail_extension_signal
+  - tension_signal_strength
+  - theme_raise_strength
+  preferred_material_cards:
+  - continuation_material.tail_anchor_direct_extend
+  - continuation_material.problem_solution_hook
+  - continuation_material.mechanism_unfolding
+  - continuation_material.raised_theme_to_subtopic
+  - continuation_material.summary_with_new_pivot
+  - continuation_material.judgement_to_reason
+  - continuation_material.case_to_macro_unfold
+  - continuation_material.multi_branch_focus
+  - continuation_material.tension_explained
+  - continuation_material.method_expansion
+base_slots:
+  anchor_focus: tail_anchor
+  continuation_type: explain
+  progression_mode: one_level_down
+  ending_function: open_only
+  anchor_clarity: medium
+  option_confusion: medium
+  distractor_modes:
+  - old_topic_return
+  - side_branch_shift
+  - abstract_overraise
+slot_extensions:
+  extension_signal_required: true
+  direction_uniqueness_min: 0.56
+  tail_completeness_required: true
+  strongest_distractor_gap: small_or_medium
+  distractor_hierarchy_profile:
+  - nearest_miss
+  - mid_old_topic
+  - far_off
+generation_archetype_source: material_card.default_generation_archetype
+material_card_overrides:
+- material_card: continuation_material.tail_anchor_direct_extend
+  slot_overrides:
+    anchor_focus: tail_anchor
+    continuation_type: explain
+    progression_mode: one_level_down
+    ending_function: open_only
+    anchor_clarity: high
+- material_card: continuation_material.problem_solution_hook
+  slot_overrides:
+    anchor_focus: problem_exposed
+    continuation_type: countermeasure
+    progression_mode: problem_to_solution
+- material_card: continuation_material.mechanism_unfolding
+  slot_overrides:
+    anchor_focus: mechanism_named
+    continuation_type: deepen_mechanism
+    progression_mode: object_to_mechanism
+- material_card: continuation_material.raised_theme_to_subtopic
+  slot_overrides:
+    anchor_focus: theme_raised
+    continuation_type: subtopic_expand
+    progression_mode: theme_to_subtopic
+- material_card: continuation_material.summary_with_new_pivot
+  slot_overrides:
+    anchor_focus: new_pivot
+    continuation_type: deepen_pivot
+    progression_mode: summary_to_new_pivot
+    ending_function: summary_plus_open
+- material_card: continuation_material.judgement_to_reason
+  slot_overrides:
+    anchor_focus: judgement_given
+    continuation_type: reason_argument
+    progression_mode: judgement_to_reason
+    ending_function: judgement_trigger
+- material_card: continuation_material.case_to_macro_unfold
+  slot_overrides:
+    anchor_focus: macro_shift
+    continuation_type: macro_unfold
+    progression_mode: case_to_macro
+- material_card: continuation_material.multi_branch_focus
+  slot_overrides:
+    anchor_focus: branch_focus
+    continuation_type: focus_branch
+    progression_mode: multi_branch_to_focus
+- material_card: continuation_material.tension_explained
+  slot_overrides:
+    anchor_focus: tension_retained
+    continuation_type: resolve_tension
+    progression_mode: tension_to_explanation
+    ending_function: tension_hold
+- material_card: continuation_material.method_expansion
+  slot_overrides:
+    anchor_focus: method_opening
+    continuation_type: method_expand
+    progression_mode: analysis_to_method
+generation_archetypes:
+  tail_anchor_direct_extend:
+    source: 接语选择题配置文件 pattern tail_anchor_direct_extend
+    processing_type: 锁定尾句落点→判断自然续写方向→排除回头项
+    correct_logic: 正确项必须与尾句新落点同向推进，且内容层级比尾句更具体一步
+    analysis_framework:
+    - 找到最后一句真正开启的新支点
+    - 判断下文最自然是解释还是展开
+    - 排除重复旧主题的选项
+    - 检查是否比尾句更下沉一层
+  problem_solution_hook:
+    source: 接语选择题配置文件 pattern problem_solution_hook
+    processing_type: 铺垫问题→结尾暴露不足→下文转入解决
+    correct_logic: 正确项必须正面回应尾句暴露的问题核心，并引入解决或改进方向
+    analysis_framework:
+    - 找出尾句具体暴露的问题或不足
+    - 确认下文更自然应是方案、改进还是替代路径
+    - 排除继续罗列问题的选项
+    - 检查正确项是否真正回应问题
+  mechanism_unfolding:
+    source: 接语选择题配置文件 pattern mechanism_unfolding
+    processing_type: 介绍现象/对象→尾句点到某机制→下文继续讲清
+    correct_logic: 正确项必须继续补足尾句刚被提出但未展开的机制，而不是换一个邻近概念
+    analysis_framework:
+    - 找出尾句被点名的作用点或影响点
+    - 判断尾句还缺哪一步说明
+    - 用表现、路径或实例往下展开
+    - 防止选到相关但非核心机制
+  raised_theme_to_subtopic:
+    source: 接语选择题配置文件 pattern raised_theme_to_subtopic
+    processing_type: 前文铺垫→末尾提升为总主题→下文进入分论点
+    correct_logic: 正确项应由总主题进入一个可展开的具体子方向，而不是停留在主题复述
+    analysis_framework:
+    - 看尾句是否完成话题提升
+    - 判断下文应落到哪个可展开的子层级
+    - 排除只是换句话说主题的选项
+    - 防止直接跳到更宏大的口号层
+  summary_with_new_pivot:
+    source: 接语选择题配置文件 pattern summary_with_new_pivot
+    processing_type: 阶段总结→尾句顺带抛出新支点→下文深化
+    correct_logic: 正确项必须识别尾句中“已总结”和“待展开”的边界，并沿待展开处继续
+    analysis_framework:
+    - 区分收束部分与开启部分
+    - 找出尚未展开的那一点
+    - 让正确项沿新支点往下走
+    - 排除围绕已总结内容打转的选项
+  judgement_to_reason:
+    source: 接语选择题配置文件 pattern judgement_to_reason
+    processing_type: 事实铺垫→尾段给判断→下文补为什么
+    correct_logic: 正确项要服务尾句判断，提供论据、原因或解释链，而不是另起判断
+    analysis_framework:
+    - 找出尾句明确下的判断或立场
+    - 判断尾句后最缺的是原因、论证还是例证
+    - 确保正确项支持原判断成立
+    - 避免选到另起炉灶的判断项
+  case_to_macro_unfold:
+    source: 接语选择题配置文件 pattern case_to_macro_unfold
+    processing_type: 具体材料→尾段拉到背景→下文进大框架
+    correct_logic: 正确项必须完成从具体到一般的过渡，并围绕新进入的宏观层继续
+    analysis_framework:
+    - 判断尾句是否从个案提升到更大问题
+    - 明确下文应在宏观框架继续
+    - 压制仍围绕个案打转的选项
+    - 避免宏观但无承接的项
+  multi_branch_focus:
+    source: 接语选择题配置文件 pattern multi_branch_focus
+    processing_type: 多方向铺垫→尾句压重一支→下文重点展开
+    correct_logic: 正确项必须抓住尾句压重的焦点支线，而不是继续平均罗列多个方向
+    analysis_framework:
+    - 找出前文列出的多个方向
+    - 看尾句最终偏向哪一支
+    - 让正确项只沿该支线展开
+    - 防止选到继续并列罗列的选项
+  tension_explained:
+    source: 接语选择题配置文件 pattern tension_explained
+    processing_type: 铺陈两难/张力→尾句保留矛盾→下文解释
+    correct_logic: 正确项应承担“解释张力/化解张力”的功能，而不是继续陈述单边价值
+    analysis_framework:
+    - 看尾句保留了哪种矛盾关系
+    - 确认下文更自然是解释还是协调
+    - 排除只是再说一次冲突的选项
+    - 避免单边价值项
+  method_expansion:
+    source: 接语选择题配置文件 pattern method_expansion
+    processing_type: 分析/判断→尾句触及方法→下文展开做法
+    correct_logic: 正确项必须接住方法入口，具体展开操作路径、条件或机制安排
+    analysis_framework:
+    - 判断尾句是否已触及路径、工具或方案
+    - 看下文应展开做法、条件还是实施步骤
+    - 压制只讲意义不讲做法的选项
+    - 确保正确项体现实践承接
+validator_contract:
+  extension_rules:
+  - 正确项必须承接尾句新落点，而不是回收已充分展开的旧话题。
+  - 至少1个错误项与正确项共享对象域，但推进方向错误、层级错位或停留在旧支线。
+  - 材料尾句必须完整，且应有真实的 extension signal；不得用半截转折或网页残留材料出题。
+  - 解析必须显式指出“尾句落点”“最自然推进方向”“错项错因”三层。
+  - 若尾句已转入方法/对策/新支点，下文不得继续做空泛总结或价值口号。
+normalized_from: continuation_standard_question_card.yaml
+normalization_notes:
+- required_candidate_types expanded to cover all preferred material cards
+- required_profiles expanded to include signals required by preferred material cards
+- generation_archetype duplication removed; question card now follows material_card.default_generation_archetype

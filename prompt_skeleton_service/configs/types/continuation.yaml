@@ -1,0 +1,806 @@
+type_id: continuation
+display_name: 接语选择题
+enabled: true
+aliases:
+  - 接语
+  - 接语选择
+  - 下文推断
+  - 语段接续
+
+task_definition: >
+  基于给定语篇尾句和前文线索，为接语选择题生成稳定的 prompt 骨架。
+  核心不是概括全文主旨，而是识别尾句最终把话题推向哪里，并判断下文最自然的展开方向。
+  正确项必须顺着尾句新落点向下一层推进；错误项应在高相关前提下制造旧话题回收、支线误接、
+  抽象层级失衡、主题跳转或空泛总结等干扰。
+
+default_pattern_id: tail_anchor_direct_extend
+
+difficulty_target_profiles:
+  easy:
+    complexity: { min: 0.20, max: 0.42 }
+    ambiguity: { min: 0.18, max: 0.38 }
+    reasoning_depth: { min: 0.20, max: 0.42 }
+    distractor_similarity: { min: 0.22, max: 0.55 }
+  medium:
+    complexity: { min: 0.38, max: 0.62 }
+    ambiguity: { min: 0.32, max: 0.60 }
+    reasoning_depth: { min: 0.38, max: 0.64 }
+    distractor_similarity: { min: 0.45, max: 0.75 }
+  hard:
+    complexity: { min: 0.56, max: 0.84 }
+    ambiguity: { min: 0.48, max: 0.80 }
+    reasoning_depth: { min: 0.55, max: 0.86 }
+    distractor_similarity: { min: 0.62, max: 0.90 }
+
+skeleton:
+  anchor_type: tail_sentence
+  operation_type: extend
+  target_type: next_step_content
+
+slot_schema:
+  anchor_focus:
+    type: string
+    required: false
+    default: tail_anchor
+    allowed:
+      - tail_anchor
+      - problem_exposed
+      - mechanism_named
+      - theme_raised
+      - new_pivot
+      - judgement_given
+      - macro_shift
+      - branch_focus
+      - tension_retained
+      - method_opening
+    description: 尾句最终落点类型
+
+  continuation_type:
+    type: string
+    required: false
+    default: explain
+    allowed:
+      - explain
+      - countermeasure
+      - deepen_mechanism
+      - subtopic_expand
+      - deepen_pivot
+      - reason_argument
+      - macro_unfold
+      - focus_branch
+      - resolve_tension
+      - method_expand
+    description: 下文最自然的展开方向
+
+  progression_mode:
+    type: string
+    required: false
+    default: one_level_down
+    allowed:
+      - one_level_down
+      - problem_to_solution
+      - object_to_mechanism
+      - theme_to_subtopic
+      - summary_to_new_pivot
+      - judgement_to_reason
+      - case_to_macro
+      - multi_branch_to_focus
+      - tension_to_explanation
+      - analysis_to_method
+    description: 尾句到下文的推进关系
+
+  ending_function:
+    type: string
+    required: false
+    default: open_only
+    allowed:
+      - open_only
+      - summary_plus_open
+      - judgement_trigger
+      - transition_trigger
+      - tension_hold
+    description: 结尾句在结构上的功能
+
+  anchor_clarity:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - high
+      - medium
+      - low
+    description: 尾句续写方向是否明确
+
+  option_confusion:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - low_medium
+      - medium
+      - medium_high
+      - high
+    description: 选项迷惑度
+
+  distractor_modes:
+    type: array
+    required: false
+    default:
+      - old_topic_return
+      - side_branch_shift
+      - abstract_overraise
+    allowed:
+      - old_topic_return
+      - side_branch_shift
+      - abstract_overraise
+      - empty_summary
+      - background_replay
+      - parallel_mechanism
+      - judgement_repeat
+      - case_detail_stay
+      - macro_topic_drift
+      - value_slogan
+    description: 干扰项模式
+
+default_slots:
+  anchor_focus: tail_anchor
+  continuation_type: explain
+  progression_mode: one_level_down
+  ending_function: open_only
+  anchor_clarity: medium
+  option_confusion: medium_high
+  distractor_modes:
+    - old_topic_return
+    - side_branch_shift
+    - abstract_overraise
+
+fewshot_policy:
+  enabled: true
+  bind_to_difficulty: false
+  max_examples: 1
+  mode: structure_only
+
+default_fewshot:
+  title: 接语选择题结构示例
+  content: >
+    示例只用于提示“接语题正确项应承接尾句新落点并自然向下推进”，
+    不用于绑定具体难度。
+
+patterns:
+  - pattern_id: tail_anchor_direct_extend
+    pattern_name: 尾句锚点直接承接型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - tail_anchor
+      continuation_type:
+        - explain
+      progression_mode:
+        - one_level_down
+      anchor_clarity:
+        - high
+
+    control_logic:
+      difficulty_source: 尾句锚点明显+续写方向单一
+      option_confusion: 低
+      control_levers:
+        passage: 尾段明确落在一个尚未展开的新支点上
+        correct_option: 顺着尾句话题向下一层自然推进，不跳脱、不回头
+        wrong_options:
+          - 回到文中已充分展开的旧话题
+          - 只沿中间段落某一信息发散
+          - 引入与尾句无直接承接的新方向
+      special_fields:
+        reverse_inference_key: 先看最后一句在把话题推向哪里，再判断什么内容最像下一段开头
+
+    generation_logic:
+      generation_core: 尾句锚点承接型接语题制作
+      processing_type: 锁定尾句落点→判断自然续写方向→排除回头项
+      correct_logic: 正确项必须与尾句新落点同向推进，且内容层级比尾句更具体一步
+      high_freq_traps:
+        - 把前文高频主题误当下文重点
+        - 回收已讲完的背景材料
+        - 选与全文相关但不承接尾句的内容
+      distractor_pattern: 用前文主线旧信息、局部细节和宽泛大主题共同构造干扰
+      analysis_steps:
+        step1_尾句定位: 找到最后一句真正开启的新支点
+        step2_承接方向: 判断下文最自然是解释还是展开
+        step3_排除回头: 排除重复旧主题的选项
+        step4_层级校验: 检查是否比尾句更下沉一层
+
+    difficulty_rules:
+      complexity:
+        base: 0.28
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.24
+            medium: 0.38
+            low: 0.54
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            one_level_down: 0.34
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            low: 0.26
+            low_medium: 0.36
+            medium: 0.50
+            medium_high: 0.64
+            high: 0.78
+
+  - pattern_id: problem_solution_hook
+    pattern_name: 问题后接对策型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - problem_exposed
+      continuation_type:
+        - countermeasure
+      progression_mode:
+        - problem_to_solution
+
+    control_logic:
+      difficulty_source: 问题落点明确但后续展开类型相近
+      option_confusion: 中
+      control_levers:
+        passage: 结尾暴露问题、风险或不足，形成对后文方案类内容的期待
+        correct_option: 承接问题核心，进入对策、替代方案或改进路径
+        wrong_options:
+          - 重复上文已讲的问题表现
+          - 转向无关背景或历史
+          - 只谈宏大意义不回应具体问题
+      special_fields:
+        reverse_inference_key: 判断结尾是在问“是什么”还是在逼出“怎么办”
+
+    generation_logic:
+      generation_core: 问题后接对策型接语题制作
+      processing_type: 铺垫问题→结尾暴露不足→下文转入解决
+      correct_logic: 正确项必须正面回应尾句暴露的问题核心，并引入解决或改进方向
+      high_freq_traps:
+        - 继续重复问题表现
+        - 把问题背景当作后文主题
+        - 直接转去无关价值讨论
+      distractor_pattern: 围绕问题现象复述项、背景延展项、空泛意义项设置干扰
+      analysis_steps:
+        step1_识别问题落点: 找出尾句具体暴露的问题或不足
+        step2_判断期待: 确认下文更自然应是方案、改进还是替代路径
+        step3_压制复述: 排除继续罗列问题的选项
+        step4_方案校验: 检查正确项是否真正回应问题
+
+    difficulty_rules:
+      complexity:
+        base: 0.40
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.34
+            medium: 0.46
+            low: 0.60
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            problem_to_solution: 0.48
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium: 0.56
+            medium_high: 0.70
+            high: 0.82
+
+    fewshot_example:
+      title: 接语选择题示例-问题后接对策型
+      fit_slots:
+        anchor_focus: problem_exposed
+        continuation_type: countermeasure
+        progression_mode: problem_to_solution
+      input_brief: >
+        文段先介绍土壤形成与微生物、有机质、微量元素之间的关系，随后指出化肥虽然能补充
+        微量元素，但利用率低且会污染环境。尾段落点是“化肥不是理想答案”，自然逼出下一步
+        应介绍更有效的替代方法。
+      question_brief: 这段文字接下来最可能（ ）。
+      options_brief:
+        - 探讨提高土壤有机质含量的途径
+        - 揭示植物进行光合作用的原理
+        - 强调确保粮食安全的重要性
+        - 介绍化肥工业的发展历史
+      answer: 探讨提高土壤有机质含量的途径
+      rationale_brief: >
+        正确项必须回应尾段暴露出的核心问题，即“化肥方案不足”，并转入替代路径；
+        错项常表现为继续延展背景、转向无关主题或停留在旧问题复述。
+
+  - pattern_id: mechanism_unfolding
+    pattern_name: 机制点名补足型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - mechanism_named
+      continuation_type:
+        - deepen_mechanism
+      progression_mode:
+        - object_to_mechanism
+
+    control_logic:
+      difficulty_source: 尾句机制点名+干扰项均可表面相关
+      option_confusion: 中高
+      control_levers:
+        passage: 结尾落在某种作用、机制或影响点上，尚未展开
+        correct_option: 围绕该机制的具体表现、影响路径或实例继续说明
+        wrong_options:
+          - 转向其他相关但非尾句核心机制
+          - 停留在一般概念介绍
+          - 泛化为主题的大而空总结
+      special_fields:
+        reverse_inference_key: 锁定尾句被点名但没讲透的对象，优先选“补充说明它”的选项
+
+    generation_logic:
+      generation_core: 机制点名型接语题制作
+      processing_type: 介绍现象/对象→尾句点到某机制→下文继续讲清
+      correct_logic: 正确项必须继续补足尾句刚被提出但未展开的机制，而不是换一个邻近概念
+      high_freq_traps:
+        - 转讲其他相关机制
+        - 重复概念定义
+        - 泛泛总结全文
+      distractor_pattern: 用相邻概念、同领域其他机制和主题性总结做干扰
+      analysis_steps:
+        step1_锁定机制: 找出尾句被点名的作用点或影响点
+        step2_判断未尽之处: 判断尾句还缺哪一步说明
+        step3_补足链条: 用表现、路径或实例往下展开
+        step4_排除邻近概念: 防止选到相关但非核心机制
+
+    difficulty_rules:
+      complexity:
+        base: 0.48
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.40
+            medium: 0.54
+            low: 0.68
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            object_to_mechanism: 0.58
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium: 0.56
+            medium_high: 0.72
+            high: 0.84
+
+  - pattern_id: raised_theme_to_subtopic
+    pattern_name: 主题抬升分论点型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - theme_raised
+      continuation_type:
+        - subtopic_expand
+      progression_mode:
+        - theme_to_subtopic
+
+    control_logic:
+      difficulty_source: 专题引入型结尾+选项抽象层级差异
+      option_confusion: 中
+      control_levers:
+        passage: 前文铺垫较充分，尾句提升到一个总主题或专题入口
+        correct_option: 围绕总主题转入一个具体分论点或展开维度
+        wrong_options:
+          - 继续讲前文案例
+          - 只重复总主题概念
+          - 跳到比总主题更远的宏观口号
+      special_fields:
+        reverse_inference_key: 结尾若把话题抬高为“总主题”，下文通常不是重复主题，而是进入其下属展开点
+
+    generation_logic:
+      generation_core: 主题引入型接语题制作
+      processing_type: 前文铺垫→末尾提升为总主题→下文进入分论点
+      correct_logic: 正确项应由总主题进入一个可展开的具体子方向，而不是停留在主题复述
+      high_freq_traps:
+        - 继续讲前文案例
+        - 只重复总主题概念
+        - 跳到比总主题更远的宏观口号
+      distractor_pattern: 用案例复述、空泛主题复述和旁支概念制造干扰
+      analysis_steps:
+        step1_识别总主题: 看尾句是否完成话题提升
+        step2_判断展开粒度: 判断下文应落到哪个可展开的子层级
+        step3_避免复述: 排除只是换句话说主题的选项
+        step4_控制层级: 防止直接跳到更宏大的口号层
+
+    difficulty_rules:
+      complexity:
+        base: 0.46
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.36
+            medium: 0.48
+            low: 0.62
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            theme_to_subtopic: 0.54
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium: 0.52
+            medium_high: 0.66
+            high: 0.80
+
+  - pattern_id: summary_with_new_pivot
+    pattern_name: 总结中带新支点型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - new_pivot
+      continuation_type:
+        - deepen_pivot
+      progression_mode:
+        - summary_to_new_pivot
+      ending_function:
+        - summary_plus_open
+
+    control_logic:
+      difficulty_source: 尾段兼具收束与开启功能
+      option_confusion: 中高
+      control_levers:
+        passage: 尾段先做阶段性收束，同时顺带抛出一个未展开的新支点
+        correct_option: 顺着新支点继续深入，而不是回到已完成总结部分
+        wrong_options:
+          - 围绕已总结内容复述
+          - 只补前文细节
+          - 突然跳到更宏大结论
+      special_fields:
+        reverse_inference_key: 判断尾句里哪个部分已经收住，哪个部分其实刚刚开启
+
+    generation_logic:
+      generation_core: 总结兼开启型接语题制作
+      processing_type: 阶段总结→尾句顺带抛出新支点→下文深化
+      correct_logic: 正确项必须识别尾句中“已总结”和“待展开”的边界，并沿待展开处继续
+      high_freq_traps:
+        - 把总结句当下文主题重复展开
+        - 只补前文例子
+        - 突然跳到更宏大结论
+      distractor_pattern: 围绕已总结内容复述、细节补充和越级拔高三类方向设置干扰
+      analysis_steps:
+        step1_拆分尾句功能: 区分收束部分与开启部分
+        step2_锁定新支点: 找出尚未展开的那一点
+        step3_顺接深化: 让正确项沿新支点往下走
+        step4_压制复述: 排除围绕已总结内容打转的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.56
+      ambiguity:
+        by_slot:
+          ending_function:
+            summary_plus_open: 0.66
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            summary_to_new_pivot: 0.64
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium: 0.58
+            medium_high: 0.74
+            high: 0.86
+
+    fewshot_example:
+      title: 接语选择题示例-总结中带新支点型
+      fit_slots:
+        anchor_focus: new_pivot
+        continuation_type: deepen_pivot
+        progression_mode: summary_to_new_pivot
+        ending_function: summary_plus_open
+      input_brief: >
+        文段前半部分围绕甲骨文的发现、研究和价值展开，尾段转入“在疑古思潮背景下，
+        殷墟成为寻找可靠古史新材料的起点”。结尾既收束前文关于甲骨价值的讨论，又开启
+        了一个新的具体话题——殷墟考古发掘。
+      question_brief: 这段文字接下来应该介绍（ ）。
+      options_brief:
+        - 中央研究院对于殷墟的考古发掘
+        - 疑古思潮对传统古史体系的质疑
+        - 西方与中国古史的不同路径
+        - 非法盗卖对殷商甲骨造成的破坏
+      answer: 中央研究院对于殷墟的考古发掘
+      rationale_brief: >
+        正确项要沿尾句刚开启的新支点“殷墟作为起点”继续展开，而不是回头重复疑古思潮
+        或甲骨流失问题；错项常表现为围绕已总结内容打转，或者跳去无关新方向。
+
+  - pattern_id: judgement_to_reason
+    pattern_name: 判断先行补原因型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - judgement_given
+      continuation_type:
+        - reason_argument
+      progression_mode:
+        - judgement_to_reason
+      ending_function:
+        - judgement_trigger
+
+    control_logic:
+      difficulty_source: 结尾判断鲜明+后文可能接原因/论证/举例
+      option_confusion: 中
+      control_levers:
+        passage: 尾段先给出判断或立场，留出“为什么如此”的空间
+        correct_option: 顺着该判断补原因、论证或解释
+        wrong_options:
+          - 更换判断对象
+          - 直接再下一个判断
+          - 回到事实罗列不服务判断
+      special_fields:
+        reverse_inference_key: 尾句若已经下判断，下文通常不是再判断一次，而是解释这个判断为何成立
+
+    generation_logic:
+      generation_core: 判断转原因型接语题制作
+      processing_type: 事实铺垫→尾段给判断→下文补为什么
+      correct_logic: 正确项要服务尾句判断，提供论据、原因或解释链，而不是另起判断
+      high_freq_traps:
+        - 更换判断对象
+        - 直接再下一个判断
+        - 回到事实罗列不服务判断
+      distractor_pattern: 用平行判断、对象错位和事实复述构造高相关错项
+      analysis_steps:
+        step1_识别判断: 找出尾句明确下的判断或立场
+        step2_推断缺口: 判断尾句后最缺的是原因、论证还是例证
+        step3_服务判断: 确保正确项支持原判断成立
+        step4_排除平行判断: 避免选到另起炉灶的判断项
+
+    difficulty_rules:
+      complexity:
+        base: 0.44
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.34
+            medium: 0.46
+            low: 0.58
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            judgement_to_reason: 0.56
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium: 0.54
+            medium_high: 0.68
+            high: 0.80
+
+  - pattern_id: case_to_macro_unfold
+    pattern_name: 个案转宏观型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - macro_shift
+      continuation_type:
+        - macro_unfold
+      progression_mode:
+        - case_to_macro
+
+    control_logic:
+      difficulty_source: 个案转宏观的过渡清晰度
+      option_confusion: 低中
+      control_levers:
+        passage: 前文以具体个案或局部现象铺陈，尾段开始拉向更大背景或一般性问题
+        correct_option: 接住宏观转向，进入更大层面的背景、机制或框架
+        wrong_options:
+          - 留在个案细节
+          - 跳向无关宏观议题
+          - 重复前文背景
+      special_fields:
+        reverse_inference_key: 看尾句是否已经把个案用途耗尽，转而把它作为更大问题的入口
+
+    generation_logic:
+      generation_core: 个案转宏观型接语题制作
+      processing_type: 具体材料→尾段拉到背景→下文进大框架
+      correct_logic: 正确项必须完成从具体到一般的过渡，并围绕新进入的宏观层继续
+      high_freq_traps:
+        - 留在个案细节
+        - 跳向无关宏观议题
+        - 回到旧背景材料
+      distractor_pattern: 用个案续写项、失焦宏观项和背景复述项设置干扰
+      analysis_steps:
+        step1_识别转层: 判断尾句是否从个案提升到更大问题
+        step2_确认新层级: 明确下文应在宏观框架继续
+        step3_排除细节停留: 压制仍围绕个案打转的选项
+        step4_防止失焦: 避免宏观但无承接的项
+
+    difficulty_rules:
+      complexity:
+        base: 0.42
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.30
+            medium: 0.44
+            low: 0.58
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            case_to_macro: 0.52
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            low_medium: 0.44
+            medium: 0.56
+            medium_high: 0.68
+
+  - pattern_id: multi_branch_focus
+    pattern_name: 多分支压重一支型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - branch_focus
+      continuation_type:
+        - focus_branch
+      progression_mode:
+        - multi_branch_to_focus
+
+    control_logic:
+      difficulty_source: 多分支中重心辨认
+      option_confusion: 高
+      control_levers:
+        passage: 前文并列铺出多个方向，尾句压重其中一支作为后文重点
+        correct_option: 围绕被压重的那一支继续展开
+        wrong_options:
+          - 围绕其他支线展开
+          - 回到总话题空泛复述
+          - 并列拼接多个方向
+      special_fields:
+        reverse_inference_key: 不是看全文谈了什么最多，而是看尾句最终把重心压在哪一支
+
+    generation_logic:
+      generation_core: 多分支聚焦型接语题制作
+      processing_type: 多方向铺垫→尾句压重一支→下文重点展开
+      correct_logic: 正确项必须抓住尾句压重的焦点支线，而不是继续平均罗列多个方向
+      high_freq_traps:
+        - 把其他支线误当重点
+        - 继续总话题复述
+        - 拼接多个并列方向
+      distractor_pattern: 围绕其他支线、总话题和并列拼接项制造混淆
+      analysis_steps:
+        step1_识别并列结构: 找出前文列出的多个方向
+        step2_定位压重点: 看尾句最终偏向哪一支
+        step3_单点展开: 让正确项只沿该支线展开
+        step4_排除平均化: 防止选到继续并列罗列的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.62
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.48
+            medium: 0.62
+            low: 0.76
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            multi_branch_to_focus: 0.68
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium_high: 0.76
+            high: 0.88
+
+  - pattern_id: tension_explained
+    pattern_name: 张力保留解释型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - tension_retained
+      continuation_type:
+        - resolve_tension
+      progression_mode:
+        - tension_to_explanation
+      ending_function:
+        - tension_hold
+
+    control_logic:
+      difficulty_source: 张力保留型结尾带来的多向干扰
+      option_confusion: 高
+      control_levers:
+        passage: 前文铺出两难、矛盾或张力，尾句不立刻收住，而保留解释空间
+        correct_option: 顺着矛盾关系给出解释、拆解或协调路径
+        wrong_options:
+          - 只重复冲突本身
+          - 片面站队某一边
+          - 回到前文背景不再服务张力
+      special_fields:
+        reverse_inference_key: 尾句若保留了冲突张力，下文通常不是重述冲突，而是解释其形成或可能化解方式
+
+    generation_logic:
+      generation_core: 张力保留型接语题制作
+      processing_type: 铺陈两难/张力→尾句保留矛盾→下文解释
+      correct_logic: 正确项应承担“解释张力/化解张力”的功能，而不是继续陈述单边价值
+      high_freq_traps:
+        - 重复冲突本身
+        - 单边价值表达
+        - 回到旧背景
+      distractor_pattern: 用冲突复述项、单边价值项和旧背景项构造错项
+      analysis_steps:
+        step1_识别张力: 看尾句保留了哪种矛盾关系
+        step2_判断后续功能: 确认下文更自然是解释还是协调
+        step3_压制重述: 排除只是再说一次冲突的选项
+        step4_防止站队: 避免单边价值项
+
+    difficulty_rules:
+      complexity:
+        base: 0.64
+      ambiguity:
+        by_slot:
+          ending_function:
+            tension_hold: 0.74
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            tension_to_explanation: 0.72
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium_high: 0.78
+            high: 0.90
+
+  - pattern_id: method_expansion
+    pattern_name: 方法转入展开型
+    enabled: true
+    match_rules:
+      anchor_focus:
+        - method_opening
+      continuation_type:
+        - method_expand
+      progression_mode:
+        - analysis_to_method
+
+    control_logic:
+      difficulty_source: 方法转入型结尾的实践承接
+      option_confusion: 中
+      control_levers:
+        passage: 前文完成现象分析或价值判断，尾句触及做法、路径、工具或机制设计
+        correct_option: 顺着尾句的方法入口展开具体做法、条件或实施路径
+        wrong_options:
+          - 抽象价值项
+          - 问题复述项
+          - 空泛倡议项
+      special_fields:
+        reverse_inference_key: 尾句一旦从分析转到“怎么做”，下文最自然是方法层展开，而不是再讲价值或问题
+
+    generation_logic:
+      generation_core: 方法转入型接语题制作
+      processing_type: 分析/判断→尾句触及方法→下文展开做法
+      correct_logic: 正确项必须接住方法入口，具体展开操作路径、条件或机制安排
+      high_freq_traps:
+        - 空泛价值倡议
+        - 再复述问题
+        - 只留在抽象原则层
+      distractor_pattern: 用抽象价值项、问题复述项和空泛倡议项设错
+      analysis_steps:
+        step1_识别方法入口: 判断尾句是否已触及路径、工具或方案
+        step2_明确实践方向: 看下文应展开做法、条件还是实施步骤
+        step3_排除价值复述: 压制只讲意义不讲做法的选项
+        step4_落到操作层: 确保正确项体现实践承接
+
+    difficulty_rules:
+      complexity:
+        base: 0.46
+      ambiguity:
+        by_slot:
+          anchor_clarity:
+            high: 0.34
+            medium: 0.46
+            low: 0.58
+      reasoning_depth:
+        by_slot:
+          progression_mode:
+            analysis_to_method: 0.58
+      distractor_similarity:
+        by_slot:
+          option_confusion:
+            medium: 0.54
+            medium_high: 0.68
+            high: 0.80

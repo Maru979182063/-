@@ -1,0 +1,398 @@
+sources:
+  - id: "people"
+    site_name: "人民网"
+    base_url: "http://www.people.com.cn"
+    entry_urls:
+      - "http://opinion.people.com.cn/GB/8213/49160/index.html"
+      - "http://world.people.com.cn/"
+      - "http://politics.people.com.cn/"
+    allowed_domains: ["people.com.cn"]
+    article_url_patterns: ["/n1/\\d{4}/\\d{4}/c\\d+-\\d+\\.html", "/n1/\\d{4}/\\d{2}/\\d{2}/c\\d+-\\d+\\.html"]
+    exclude_url_patterns: ["/index\\.html$", "/GB/", "paper\\.people\\.com\\.cn"]
+    priority_keywords: ["人民时评", "评论", "观察", "人民论坛", "热评", "理论"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "时评政论"
+    title_selectors: ["h1"]
+    content_selectors: [".rm_txt_con", ".box_con", ".show_text", "#rwb_zw"]
+    date_selectors: [".box01 .fl", ".edit", ".clearfix .fl"]
+    enabled: true
+    schedule:
+      cron: "0 8,14,20 * * *"
+
+  - id: "xinhuanet"
+    site_name: "新华网"
+    base_url: "http://www.news.cn"
+    entry_urls:
+      - "https://www.news.cn/comments/"
+      - "https://www.news.cn/politics/"
+    allowed_domains: ["news.cn", "xinhuanet.com"]
+    article_url_patterns: ["/comments/\\d{8}/[a-z0-9]+/c\\.html$", "/politics/\\d{8}/[a-z0-9]+/c\\.html$", "/politics/leaders/\\d{8}/[a-z0-9]+/c\\.html$"]
+    exclude_url_patterns: ["/index\\.htm$", "/home\\.htm$", "/zt/", "english\\.news\\.cn"]
+    priority_keywords: ["新华时评", "述评", "观察", "评论员", "热点"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "时评政论"
+    title_selectors: [".title", "h1"]
+    content_selectors: [".article", "#detail", ".main-aticle", ".xl-content"]
+    date_selectors: [".h-time", ".info", ".source"]
+    enabled: true
+    schedule:
+      cron: "10 8,14,20 * * *"
+
+  - id: "gmw"
+    site_name: "光明网"
+    base_url: "https://www.gmw.cn"
+    entry_urls:
+      - "https://politics.gmw.cn/"
+      - "https://theory.gmw.cn/"
+    allowed_domains: ["gmw.cn"]
+    article_url_patterns: ["/\\d{4}-\\d{2}/\\d{2}/content_\\d+\\.htm$", "/content_\\d+\\.htm$"]
+    exclude_url_patterns: ["/node_\\d+\\.htm$", "/topics\\.", "/index\\.htm$"]
+    priority_keywords: ["光明时评", "理论", "评论", "观察"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "理论评论"
+    title_selectors: ["h1", ".u-title", ".m-title"]
+    content_selectors: [".u-mainText", ".m-content", ".content", ".article"]
+    date_selectors: [".m-con-time", ".u-source", ".time"]
+    enabled: true
+    schedule:
+      cron: "20 8,14,20 * * *"
+
+  - id: "qstheory"
+    site_name: "求是网"
+    base_url: "http://www.qstheory.cn"
+    entry_urls:
+      - "http://www.qstheory.cn/"
+      - "http://www.qstheory.cn/qszq/llwx/index.htm"
+    allowed_domains: ["qstheory.cn"]
+    article_url_patterns: ["/\\d{8}/[a-z0-9]+/c\\.html$", "/\\d{8}/[a-z0-9]+/c\\.html"]
+    exclude_url_patterns: ["/index\\.htm$", "/v9zhuanqu/", "/qssp/", "/qswp\\.htm"]
+    priority_keywords: ["求是", "理论", "评论", "观察"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "理论评论"
+    title_selectors: ["h1", ".title", ".head-title"]
+    content_selectors: [".article-content", ".text", ".content", ".detailText"]
+    date_selectors: [".info", ".article-info", ".source"]
+    enabled: true
+    schedule:
+      cron: "30 8,14,20 * * *"
+
+  - id: "gov"
+    site_name: "中国政府网"
+    base_url: "https://www.gov.cn"
+    entry_urls:
+      - "https://www.gov.cn/zhengce/"
+      - "https://www.gov.cn/yaowen/"
+      - "https://www.gov.cn/yaowen/liebiao/"
+    allowed_domains: ["gov.cn"]
+    article_url_patterns: ["/zhengce/(content/)?\\d{6}/content_\\d+\\.htm$", "/yaowen/liebiao/\\d{6}/content_\\d+\\.htm$"]
+    exclude_url_patterns: ["/index\\.htm$", "/jiedu/tujie/", "/xzfgk/", "/search/"]
+    priority_keywords: ["政策", "解读", "要闻", "国办", "国务院"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "政策说明"
+    title_selectors: ["h1", ".pages-title", ".g-title"]
+    content_selectors: [".pages_content", ".content", ".g-article"]
+    date_selectors: [".pages-date", ".g-source", ".source"]
+    enabled: true
+    schedule:
+      cron: "40 8,14,20 * * *"
+
+  - id: "banyuetan"
+    site_name: "半月谈"
+    base_url: "http://www.banyuetan.org"
+    entry_urls:
+      - "http://www.banyuetan.org/"
+    allowed_domains: ["banyuetan.org"]
+    article_url_patterns: ["/c/", "/detail/", "/\\d{8}/", "\\.html?$"]
+    priority_keywords: ["评论", "时评", "观察", "热点", "半月谈"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "时评政论"
+    enabled: true
+    schedule:
+      cron: "50 8,14,20 * * *"
+
+  - id: "cyol"
+    site_name: "中国青年报"
+    base_url: "https://www.cyol.com"
+    entry_urls:
+      - "https://www.cyol.com/"
+    allowed_domains: ["cyol.com"]
+    article_url_patterns: ["/gb/", "/content/", "/\\d{4}-\\d{2}/\\d{2}/", "\\.htm$"]
+    priority_keywords: ["评论", "青年", "观察", "热点"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "时评政论"
+    enabled: true
+    schedule:
+      cron: "0 9,15,21 * * *"
+
+  - id: "ce"
+    site_name: "经济日报"
+    base_url: "http://www.ce.cn"
+    entry_urls:
+      - "http://www.ce.cn/"
+      - "http://views.ce.cn/"
+    allowed_domains: ["ce.cn"]
+    article_url_patterns: ["/\\d{4}/\\d{2}/\\d{2}/", "/xwzx/", "/views/", "\\.shtml$"]
+    priority_keywords: ["评论", "观察", "经济日报", "时评"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "经济评论"
+    enabled: true
+    schedule:
+      cron: "10 9,15,21 * * *"
+
+  - id: "lifeweek"
+    site_name: "三联生活周刊"
+    base_url: "https://www.lifeweek.com.cn"
+    entry_urls:
+      - "https://www.lifeweek.com.cn/"
+    allowed_domains: ["lifeweek.com.cn"]
+    article_url_patterns: ["/article/", "/\\d+/\\d+/\\d+/", "\\.html?$"]
+    priority_keywords: ["评论", "随笔", "人物", "社会"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "文化社会"
+    enabled: true
+    schedule:
+      cron: "20 9,15,21 * * *"
+
+  - id: "whb"
+    site_name: "文汇报"
+    base_url: "https://www.whb.cn"
+    entry_urls:
+      - "https://www.whb.cn/"
+    allowed_domains: ["whb.cn"]
+    article_url_patterns: ["/commonDetail/", "/\\d{8}/", "\\.html?$"]
+    priority_keywords: ["评论", "文汇", "观察", "随笔"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "文化评论"
+    enabled: true
+    schedule:
+      cron: "30 9,15,21 * * *"
+
+  - id: "thepaper"
+    site_name: "澎湃新闻"
+    base_url: "https://www.thepaper.cn"
+    entry_urls:
+      - "https://www.thepaper.cn/"
+    allowed_domains: ["thepaper.cn"]
+    article_url_patterns: ["/newsDetail_forward_", "/\\d+$", "/newsDetail_"]
+    priority_keywords: ["评论", "澎湃", "观察", "热点"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "时事评论"
+    enabled: true
+    schedule:
+      cron: "40 9,15,21 * * *"
+
+  - id: "guokr"
+    site_name: "果壳"
+    base_url: "https://www.guokr.com"
+    entry_urls:
+      - "https://www.guokr.com/"
+    allowed_domains: ["guokr.com"]
+    article_url_patterns: ["/article/", "/science/", "\\d+/"]
+    priority_keywords: ["科学", "科普", "解释", "观察"]
+    article_limit: 50
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "科普说明"
+    enabled: true
+    schedule:
+      cron: "50 9,15,21 * * *"
+
+  - id: "shandong_gov_profile"
+    site_name: "山东省政府-省情"
+    base_url: "http://www.shandong.gov.cn"
+    entry_urls:
+      - "http://www.shandong.gov.cn/col/col94094/index.html"
+    allowed_domains: ["shandong.gov.cn"]
+    article_url_patterns: ["/art/\\d{4}/\\d{2}/\\d{2}/art_\\d+_\\d+\\.html$"]
+    exclude_url_patterns: ["/index\\.html$", "/col/col\\d+/"]
+    priority_keywords: ["省情", "概况", "人口", "经济", "地理", "行政区划", "历史沿革"]
+    article_limit: 40
+    min_body_length: 120
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "省情介绍"
+    title_selectors: ["h1", ".arti-title", ".title"]
+    content_selectors: [".TRS_Editor", ".article_con", ".xlcontent", ".content"]
+    date_selectors: [".arti-time", ".info", ".pubtime"]
+    enabled: false
+    schedule:
+      cron: "0 10 * * *"
+
+  - id: "pbc"
+    site_name: "中国人民银行"
+    base_url: "https://www.pbc.gov.cn"
+    entry_urls:
+      - "https://www.pbc.gov.cn/"
+    allowed_domains: ["pbc.gov.cn"]
+    article_url_patterns: ["/\\d+/\\d+/\\d+/index\\.html$", "/goutongjiaoliu/\\d+/\\d+/\\d+/index\\.html$"]
+    exclude_url_patterns: ["/index\\.html$", "/search", "/english/"]
+    priority_keywords: ["货币政策", "宏观经济", "金融", "市场经济", "政策解读", "基础概念"]
+    article_limit: 40
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "宏观经济"
+    title_selectors: ["h1", ".tit", ".title"]
+    content_selectors: [".content", ".TRS_Editor", ".zoom", ".article"]
+    date_selectors: [".info", ".subTitle", ".time"]
+    enabled: false
+    schedule:
+      cron: "10 10 * * *"
+
+  - id: "stats_gov"
+    site_name: "国家统计局"
+    base_url: "https://www.stats.gov.cn"
+    entry_urls:
+      - "https://www.stats.gov.cn/"
+    allowed_domains: ["stats.gov.cn"]
+    article_url_patterns: ["/sj/zxfb/\\d{6}/t\\d+_\\d+\\.html$", "/sj/zxfb/\\d{6}/t\\d+_\\d+\\.htm$"]
+    exclude_url_patterns: ["/index\\.html$", "/english/", "/search"]
+    priority_keywords: ["统计", "数据", "国民经济", "宏观", "指标", "运行情况"]
+    article_limit: 40
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "宏观经济"
+    title_selectors: ["h1", ".title", ".arti_title"]
+    content_selectors: [".TRS_Editor", ".article", ".content", ".zoom"]
+    date_selectors: [".info", ".date", ".time"]
+    enabled: false
+    schedule:
+      cron: "20 10 * * *"
+
+  - id: "mof"
+    site_name: "财政部"
+    base_url: "https://www.mof.gov.cn"
+    entry_urls:
+      - "https://www.mof.gov.cn/index.htm"
+    allowed_domains: ["mof.gov.cn"]
+    article_url_patterns: ["/zhengwuxinxi/\\w+/\\d{6}/t\\d+_\\d+\\.htm$", "/\\w+/\\d{6}/t\\d+_\\d+\\.htm$"]
+    exclude_url_patterns: ["/index\\.htm$", "/search/", "/english/"]
+    priority_keywords: ["财政政策", "预算", "税收", "财政", "政策解读"]
+    article_limit: 40
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "宏观经济"
+    title_selectors: ["h1", ".title", ".con-title"]
+    content_selectors: [".TRS_Editor", ".content", ".article", ".con-txt"]
+    date_selectors: [".info", ".date", ".time"]
+    enabled: false
+    schedule:
+      cron: "30 10 * * *"
+
+  - id: "yicai"
+    site_name: "第一财经"
+    base_url: "https://www.yicai.com"
+    entry_urls:
+      - "https://www.yicai.com/"
+    allowed_domains: ["yicai.com"]
+    article_url_patterns: ["/news/\\d+\\.html$", "/topic/\\d+\\.html$"]
+    exclude_url_patterns: ["/video/", "/live/", "/audio/", "/search"]
+    priority_keywords: ["经济", "宏观", "市场", "政策", "产业", "财经"]
+    article_limit: 40
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "经济热点"
+    title_selectors: ["h1", ".m-title", ".title"]
+    content_selectors: [".m-txt", ".article-content", ".text", ".content"]
+    date_selectors: [".time", ".m-source", ".info"]
+    enabled: false
+    schedule:
+      cron: "40 10 * * *"
+
+  - id: "kepuchina"
+    site_name: "科普中国"
+    base_url: "https://www.kepuchina.cn"
+    entry_urls:
+      - "https://www.kepuchina.cn/"
+    allowed_domains: ["kepuchina.cn"]
+    article_url_patterns: ["/article/.+", "/science/.+"]
+    exclude_url_patterns: ["/index\\.shtml$", "/more/", "/search", "/video/"]
+    priority_keywords: ["科普", "科学", "实验", "物理", "化学", "生物"]
+    article_limit: 40
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "科技科普"
+    title_selectors: ["h1", ".title", ".article-title"]
+    content_selectors: [".content", ".article-content", ".TRS_Editor", ".text"]
+    date_selectors: [".info", ".time", ".source"]
+    enabled: false
+    schedule:
+      cron: "50 10 * * *"
+
+  - id: "gmw_tech"
+    site_name: "光明网科技频道"
+    base_url: "https://tech.gmw.cn"
+    entry_urls:
+      - "https://tech.gmw.cn/"
+    allowed_domains: ["gmw.cn"]
+    article_url_patterns: ["/\\d{4}-\\d{2}/\\d{2}/content_\\d+\\.htm$", "/content_\\d+\\.htm$"]
+    exclude_url_patterns: ["/node_\\d+\\.htm$", "/index\\.htm$", "/topics\\."]
+    priority_keywords: ["科技", "科普", "科学", "技术", "前沿"]
+    article_limit: 40
+    min_body_length: 180
+    auto_process_after_ingest: true
+    process_mode: "full"
+    language: "zh"
+    domain: "科技科普"
+    title_selectors: ["h1", ".u-title", ".m-title"]
+    content_selectors: [".u-mainText", ".m-content", ".content", ".article"]
+    date_selectors: [".m-con-time", ".u-source", ".time"]
+    enabled: false
+    schedule:
+      cron: "0 11 * * *"

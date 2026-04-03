@@ -1,0 +1,21 @@
+version: "material-gov.v1"
+
+minimums:
+  min_sentences: 4
+  min_chars: 150
+  min_independence_score: 0.48
+  min_information_density: 0.35
+
+merge:
+  containment_ratio: 0.8
+  jaccard_ratio: 0.85
+  lcs_ratio: 0.8
+  target_length: 320
+
+labels:
+  top_k: 4
+  secondary_k: 3
+  wide_labels:
+    - "generic_comprehension"
+    - "generic_summary"
+    - "generic_argumentation"

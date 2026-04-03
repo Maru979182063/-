@@ -1,0 +1,325 @@
+schema_version: material_card_registry.v1
+registry_id: continuation_material_cards_v1
+business_family_id: continuation
+registry_role: intermediate_structure_cards
+notes:
+- 以下10张卡以接语选择题配置文件中的10个pattern为核心原型，并对齐docx真题的尾句承接方式。
+- 这些卡是材料层中间结构卡，不直接等于题目生成prompt。
+- question card会将10张材料卡一对一映射到10个接语生成原型。
+cards:
+- card_id: continuation_material.tail_anchor_direct_extend
+  display_name: 新落点延展卡
+  selection_core: 尾句已落到一个尚未展开的新支点，下文自然沿该点往下一层解释。
+  structures:
+  - 开放式尾句
+  - 新支点
+  - 下沉一层
+  required_signals:
+    tail_extension_signal: '>=0.74'
+    continuation_openness: '>=0.72'
+    direction_uniqueness: '>=0.66'
+    anchor_clarity: '>=0.72'
+  preferred_signals:
+  - 最后一句不封死
+  - 尾句提到新对象/新角度
+  - 前文相关但未展开
+  avoid_signals:
+  - 尾句只是收束总结
+  - 新落点不明确
+  - 仍强依赖外部上下文
+  candidate_contract:
+    raw_policy: whole_passage 或 closed_span 优先
+    allowed_candidate_types: &id001
+    - whole_passage
+    - closed_span
+    preferred_candidate_types: *id001
+  card_bias: 顺承解释型接语
+  default_generation_archetype: tail_anchor_direct_extend
+  distractor_bias:
+  - 回到旧话题
+  - 只补前文细节
+  - 跳入无关方向
+- card_id: continuation_material.problem_solution_hook
+  display_name: 问题暴露转对策卡
+  selection_core: 尾句暴露问题、风险或不足，下文最自然进入对策、替代方案或改进路径。
+  structures:
+  - 问题落点
+  - 方案期待
+  - 回应性强
+  required_signals:
+    problem_signal_strength: '>=0.72'
+    continuation_openness: '>=0.70'
+    direction_uniqueness: '>=0.64'
+    anchor_clarity: '>=0.60'
+  preferred_signals:
+  - 结尾点出不足/困境
+  - 前文已铺垫问题背景
+  - 下文具有方案空间
+  avoid_signals:
+  - 问题尚未聚焦
+  - 尾句仍停留背景
+  - 所谓对策无法回应问题
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id002
+    - multi_paragraph_unit
+    preferred_candidate_types: *id002
+  card_bias: 问题→方案型接语
+  default_generation_archetype: problem_solution_hook
+  distractor_bias:
+  - 继续罗列问题
+  - 转去无关背景
+  - 只讲宏大意义
+- card_id: continuation_material.mechanism_unfolding
+  display_name: 机制影响展开卡
+  selection_core: 尾句点名某种作用机制、因果链或影响路径，但尚未展开具体机理。
+  structures:
+  - 机制点名
+  - 因果链未展开
+  - 解释需求
+  required_signals:
+    mechanism_signal_strength: '>=0.70'
+    continuation_openness: '>=0.68'
+    direction_uniqueness: '>=0.60'
+    anchor_clarity: '>=0.58'
+  preferred_signals:
+  - 出现“因为/导致/影响/通过”等机制提示
+  - 尾句只点名不细讲
+  - 下文可补足原理
+  avoid_signals:
+  - 机制已经讲完
+  - 只有现象无作用链
+  - 多个机制竞争
+  candidate_contract:
+    raw_policy: whole_passage 或 closed_span
+    allowed_candidate_types:
+    - whole_passage
+    - closed_span
+    preferred_candidate_types: []
+  card_bias: 机制补足型接语
+  default_generation_archetype: mechanism_unfolding
+  distractor_bias:
+  - 重复现象
+  - 转去并列机制
+  - 跳到价值评议
+- card_id: continuation_material.raised_theme_to_subtopic
+  display_name: 概念提升引题卡
+  selection_core: 尾句将话题从具体对象抬升到一个更高主题，下文自然拆出其中一个分论点或子题。
+  structures:
+  - 主题抬升
+  - 分论点入口
+  - 总到分
+  required_signals:
+    theme_raise_strength: '>=0.72'
+    continuation_openness: '>=0.66'
+    direction_uniqueness: '>=0.58'
+    anchor_clarity: '>=0.56'
+  preferred_signals:
+  - 尾句提到更高层主题
+  - 前文只是引入
+  - 下文可展开子题
+  avoid_signals:
+  - 尾句只是空泛拔高
+  - 没有可落分论点
+  - 主题过宽无着力点
+  candidate_contract:
+    raw_policy: whole_passage 优先
+    allowed_candidate_types: &id003
+    - whole_passage
+    preferred_candidate_types: *id003
+  card_bias: 主题→分论点型接语
+  default_generation_archetype: raised_theme_to_subtopic
+  distractor_bias:
+  - 继续总论
+  - 回到旧例子
+  - 并列罗列所有分题
+- card_id: continuation_material.summary_with_new_pivot
+  display_name: 总结后留白卡
+  selection_core: 尾句前半收束前文，后半开启新的具体支点，下文应围绕新支点展开。
+  structures:
+  - 总结+开放
+  - 新支点后移
+  - 旧话题已收束
+  required_signals:
+    summary_strength: '>=0.70'
+    tail_extension_signal: '>=0.72'
+    continuation_openness: '>=0.70'
+    direction_uniqueness: '>=0.68'
+  preferred_signals:
+  - 尾句有“既…又…”式功能切换
+  - 前文已总结完一轮
+  - 最后一句带出新对象/新任务
+  avoid_signals:
+  - 尾句纯总结
+  - 尾句纯开放无前文回收
+  - 所谓新支点其实旧话题重述
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id004
+    - multi_paragraph_unit
+    preferred_candidate_types: *id004
+  card_bias: 总结中带新支点型接语
+  default_generation_archetype: summary_with_new_pivot
+  distractor_bias:
+  - 围绕已总结内容打转
+  - 细节补前文
+  - 越级拔高
+- card_id: continuation_material.judgement_to_reason
+  display_name: 判断落点补论证卡
+  selection_core: 尾句先给出鲜明判断或立场，下文最自然补充原因、论据或进一步论证。
+  structures:
+  - 判断先行
+  - 论证待补
+  - 立场明确
+  required_signals:
+    judgement_signal_strength: '>=0.72'
+    continuation_openness: '>=0.64'
+    direction_uniqueness: '>=0.58'
+    anchor_clarity: '>=0.62'
+  preferred_signals:
+  - 尾句有评价性判断
+  - 前文已作铺垫
+  - 下文适合回答“为什么”
+  avoid_signals:
+  - 判断已被充分论证
+  - 只有事实无判断
+  - 价值口号过重
+  candidate_contract:
+    raw_policy: closed_span 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - closed_span
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 判断→原因型接语
+  default_generation_archetype: judgement_to_reason
+  distractor_bias:
+  - 重复判断
+  - 直接转对策
+  - 回到旧背景
+- card_id: continuation_material.case_to_macro_unfold
+  display_name: 个案转大背景卡
+  selection_core: 文段先谈个案/例子，尾句转向更宏观的问题、背景或规律，下文应在宏观层继续。
+  structures:
+  - 个案转宏观
+  - 层级上提
+  - 背景展开
+  required_signals:
+    case_macro_shift_strength: '>=0.72'
+    continuation_openness: '>=0.66'
+    direction_uniqueness: '>=0.60'
+    anchor_clarity: '>=0.56'
+  preferred_signals:
+  - 前文个案充分
+  - 尾句明确跳到更大层级
+  - 下文适合扩展宏观框架
+  avoid_signals:
+  - 个案仍是重心
+  - 宏观方向不明确
+  - 仅口号式升华
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id005
+    - multi_paragraph_unit
+    preferred_candidate_types: *id005
+  card_bias: 个案→宏观型接语
+  default_generation_archetype: case_to_macro_unfold
+  distractor_bias:
+  - 继续个案细节
+  - 空泛宏观口号
+  - 跳去别的宏大议题
+- card_id: continuation_material.multi_branch_focus
+  display_name: 并列择一展开卡
+  selection_core: 前文并列铺出多个方向，尾句压重其中一支，下文应围绕被压重的那一支展开。
+  structures:
+  - 多支线
+  - 尾句压重
+  - 单支展开
+  required_signals:
+    branch_focus_strength: '>=0.74'
+    direction_uniqueness: '>=0.70'
+    continuation_openness: '>=0.64'
+    anchor_clarity: '>=0.54'
+  preferred_signals:
+  - 有两个以上并列方向
+  - 尾句明确偏向一支
+  - 下文可单点深入
+  avoid_signals:
+  - 并列结构本身不清晰
+  - 尾句未压重
+  - 所有支线同等重要
+  candidate_contract:
+    raw_policy: whole_passage 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - whole_passage
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 并列择一型接语
+  default_generation_archetype: multi_branch_focus
+  distractor_bias:
+  - 围绕其他支线
+  - 继续总话题复述
+  - 并列拼接多个方向
+- card_id: continuation_material.tension_explained
+  display_name: 张力冲突承接卡
+  selection_core: 尾句保留两难、冲突或矛盾关系，不立即收束，下文自然解释其成因或协调路径。
+  structures:
+  - 张力保留
+  - 解释期待
+  - 不能站队
+  required_signals:
+    tension_signal_strength: '>=0.74'
+    continuation_openness: '>=0.70'
+    direction_uniqueness: '>=0.62'
+    anchor_clarity: '>=0.50'
+  preferred_signals:
+  - 尾句保留矛盾关系
+  - 前文铺出双方力量
+  - 下文适合解释/化解
+  avoid_signals:
+  - 冲突已结束
+  - 尾句直接下判断
+  - 冲突双方并不稳定
+  candidate_contract:
+    raw_policy: closed_span 或 multi_paragraph_unit
+    allowed_candidate_types:
+    - closed_span
+    - multi_paragraph_unit
+    preferred_candidate_types: []
+  card_bias: 张力解释型接语
+  default_generation_archetype: tension_explained
+  distractor_bias:
+  - 重复冲突本身
+  - 单边站队
+  - 回到旧背景
+- card_id: continuation_material.method_expansion
+  display_name: 方法路径细化卡
+  selection_core: 前文完成分析/判断，尾句触及做法、路径、工具或机制设计，下文应具体展开方法层。
+  structures:
+  - 方法入口
+  - 做法展开
+  - 操作层承接
+  required_signals:
+    method_signal_strength: '>=0.72'
+    continuation_openness: '>=0.66'
+    direction_uniqueness: '>=0.60'
+    anchor_clarity: '>=0.58'
+  preferred_signals:
+  - 尾句出现“如何做/路径/工具/机制”等方法入口
+  - 前文分析已相对完成
+  - 下文适合展开条件步骤
+  avoid_signals:
+  - 尾句仍在价值判断
+  - 方法入口过于虚
+  - 只有口号无做法
+  candidate_contract:
+    raw_policy: multi_paragraph_unit 优先
+    allowed_candidate_types: &id006
+    - multi_paragraph_unit
+    preferred_candidate_types: *id006
+  card_bias: 方法转入型接语
+  default_generation_archetype: method_expansion
+  distractor_bias:
+  - 空泛价值倡议
+  - 再复述问题
+  - 停在抽象原则
+normalized_from: continuation_intermediate_material_cards.yaml

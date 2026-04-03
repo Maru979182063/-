@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>行测题目制作 v0.8</title>
+    <link rel="stylesheet" href="/demo-static/styles.css?v=20260402f" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <section id="builderScreen" class="screen active">
+        <div class="hero-card">
+          <h1>行测题目制作 v0.8</h1>
+
+          <form id="generateForm" class="builder-form">
+            <div class="builder-grid">
+              <label class="field">
+                <span>当前支持题目</span>
+                <select id="questionFocus" name="question_focus"></select>
+              </label>
+
+              <label class="field">
+                <span>二级分类</span>
+                <select id="specialType" name="special_question_type"></select>
+              </label>
+
+              <label class="field">
+                <span>难度需求</span>
+                <select id="difficultyLevel" name="difficulty_level">
+                  <option value="简单">简单</option>
+                  <option value="中等" selected>中等</option>
+                  <option value="困难">困难</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>文本风格方向</span>
+                <select id="textDirection" name="text_direction"></select>
+              </label>
+
+              <label class="field">
+                <span>文段结构逻辑</span>
+                <select id="materialStructure" name="material_structure"></select>
+              </label>
+            </div>
+
+            <div class="count-card">
+              <div class="count-head">
+                <span>生成条目数</span>
+                <strong id="countValue">1</strong>
+              </div>
+              <input id="count" name="count" type="range" min="1" max="5" value="1" />
+              <div class="count-scale">
+                <span>1</span>
+                <span>2</span>
+                <span>3</span>
+                <span>4</span>
+                <span>5</span>
+              </div>
+            </div>
+
+            <section class="reference-card">
+              <div class="reference-card-head">
+                <div>
+                  <h2>参考题驱动生题</h2>
+                  <p>可选填写。你可以先把整道原题直接粘进“原题文段”，系统会先自动拆题回填，再按原题结构和风格检索文段制作相似题。</p>
+                </div>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                  <span class="reference-badge">V2 检索增强</span>
+                  <button id="sourceQuestionDetectBtn" type="button" class="secondary-btn">自动拆题并回填</button>
+                </div>
+              </div>
+
+               <div class="reference-grid">
+                 <label class="reference-field reference-field-full">
+                   <span>原题文段</span>
+                   <textarea
+                      id="sourceQuestionPassage"
+                    rows="6"
+                    placeholder="可直接粘贴整道原题原文。点击“自动拆题并回填”后，系统会自动拆成材料、题干、选项、答案、解析。"
+                  ></textarea>
+                </label>
+
+                <label class="reference-field reference-field-full">
+                  <span>原题题干</span>
+                  <textarea
+                    id="sourceQuestionStem"
+                    rows="2"
+                    placeholder="例如：这段文字意在强调（ ）。"
+                  ></textarea>
+                </label>
+
+                <label class="reference-field">
+                  <span>选项 A</span>
+                  <textarea id="sourceOptionA" rows="2" placeholder="输入原题选项 A"></textarea>
+                </label>
+                <label class="reference-field">
+                  <span>选项 B</span>
+                  <textarea id="sourceOptionB" rows="2" placeholder="输入原题选项 B"></textarea>
+                </label>
+                <label class="reference-field">
+                  <span>选项 C</span>
+                  <textarea id="sourceOptionC" rows="2" placeholder="输入原题选项 C"></textarea>
+                </label>
+                <label class="reference-field">
+                  <span>选项 D</span>
+                  <textarea id="sourceOptionD" rows="2" placeholder="输入原题选项 D"></textarea>
+                </label>
+
+                <label class="reference-field">
+                  <span>原题答案</span>
+                  <select id="sourceQuestionAnswer">
+                    <option value="">不填</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                  </select>
+                </label>
+
+                 <label class="reference-field reference-field-wide">
+                   <span>原题解析</span>
+                   <textarea
+                     id="sourceQuestionAnalysis"
+                    rows="3"
+                    placeholder="可选。填写后会连同原题一起作为 few-shot 风格模板。"
+                   ></textarea>
+                 </label>
+               </div>
+               <div id="sourceQuestionParseStatus" class="reference-parse-status" hidden></div>
+             </section>
+
+            <div class="action-center">
+              <button id="generateBtn" type="submit" class="primary-btn">提交</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="loadingScreen" class="screen">
+        <div class="loading-card">
+          <h1>行测题目制作 v0.8</h1>
+          <div class="loading-layout">
+            <div class="loading-left">
+              <h2>流程加载中</h2>
+              <div id="loadingSteps" class="step-list"></div>
+            </div>
+            <div class="loading-right">
+              <div class="node-card">
+                <div class="node-title">当前运行节点展示</div>
+                <div id="loadingNode" class="node-text">等待开始...</div>
+                <p id="loadingNodeDesc" class="node-desc">系统将按既定流程完成出题、校验与审核。</p>
+              </div>
+              <button id="cancelLoadingBtn" type="button" class="ghost-btn">返回上一页</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="resultScreen" class="screen">
+        <div class="result-shell">
+          <div class="result-header">
+            <div>
+              <h1>行测题目制作 v0.8</h1>
+              <p id="resultBatchInfo">等待本次生成结果...</p>
+            </div>
+            <div class="result-header-actions">
+              <button id="backToBuilderBtn" type="button" class="ghost-btn">返回首页</button>
+              <button id="exportApprovedBtn" type="button" class="primary-btn">一键下载通过题目</button>
+            </div>
+          </div>
+
+          <div id="resultList" class="result-list"></div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/demo-static/app_v2.js?v=20260402f"></script>
+  </body>
+</html>

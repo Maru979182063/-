@@ -1,0 +1,46 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_fill__ending_countermeasure__abstract
+  display_name: 语句填空-结尾提出对策
+  description: 横线在结尾，空句承担提出对策或行动方向的业务卡。
+  mother_family_id: sentence_fill
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句填空题
+    - 结尾
+    - 对策
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres: [评论文, 政策文, 宣传文]
+    preferred_material_structures: [问题-对策, 现象-分析, 观点-论证]
+    preferred_markers: [应该, 应当, 必须, 要, 措施]
+  ranking_weights:
+    relation_match: 0.40
+    marker_match: 0.16
+    structural_match: 0.14
+    semantic_completeness: 0.15
+    readability: 0.15
+
+slot_projection:
+  question_type: sentence_fill
+  business_subtype: null
+  pattern_candidates: [ending_summary]
+  type_slots:
+    blank_position: ending
+    function_type: ending_summary
+    logic_relation: summary
+    context_dependency: low
+    bidirectional_validation: low
+    reference_dependency: low
+    abstraction_level: medium
+    distractor_modes: [function_mismatch, wrong_direction, topic_shift]
+    distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_fill__ending_countermeasure__abstract
+    business_feature_card_label: 语句填空-结尾提出对策
+    business_core_rule: 空句要在段尾落到对策或行动建议

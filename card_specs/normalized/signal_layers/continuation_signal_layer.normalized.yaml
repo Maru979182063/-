@@ -1,0 +1,211 @@
+schema_version: signal_layer.v1
+layer_id: continuation_intermediate_signal_layer_v1
+business_family_id: continuation
+layer_role: neutral_signal_profile
+description: 接语选择题的一期中间结构层。母卡/主族只做索引；真正用于命中子卡的是尾句承接所需的中性信号与派生信号。
+notes:
+- family不承担唯一真相判定，只负责召回与粗筛。
+- candidate允许多命中多个中间结构卡。
+- question card在消费阶段再决定采用哪一种“下文推进视角”。
+signals:
+- signal_id: document_genre
+  type: enum
+  description: 文章文体底色
+  allowed_values:
+  - 科普说明
+  - 评论议论
+  - 政策评论
+  - 历史叙事
+  - 前言导论
+  - 综合说明
+- signal_id: article_purpose_frame
+  type: enum
+  description: 文章写作任务
+  allowed_values:
+  - 介绍说明
+  - 问题判断
+  - 机制解释
+  - 主题导入
+  - 方法讨论
+  - 案例扩展
+- signal_id: discourse_shape
+  type: enum
+  description: 主结构骨架
+  allowed_values:
+  - 递进展开
+  - 问题-分析
+  - 总结后转支点
+  - 并列后聚焦
+  - 个案后升维
+  - 判断后待论证
+  - 张力保留
+- signal_id: tail_anchor
+  type: string
+  description: 尾句最终压重的新落点/新支点
+- signal_id: anchor_focus
+  type: enum
+  description: 尾句最终落点类型
+  allowed_values:
+  - tail_anchor
+  - problem_exposed
+  - mechanism_named
+  - theme_raised
+  - new_pivot
+  - judgement_given
+  - macro_shift
+  - branch_focus
+  - tension_retained
+  - method_opening
+- signal_id: continuation_type
+  type: enum
+  description: 下文最自然的展开方向
+  allowed_values:
+  - explain
+  - countermeasure
+  - deepen_mechanism
+  - subtopic_expand
+  - deepen_pivot
+  - reason_argument
+  - macro_unfold
+  - focus_branch
+  - resolve_tension
+  - method_expand
+- signal_id: progression_mode
+  type: enum
+  description: 尾句到下文的推进关系
+  allowed_values:
+  - one_level_down
+  - problem_to_solution
+  - object_to_mechanism
+  - theme_to_subtopic
+  - summary_to_new_pivot
+  - judgement_to_reason
+  - case_to_macro
+  - multi_branch_to_focus
+  - tension_to_explanation
+  - analysis_to_method
+- signal_id: ending_function
+  type: enum
+  description: 结尾句在结构上的功能
+  allowed_values:
+  - open_only
+  - summary_plus_open
+  - judgement_trigger
+  - transition_trigger
+  - tension_hold
+- signal_id: tail_extension_signal
+  type: float
+  description: 尾句是否真正留下向下展开空间
+  range:
+  - 0
+  - 1
+- signal_id: continuation_openness
+  type: float
+  description: 尾句接续开放度
+  range:
+  - 0
+  - 1
+- signal_id: direction_uniqueness
+  type: float
+  description: 尾句指向是否足够单一
+  range:
+  - 0
+  - 1
+- signal_id: anchor_clarity
+  type: float
+  description: 续写方向是否明确可辨
+  range:
+  - 0
+  - 1
+- signal_id: context_dependency
+  type: float
+  description: 对外部上下文依赖程度
+  range:
+  - 0
+  - 1
+- signal_id: problem_signal_strength
+  type: float
+  description: 问题暴露强度
+  range:
+  - 0
+  - 1
+- signal_id: mechanism_signal_strength
+  type: float
+  description: 机制/因果链提示强度
+  range:
+  - 0
+  - 1
+- signal_id: theme_raise_strength
+  type: float
+  description: 主题抬升强度
+  range:
+  - 0
+  - 1
+- signal_id: summary_strength
+  type: float
+  description: 总结回收强度
+  range:
+  - 0
+  - 1
+- signal_id: judgement_signal_strength
+  type: float
+  description: 判断/立场强度
+  range:
+  - 0
+  - 1
+- signal_id: case_macro_shift_strength
+  type: float
+  description: 个案转宏观的层级跃迁强度
+  range:
+  - 0
+  - 1
+- signal_id: branch_focus_strength
+  type: float
+  description: 多支线中压重单支的强度
+  range:
+  - 0
+  - 1
+- signal_id: tension_signal_strength
+  type: float
+  description: 矛盾/张力保留强度
+  range:
+  - 0
+  - 1
+- signal_id: method_signal_strength
+  type: float
+  description: 方法/路径入口强度
+  range:
+  - 0
+  - 1
+derived_signals:
+- signal_id: family_affinity_topk
+  type: array
+  description: 接语题与其它家族的粗排序，不做唯一归属
+- signal_id: candidate_type
+  type: enum
+  description: 一期候选材料类型
+  allowed_values:
+  - whole_passage
+  - closed_span
+  - multi_paragraph_unit
+- signal_id: recommended_generation_archetype
+  type: enum
+  description: 接语题十种生成原型之一
+  allowed_values:
+  - tail_anchor_direct_extend
+  - problem_solution_hook
+  - mechanism_unfolding
+  - raised_theme_to_subtopic
+  - summary_with_new_pivot
+  - judgement_to_reason
+  - case_to_macro_unfold
+  - multi_branch_focus
+  - tension_explained
+  - method_expansion
+- signal_id: recommended_material_cards
+  type: array
+  description: Top-N中间结构卡建议
+- signal_id: distractor_profile
+  type: object
+  description: 建议的错项距离/方向
+normalized_from: continuation_signal_layer.yaml

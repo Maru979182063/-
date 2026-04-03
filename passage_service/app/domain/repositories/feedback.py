@@ -1,0 +1,9 @@
+from typing import Protocol
+
+from app.infra.db.orm.feedback import FeedbackAggregateORM, FeedbackRecordORM
+
+
+class FeedbackRepository(Protocol):
+    def create_record(self, **kwargs) -> FeedbackRecordORM: ...
+    def get_aggregate(self, material_id: str) -> FeedbackAggregateORM | None: ...
+    def upsert_aggregate(self, material_id: str, **kwargs) -> FeedbackAggregateORM: ...

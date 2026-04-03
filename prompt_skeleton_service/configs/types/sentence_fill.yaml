@@ -1,0 +1,712 @@
+type_id: sentence_fill
+display_name: 语句填空题
+enabled: true
+aliases:
+  - 语句填空
+  - 填空题
+  - 句子填空
+  - 语段填句
+
+task_definition: >
+  基于给定语段和空位位置，为语句填空题生成稳定的 prompt 骨架。
+  核心任务不是补一句表面通顺的话，而是识别空位在段落中的结构功能：
+  它可能承担总起、承接、解释、总结、升华、插入说明或综合衔接等作用。
+  正确项必须同时满足位置功能、上下文逻辑和语义对象匹配；
+  错误项应在同话题或同结构表面相关的前提下，通过位置错置、功能错位、
+  指代缺失、概括失衡或逻辑链断裂制造干扰。
+
+default_pattern_id: bridge_transition
+
+difficulty_target_profiles:
+  easy:
+    complexity: { min: 0.20, max: 0.42 }
+    ambiguity: { min: 0.18, max: 0.38 }
+    reasoning_depth: { min: 0.20, max: 0.42 }
+    distractor_similarity: { min: 0.22, max: 0.52 }
+  medium:
+    complexity: { min: 0.38, max: 0.62 }
+    ambiguity: { min: 0.32, max: 0.58 }
+    reasoning_depth: { min: 0.38, max: 0.64 }
+    distractor_similarity: { min: 0.45, max: 0.74 }
+  hard:
+    complexity: { min: 0.56, max: 0.84 }
+    ambiguity: { min: 0.48, max: 0.80 }
+    reasoning_depth: { min: 0.56, max: 0.86 }
+    distractor_similarity: { min: 0.62, max: 0.90 }
+
+skeleton:
+  anchor_type: blank_position_context
+  operation_type: fill_by_function
+  target_type: valid_bridge_sentence
+
+slot_schema:
+  blank_position:
+    type: string
+    required: false
+    default: middle
+    allowed:
+      - opening
+      - middle
+      - ending
+      - inserted
+      - mixed
+    description: 空位所在位置
+
+  function_type:
+    type: string
+    required: false
+    default: bridge
+    allowed:
+      - opening_summary
+      - bridge
+      - middle_explanation
+      - middle_focus_shift
+      - ending_summary
+      - ending_elevation
+      - inserted_reference
+      - comprehensive_match
+    description: 空位承担的段落功能
+
+  logic_relation:
+    type: string
+    required: false
+    default: continuation
+    allowed:
+      - continuation
+      - transition
+      - explanation
+      - focus_shift
+      - summary
+      - elevation
+      - reference_match
+      - multi_constraint
+    description: 与上下文的逻辑关系
+
+  context_dependency:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 对上下文依赖程度
+
+  bidirectional_validation:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 是否必须同时承前启后
+
+  reference_dependency:
+    type: string
+    required: false
+    default: low
+    allowed:
+      - low
+      - medium
+      - high
+    description: 是否涉及指代对象、主语、概念匹配
+
+  abstraction_level:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 正确项抽象层级
+
+  distractor_modes:
+    type: array
+    required: false
+    default:
+      - function_mismatch
+      - weak_forward_link
+      - topic_shift
+    allowed:
+      - function_mismatch
+      - weak_forward_link
+      - weak_backward_link
+      - topic_shift
+      - overgeneralization
+      - undergeneralization
+      - reference_missing
+      - single_dimension_only
+      - wrong_direction
+      - role_mismatch
+    description: 错误项模式
+
+  distractor_strength:
+    type: string
+    required: false
+    default: medium
+    allowed:
+      - low
+      - medium
+      - high
+    description: 错误项迷惑强度
+
+default_slots:
+  blank_position: middle
+  function_type: bridge
+  logic_relation: continuation
+  context_dependency: medium
+  bidirectional_validation: medium
+  reference_dependency: low
+  abstraction_level: medium
+  distractor_modes:
+    - function_mismatch
+    - weak_forward_link
+    - topic_shift
+  distractor_strength: high
+
+fewshot_policy:
+  enabled: true
+  bind_to_difficulty: false
+  max_examples: 1
+  mode: structure_only
+
+default_fewshot:
+  title: 语句填空题结构示例
+  content: >
+    示例只用于提示“填空题要先判断空位功能，再匹配上下文逻辑”，
+    不用于绑定具体难度。
+
+patterns:
+  - pattern_id: opening_summary
+    pattern_name: 段首总起型
+    enabled: true
+    match_rules:
+      blank_position:
+        - opening
+      function_type:
+        - opening_summary
+      logic_relation:
+        - summary
+      abstraction_level:
+        - medium
+        - high
+
+    control_logic:
+      difficulty_source: 段落总领概括
+      option_confusion: 中低
+      control_levers:
+        passage: 选择后文信息密集、维度丰富、需要一条总起句统摄的段落
+        correct_option: 正确项要概括后文主要内容，并为后文举例或展开提供总领
+        wrong_options:
+          - 维度错位项
+          - 过度偏重局部功能项
+          - 与后文主线不匹配项
+      special_fields:
+        reverse_inference_key: 先看后文在讲哪几类内容，再判断哪一句最适合做总起句
+
+    generation_logic:
+      generation_core: 段首总起型填空题制作
+      processing_type: 后文信息整合→提炼总领句
+      correct_logic: 正确项必须统摄后文多个信息维度，而不是只抓一个局部点
+      high_freq_traps:
+        - 维度误判
+        - 只抓局部不统摄全段
+        - 把结果句误作总起句
+      distractor_pattern: 以维度错位、局部偏重和主题失焦构造干扰
+      analysis_steps:
+        step1_后文扫描: 提取后文主要信息维度
+        step2_统摄判断: 判断哪些表达能统领后文
+        step3_抽象控制: 总起句要高于局部信息
+        step4_排除局部项: 排除只覆盖单一维度的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.36
+      ambiguity:
+        by_slot:
+          abstraction_level:
+            low: 0.26
+            medium: 0.40
+            high: 0.54
+      reasoning_depth:
+        by_slot:
+          function_type:
+            opening_summary: 0.46
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.30
+            medium: 0.46
+            high: 0.62
+
+  - pattern_id: bridge_transition
+    pattern_name: 承上启下型
+    enabled: true
+    match_rules:
+      blank_position:
+        - middle
+      function_type:
+        - bridge
+      logic_relation:
+        - continuation
+        - transition
+      bidirectional_validation:
+        - medium
+        - high
+
+    control_logic:
+      difficulty_source: 话题承接顺序
+      option_confusion: 中
+      control_levers:
+        passage: 选择上文先提出对象、下文继续展开其作用或意义的材料
+        correct_option: 正确项必须既承接前文话题，又自然引出后文展开对象
+        wrong_options:
+          - 解释提前项
+          - 话题未出现项
+          - 位置滞后项
+      special_fields:
+        reverse_inference_key: 不是只看前文承接，还要看能否顺利引出后文下一层展开
+
+    generation_logic:
+      generation_core: 承上启下型填空题制作
+      processing_type: 前文提出对象→空位承接→后文具体展开
+      correct_logic: 正确项必须同时满足承前与启后，不能只做到一边
+      high_freq_traps:
+        - 顺序错
+        - 话题断裂
+        - 只能承前不能启后
+      distractor_pattern: 用提前解释项、弱承接项和断裂项制造干扰
+      analysis_steps:
+        step1_前文对象: 确认前文已提出什么核心对象或话题
+        step2_后文任务: 判断后文是解释作用、机制还是例证
+        step3_桥梁生成: 让正确项完成“提出→展开”的过渡
+        step4_双向验证: 检查是否既能接前文又能引后文
+
+    difficulty_rules:
+      complexity:
+        base: 0.42
+      ambiguity:
+        by_slot:
+          bidirectional_validation:
+            low: 0.28
+            medium: 0.44
+            high: 0.60
+      reasoning_depth:
+        by_slot:
+          logic_relation:
+            continuation: 0.42
+            transition: 0.50
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.30
+            medium: 0.52
+            high: 0.70
+
+  - pattern_id: middle_focus_shift
+    pattern_name: 中间承接聚焦型
+    enabled: true
+    match_rules:
+      blank_position:
+        - middle
+      function_type:
+        - middle_focus_shift
+      logic_relation:
+        - focus_shift
+      context_dependency:
+        - high
+
+    control_logic:
+      difficulty_source: 前后文抽象承接
+      option_confusion: 高
+      control_levers:
+        passage: 选择前文提出总论，后文开始集中解释某一个关键因素的材料
+        correct_option: 正确项要把前文较宽的描述收束到后文真正展开的关键点
+        wrong_options:
+          - 只说单一局部因素项
+          - 空泛综合项
+          - 与后文焦点不匹配项
+      special_fields:
+        reverse_inference_key: 看后文真正聚焦解释什么，再反推空位必须把前文收束到哪里
+
+    generation_logic:
+      generation_core: 中间承接聚焦型填空题制作
+      processing_type: 总论铺开→空位聚焦→后文集中解释
+      correct_logic: 正确项必须承担“收束前文 + 指向后文焦点”的双重任务
+      high_freq_traps:
+        - 只抓单一维度
+        - 过度综合
+        - 焦点错位
+      distractor_pattern: 用单维度项、空泛项和错焦点项制造高干扰
+      analysis_steps:
+        step1_前文总论: 识别前文宽口径描述
+        step2_后文焦点: 找出后文具体展开的关键因素
+        step3_中间收束: 用空位把总论压到焦点上
+        step4_排除泛项: 排除只看似全面但不能引后文的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.56
+      ambiguity:
+        by_slot:
+          context_dependency:
+            medium: 0.46
+            high: 0.66
+      reasoning_depth:
+        by_slot:
+          logic_relation:
+            focus_shift: 0.66
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.62
+            high: 0.82
+
+  - pattern_id: middle_explanation
+    pattern_name: 中间解释型
+    enabled: true
+    match_rules:
+      blank_position:
+        - middle
+      function_type:
+        - middle_explanation
+      logic_relation:
+        - explanation
+
+    control_logic:
+      difficulty_source: 概念解释功能
+      option_confusion: 中
+      control_levers:
+        passage: 选前文抛概念、后文举例或具体展开的材料
+        correct_option: 正确项承担解释桥梁作用
+        wrong_options:
+          - 总结句项
+          - 案例句项
+          - 偏题项
+      special_fields:
+        reverse_inference_key: 先判断空位是不是解释层，而不是总结层或案例层
+
+    generation_logic:
+      generation_core: 中间解释型填空题制作
+      processing_type: 抽象概念→解释句→具体展开
+      correct_logic: 正确项应把前文抽象表达具体化，为后文例证或说明搭桥
+      high_freq_traps:
+        - 用总结句填解释位
+        - 直接放案例句
+        - 功能层级跳跃
+      distractor_pattern: 通过功能错位制造干扰
+      analysis_steps:
+        step1_抽象概念识别: 找出前文抛出的概念或判断
+        step2_后文展开判断: 确认后文是在举例还是细化
+        step3_空位功能确认: 判定空位应承担解释职责
+        step4_功能排除: 排除总结项和案例项
+
+    difficulty_rules:
+      complexity:
+        base: 0.38
+      ambiguity:
+        by_slot:
+          context_dependency:
+            low: 0.26
+            medium: 0.40
+            high: 0.54
+      reasoning_depth:
+        by_slot:
+          logic_relation:
+            explanation: 0.46
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.28
+            medium: 0.46
+            high: 0.62
+
+  - pattern_id: ending_summary
+    pattern_name: 尾句总结型
+    enabled: true
+    match_rules:
+      blank_position:
+        - ending
+      function_type:
+        - ending_summary
+      logic_relation:
+        - summary
+
+    control_logic:
+      difficulty_source: 整段主旨概括
+      option_confusion: 中
+      control_levers:
+        passage: 选择段尾有总结需求、前文围绕单一核心任务推进的材料
+        correct_option: 正确项要精确概括全文主线任务或判断对象
+        wrong_options:
+          - 泛化概括项
+          - 偏离主线项
+          - 错误方向项
+      special_fields:
+        reverse_inference_key: 先看前文在围绕什么单一任务推进，再判断哪句能作为段尾收束
+
+    generation_logic:
+      generation_core: 尾句总结型填空题制作
+      processing_type: 全段主线提炼→段尾收束
+      correct_logic: 正确项必须压缩前文主线，但不能泛化到失去对象和任务指向
+      high_freq_traps:
+        - 只抓局部证据不抓判断对象
+        - 概括过宽
+        - 方向相反
+      distractor_pattern: 用泛化项、偏题项和反向项构造干扰
+      analysis_steps:
+        step1_主线识别: 找出全文在解决的核心任务
+        step2_对象绑定: 判断总结句必须保留的对象与动作
+        step3_收束压缩: 将主线压成一句结尾总结
+        step4_排除泛化: 排除看似高级但失焦的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.44
+      ambiguity:
+        by_slot:
+          abstraction_level:
+            low: 0.28
+            medium: 0.42
+            high: 0.58
+      reasoning_depth:
+        by_slot:
+          logic_relation:
+            summary: 0.52
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.30
+            medium: 0.50
+            high: 0.68
+
+    fewshot_example:
+      title: 语句填空题示例-尾句总结型
+      fit_slots:
+        blank_position: ending
+        function_type: ending_summary
+        logic_relation: summary
+        abstraction_level: medium
+      input_brief: >
+        文段前半部分讨论早期制盐活动很难留下明确遗存，后半部分进一步说明，
+        判断一个遗址是否存在制盐活动，不能只看器具，还要结合盐卤资源、遗址数量规模异常等旁证。
+        空位位于段尾，应承担对整段判断任务的收束总结。
+      question_brief: 填入文中空白横线处最恰当的一项是（ ）。
+      options_brief:
+        - 判断某个遗址是否存在制盐活动
+        - 制盐遗址的发现具有一定的偶然性
+        - 人类的制盐技术并不是单方面发展的
+        - 考古工作需要建立在坚实的证据基础上
+      answer: 判断某个遗址是否存在制盐活动
+      rationale_brief: >
+        正确项要概括本段一直围绕的核心任务，并自然引出后文“除了……还需要……”的证据要求；
+        错项常表现为概括过泛、话题偏移，或只抓某一局部判断。
+
+  - pattern_id: ending_elevation
+    pattern_name: 尾句升华型
+    enabled: true
+    match_rules:
+      blank_position:
+        - ending
+      function_type:
+        - ending_elevation
+      logic_relation:
+        - elevation
+      abstraction_level:
+        - high
+
+    control_logic:
+      difficulty_source: 案例归纳+观点升华
+      option_confusion: 低
+      control_levers:
+        passage: 选择前文先举实验或案例、段尾需要回归中心论点的材料
+        correct_option: 正确项应把案例回收为更高一层的观点或结论
+        wrong_options:
+          - 跑题比较项
+          - 单一精神品质项
+          - 物种/对象差异项
+      special_fields:
+        reverse_inference_key: 看案例究竟要证明什么更高层观点，而不是继续讨论案例本身
+
+    generation_logic:
+      generation_core: 尾句升华型填空题制作
+      processing_type: 案例/实验→抽象观点回收
+      correct_logic: 正确项要把前文案例抽象为更高层的中心判断，而不是停留在案例事实层
+      high_freq_traps:
+        - 跑题
+        - 换主题
+        - 留在案例层
+      distractor_pattern: 用偏题比较项、对象差异项和品质项制造干扰
+      analysis_steps:
+        step1_案例含义: 提炼案例真正证明的观点
+        step2_中心回收: 把案例意义拉回到全文论点
+        step3_升华控制: 升华但不脱题
+        step4_排除案例停留: 排除只围绕案例表层信息的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.40
+      ambiguity:
+        by_slot:
+          abstraction_level:
+            medium: 0.38
+            high: 0.56
+      reasoning_depth:
+        by_slot:
+          logic_relation:
+            elevation: 0.60
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.26
+            medium: 0.42
+            high: 0.58
+
+  - pattern_id: inserted_reference_match
+    pattern_name: 定位插入型
+    enabled: true
+    match_rules:
+      blank_position:
+        - inserted
+      function_type:
+        - inserted_reference
+      logic_relation:
+        - reference_match
+      reference_dependency:
+        - medium
+        - high
+
+    control_logic:
+      difficulty_source: 指代对象识别+前后文双向验证
+      option_confusion: 中
+      control_levers:
+        passage: 选择前文提出理论、后文继续解释其适用范围的材料
+        correct_option: 正确项要同时解释前文理论并自然引出后文内容
+        wrong_options:
+          - 无明确指代对象项
+          - 只承前不启后项
+          - 勉强承接但无法引出后文项
+      special_fields:
+        reverse_inference_key: 先锁定代词、概念或主语所指，再判断该句能否同时卡住前后文
+
+    generation_logic:
+      generation_core: 定位插入型填空题制作
+      processing_type: 找指代对象→匹配解释范围→验证后文
+      correct_logic: 正确项必须满足指代对象匹配、语义承接和后文引出三重条件
+      high_freq_traps:
+        - 忽视指代对象
+        - 只看局部不看上下文
+        - 语义接近但引不出后文
+      distractor_pattern: 用无指代项、弱承接项和假桥梁项制造干扰
+      analysis_steps:
+        step1_指代锁定: 找出代词、概念或主语所指对象
+        step2_前文对齐: 判断空位是否解释或承接该对象
+        step3_后文验证: 检查是否自然引出后文
+        step4_双向筛除: 排除只满足单边的选项
+
+    difficulty_rules:
+      complexity:
+        base: 0.54
+      ambiguity:
+        by_slot:
+          reference_dependency:
+            low: 0.30
+            medium: 0.50
+            high: 0.68
+      reasoning_depth:
+        by_slot:
+          bidirectional_validation:
+            medium: 0.56
+            high: 0.70
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.60
+            high: 0.78
+
+    fewshot_example:
+      title: 语句填空题示例-定位插入型
+      fit_slots:
+        blank_position: inserted
+        function_type: inserted_reference
+        logic_relation: reference_match
+        reference_dependency: high
+        bidirectional_validation: high
+      input_brief: >
+        文段先提出一个关于“进入农耕社会后对盐的需求增强，从而推动制盐出现”的理论，
+        后文紧接着讨论沿海与内陆制盐出现时间差异。待插入句以“这一理论”开头，
+        既要回指前文理论，又要自然引出后文的区域差异说明。
+      question_brief: 以下这段文字，最适合放在文中哪个位置？（ ）
+      options_brief:
+        - 放在理论尚未提出的位置
+        - 放在天然取盐现象描述之后
+        - 放在提出“农耕社会需求理论”之后、沿海与内陆差异之前
+        - 放在后文已经转入考古推断之后
+      answer: 放在提出“农耕社会需求理论”之后、沿海与内陆差异之前
+      rationale_brief: >
+        正确位置必须同时满足两点：前面能找到“这一理论”的明确指代对象，
+        后面又能顺势承接“为何内陆盐业开发早于沿海”的展开；错项常表现为只有单边匹配。
+
+  - pattern_id: comprehensive_multi_match
+    pattern_name: 综合多维匹配型
+    enabled: true
+    match_rules:
+      blank_position:
+        - mixed
+      function_type:
+        - comprehensive_match
+      logic_relation:
+        - multi_constraint
+      context_dependency:
+        - high
+      bidirectional_validation:
+        - high
+      reference_dependency:
+        - high
+
+    control_logic:
+      difficulty_source: 多维匹配
+      option_confusion: 高
+      control_levers:
+        passage: 选择既有指代也有结构位置要求的材料
+        correct_option: 正确项必须同时满足指代、逻辑、位置三重条件
+        wrong_options:
+          - 仅指代匹配项
+          - 仅逻辑匹配项
+          - 仅结构匹配项
+      special_fields:
+        reverse_inference_key: 不能只抓一个维度，要同时验证对象、逻辑和位置
+
+    generation_logic:
+      generation_core: 综合多维匹配型填空题制作
+      processing_type: 同时匹配承接、指代、逻辑关系与空位功能
+      correct_logic: 正确项必须在多条约束下同时成立，不能只满足单一维度
+      high_freq_traps:
+        - 只看一个维度
+        - 忽视多条件叠加
+        - 位置/语义单侧成立
+      distractor_pattern: 用单维正确、多维失败的选项制造高强度干扰
+      analysis_steps:
+        step1_对象匹配: 看是否存在明确指代或主语限制
+        step2_逻辑匹配: 看是否承前启后或完成指定结构功能
+        step3_位置匹配: 看是否适合段首/中间/尾段
+        step4_综合筛选: 只有同时满足多维约束的选项才成立
+
+    difficulty_rules:
+      complexity:
+        base: 0.70
+      ambiguity:
+        by_slot:
+          context_dependency:
+            high: 0.72
+      reasoning_depth:
+        by_slot:
+          logic_relation:
+            multi_constraint: 0.78
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            medium: 0.72
+            high: 0.88

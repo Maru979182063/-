@@ -1,0 +1,129 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: necessary_condition_countermeasure__main_idea
+  display_name: 必要条件关系-只有才/对策重点
+  description: 适用于必要条件和对策表述明显的文段，重点抓“只有……才”或针对问题的有效做法。
+  mother_family_id: main_idea
+  business_subtype: center_understanding
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 必要条件
+    - 对策重点
+
+feature_signature:
+  relation_type: 必要条件关系
+  relation_focus: 只有……才中间是重点
+  typical_formats:
+    - 只有……才……
+    - 通过……才能……
+  explicit_markers:
+    cause_markers: []
+    conclusion_markers:
+      - 只有
+      - 才
+      - 才能
+      - 前提
+      - 基础
+      - 保障
+      - 应该
+      - 必须
+      - 需要
+    variant_markers:
+      - 采取
+      - 措施
+      - 方式
+      - 方法
+      - 途径
+  structural_features:
+    conclusion_is_core: true
+    conclusion_position: any
+    sentence_position_hint: countermeasure_sentence
+    needs_multi_relation_analysis: true
+  distractor_features:
+    strong_modes:
+      - middle_conclusion
+      - scope_shift
+      - fabrication
+    non_key_content_sources:
+      - 围绕问题的表述
+      - 围绕意义效果的表述
+  extraction_hints:
+    require_explicit_marker: true
+    require_complete_meaning: true
+    min_sentence_count: 2
+    preferred_paragraph_window:
+      - 1
+      - 2
+
+retrieval_profile:
+  hard_filters:
+    logic_relations:
+      - 必要条件
+    require_explicit_marker: true
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres:
+      - 政策文
+      - 评论文
+      - 宣传文
+    preferred_material_structures:
+      - 问题-分析-结论
+      - 观点-论证
+      - 背景-核心结论
+    preferred_conclusion_position: []
+    preferred_markers:
+      - 只有
+      - 才
+      - 才能
+      - 应该
+      - 必须
+  ranking_weights:
+    relation_match: 0.35
+    marker_match: 0.25
+    structural_match: 0.20
+    semantic_completeness: 0.10
+    readability: 0.10
+  fallback_policy:
+    allow_marker_loosen: true
+    allow_position_loosen: true
+    allow_relation_semantic_match: true
+
+slot_projection:
+  question_type: main_idea
+  business_subtype: center_understanding
+  pattern_candidates:
+    - whole_passage_integration
+    - conclusion_sentence_refinement
+  type_slots:
+    structure_type: progressive
+    main_point_source: whole_passage
+    abstraction_level: medium
+    coverage_requirement: integrated
+    target_form: article_task
+    distractor_modes:
+      - middle_conclusion
+      - scope_shift
+      - fabrication
+    distractor_strength: high
+    statement_visibility: medium
+  prompt_extras:
+    business_feature_card_id: necessary_condition_countermeasure__main_idea
+    business_feature_card_label: 必要条件关系-只有才/对策重点
+    retrieval_mode: business_feature_card
+
+canonical_projection:
+  expected_universal_profile:
+    logic_relations:
+      - 必要条件
+    position_roles: []
+    material_structure_label: 问题-分析-结论
+  expected_business_fields:
+    feature_type: 必要条件关系
+    conclusion_focus: true
+    conclusion_position: any
+    explicit_marker_group:
+      - 只有
+      - 才
+      - 才能

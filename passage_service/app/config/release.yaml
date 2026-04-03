@@ -1,0 +1,6 @@
+default_gray_ratio: 0.1
+promotion:
+  min_usage_count: 3
+  min_accept_rate: 0.8
+deprecation:
+  min_bad_case_count: 3

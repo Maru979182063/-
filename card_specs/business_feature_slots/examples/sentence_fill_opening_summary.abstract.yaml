@@ -1,0 +1,46 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_fill__opening_summary__abstract
+  display_name: 语句填空-开头概括后文
+  description: 横线在开头，空句承担总起概括后文信息的业务卡。
+  mother_family_id: sentence_fill
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句填空题
+    - 开头
+    - 概括后文
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres: [科普文, 评论文, 政策文, 宣传文]
+    preferred_material_structures: [综合说明, 现象-分析, 观点-论证]
+    preferred_markers: [总体来看, 围绕, 总的来说]
+  ranking_weights:
+    relation_match: 0.36
+    marker_match: 0.14
+    structural_match: 0.18
+    semantic_completeness: 0.16
+    readability: 0.16
+
+slot_projection:
+  question_type: sentence_fill
+  business_subtype: null
+  pattern_candidates: [opening_summary]
+  type_slots:
+    blank_position: opening
+    function_type: opening_summary
+    logic_relation: summary
+    context_dependency: medium
+    bidirectional_validation: low
+    reference_dependency: low
+    abstraction_level: medium
+    distractor_modes: [function_mismatch, overgeneralization, undergeneralization]
+    distractor_strength: medium
+  prompt_extras:
+    business_feature_card_id: sentence_fill__opening_summary__abstract
+    business_feature_card_label: 语句填空-开头概括后文
+    business_core_rule: 空句先总起，再带出后文展开

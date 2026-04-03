@@ -1,0 +1,46 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_fill__middle_carry_previous__abstract
+  display_name: 语句填空-中间承上
+  description: 横线在中间，空句主要承接前文信息的业务卡。
+  mother_family_id: sentence_fill
+  enabled: true
+  source: textbook_business_card
+  tags:
+    - 语句填空题
+    - 中间
+    - 承上
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+  soft_filters:
+    preferred_document_genres: [科普文, 评论文, 政策文, 宣传文]
+    preferred_material_structures: [现象-分析, 观点-论证, 综合说明]
+    preferred_markers: [由此, 这, 上述, 这种]
+  ranking_weights:
+    relation_match: 0.38
+    marker_match: 0.16
+    structural_match: 0.16
+    semantic_completeness: 0.15
+    readability: 0.15
+
+slot_projection:
+  question_type: sentence_fill
+  business_subtype: null
+  pattern_candidates: [middle_explanation]
+  type_slots:
+    blank_position: middle
+    function_type: middle_explanation
+    logic_relation: explanation
+    context_dependency: medium
+    bidirectional_validation: low
+    reference_dependency: medium
+    abstraction_level: low
+    distractor_modes: [weak_backward_link, function_mismatch, role_mismatch]
+    distractor_strength: high
+  prompt_extras:
+    business_feature_card_id: sentence_fill__middle_carry_previous__abstract
+    business_feature_card_label: 语句填空-中间承上
+    business_core_rule: 空句主要承接前文判断或对象

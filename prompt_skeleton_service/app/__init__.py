@@ -1,0 +1,1 @@
+"""Prompt skeleton service package."""
