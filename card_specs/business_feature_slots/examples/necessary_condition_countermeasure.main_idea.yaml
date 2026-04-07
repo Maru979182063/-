@@ -58,6 +58,23 @@ feature_signature:
       - 1
       - 2
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: main_idea
+  structure_schema:
+    argument_structure:
+      preferred_values:
+        - problem_solution
+    main_axis_source: solution_conclusion
+    abstraction_level: medium
+    distractor_types:
+      - detail_as_main
+      - subject_shift
+      - focus_shift
+  uniqueness_source:
+    - axis_coverage
+    - abstraction_match
+
 retrieval_profile:
   hard_filters:
     logic_relations:
@@ -109,6 +126,10 @@ slot_projection:
       - fabrication
     distractor_strength: high
     statement_visibility: medium
+    argument_structure: problem_solution
+    main_axis_source: solution_conclusion
+    distractor_types: [detail_as_main, subject_shift, focus_shift]
+    uniqueness_source: [axis_coverage, abstraction_match]
   prompt_extras:
     business_feature_card_id: necessary_condition_countermeasure__main_idea
     business_feature_card_label: 必要条件关系-只有才/对策重点

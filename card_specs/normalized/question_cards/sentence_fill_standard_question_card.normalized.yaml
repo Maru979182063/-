@@ -8,6 +8,50 @@ runtime_binding:
   business_subtype: null
 display_name: 语句填空标准题卡
 description: 基于空位位置与上下文逻辑，为文段选择最合适的填入句。该卡消费中间结构材料卡，而不直接绑定单一主族。
+structure_schema:
+  position:
+    type: enum
+    values:
+      - opening
+      - middle
+      - ending
+      - inserted
+      - mixed
+  function_type:
+    type: enum
+    values:
+      - summary
+      - topic_intro
+      - carry_previous
+      - lead_next
+      - bridge
+      - reference_summary
+      - countermeasure
+      - conclusion
+  reference_anchor:
+    type: optional
+  bidirectional_check:
+    previous_valid: bool
+    next_valid: bool
+  semantic_scope:
+    type: enum
+    values:
+      - local
+      - sentence_level
+      - paragraph_level
+uniqueness_source:
+  - function_mismatch
+  - reference_failure
+  - scope_mismatch
+legacy_slot_mapping:
+  function_type:
+    opening_summary: summary
+    middle_explanation: carry_previous
+    middle_focus_shift: lead_next
+    ending_summary: conclusion
+    ending_elevation: conclusion
+    inserted_reference: reference_summary
+    comprehensive_match: bridge
 upstream_contract:
   required_candidate_types:
   - closed_span
@@ -37,12 +81,17 @@ base_slots:
   logic_relation: continuation
   context_dependency: medium
   bidirectional_validation: medium
+  reference_anchor: none
   reference_dependency: low
   abstraction_level: medium
+  semantic_scope: sentence_level
   distractor_modes:
   - function_mismatch
   - weak_forward_link
   - topic_shift
+  uniqueness_source:
+  - function_mismatch
+  - scope_mismatch
 slot_extensions:
   backward_link_required: true
   forward_link_required: true
@@ -57,52 +106,94 @@ material_card_overrides:
 - material_card: fill_material.opening_summary
   slot_overrides:
     blank_position: opening
-    function_type: opening_summary
+    function_type: summary
     logic_relation: summary
+    reference_anchor: none
     abstraction_level: high
+    semantic_scope: paragraph_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.bridge_transition
   slot_overrides:
     blank_position: middle
     function_type: bridge
     logic_relation: continuation
     bidirectional_validation: high
+    reference_anchor: optional
+    semantic_scope: sentence_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.middle_focus_shift
   slot_overrides:
     blank_position: middle
-    function_type: middle_focus_shift
+    function_type: lead_next
     logic_relation: focus_shift
     context_dependency: high
+    reference_anchor: none
+    semantic_scope: sentence_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.middle_explanation
   slot_overrides:
     blank_position: middle
-    function_type: middle_explanation
+    function_type: carry_previous
     logic_relation: explanation
+    reference_anchor: optional
+    semantic_scope: local
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.ending_summary
   slot_overrides:
     blank_position: ending
-    function_type: ending_summary
+    function_type: conclusion
     logic_relation: summary
+    reference_anchor: none
+    semantic_scope: paragraph_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.ending_elevation
   slot_overrides:
     blank_position: ending
-    function_type: ending_elevation
+    function_type: conclusion
     logic_relation: elevation
     abstraction_level: high
+    reference_anchor: none
+    semantic_scope: paragraph_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.inserted_reference_match
   slot_overrides:
     blank_position: inserted
-    function_type: inserted_reference
+    function_type: reference_summary
     logic_relation: reference_match
+    reference_anchor: required
     reference_dependency: high
     bidirectional_validation: high
+    semantic_scope: sentence_level
+    uniqueness_source:
+    - function_mismatch
+    - reference_failure
+    - scope_mismatch
 - material_card: fill_material.comprehensive_multi_match
   slot_overrides:
     blank_position: mixed
-    function_type: comprehensive_match
+    function_type: bridge
     logic_relation: multi_constraint
+    reference_anchor: optional
     context_dependency: high
     bidirectional_validation: high
     reference_dependency: high
+    semantic_scope: paragraph_level
+    uniqueness_source:
+    - function_mismatch
+    - reference_failure
+    - scope_mismatch
 generation_archetypes:
   opening_summary:
     source: 语句填空题配置文件 pattern opening_summary
@@ -189,8 +280,6 @@ answer_grounding:
   unsupported_extension_types:
   - stance
   - causal_chain
-  - countermeasure
-  - conclusion
   - evaluative_claim
   require_correct_option_material_defensibility: true
   distractor_sources:
@@ -205,5 +294,6 @@ answer_grounding:
 normalized_from: sentence_fill_standard_question_card.yaml
 normalization_notes:
 - required_candidate_types expanded to cover all preferred material cards
-- required_profiles expanded to include signals required by preferred material cards
+- required_profiles remain runtime-compatible; new structure fields are exposed as schema metadata instead of hard material requirements
 - generation_archetype duplication removed; question card now follows material_card.default_generation_archetype
+- canonical function_type now follows structure-driven schema; old opening_summary/middle_explanation/etc are kept only as legacy aliases

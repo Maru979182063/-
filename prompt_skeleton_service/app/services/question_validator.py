@@ -28,6 +28,865 @@ class QuestionValidatorService:
             "sentence_fill": self._validate_sentence_fill,
         }
 
+    @staticmethod
+    def _build_contract_gated_check(
+        *,
+        active: bool,
+        passed: bool,
+        source: str,
+        **details: Any,
+    ) -> dict[str, Any]:
+        payload = {
+            **details,
+            "required": active,
+            "source": source,
+            "status": "active" if active else "skipped_missing_contract",
+        }
+        payload["passed"] = passed if active else None
+        return payload
+
+    @staticmethod
+    def _append_unique_error(errors: list[str], code: str) -> None:
+        if code and code not in errors:
+            errors.append(code)
+
+    @staticmethod
+    def _coerce_int(value: Any) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _resolve_sentence_order_units_for_sequence(
+        self,
+        *,
+        original_sentences: list[str],
+        order: list[int],
+    ) -> list[tuple[int, str]]:
+        resolved: list[tuple[int, str]] = []
+        for raw_index in order:
+            unit_index = self._coerce_int(raw_index)
+            if unit_index is None or unit_index < 1 or unit_index > len(original_sentences):
+                return []
+            resolved.append((unit_index, str(original_sentences[unit_index - 1] or "").strip()))
+        return resolved
+
+    def _sentence_order_head_is_illegal(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        if not candidate:
+            return True
+        if candidate.startswith(("这", "这种", "这一", "该", "此")):
+            return True
+        if candidate.startswith(("但是", "然而", "不过")):
+            return True
+        if candidate.startswith(("同时", "此外", "在此基础上", "另一方面", "与此同时", "而")):
+            return True
+        if candidate.startswith(("因此", "所以")):
+            return True
+        return False
+
+    def _sentence_order_tail_is_illegal(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        if not candidate:
+            return True
+        if candidate.startswith(("首先", "其次", "再次")):
+            return True
+        if candidate.startswith(("例如", "比如")):
+            return True
+        if any(token in candidate for token in ("例如", "比如")):
+            return True
+        if any(token in candidate for token in ("首先", "其次", "再次")):
+            return True
+        return False
+
+    def _extract_sentence_order_binding_pairs(self, context: dict[str, Any]) -> list[tuple[int, int]]:
+        candidates: list[Any] = []
+        resolved_slots = context.get("resolved_slots")
+        control_logic = context.get("control_logic")
+        source_question = context.get("source_question")
+        source_question_analysis = context.get("source_question_analysis")
+        validator_contract = context.get("validator_contract")
+
+        if isinstance(resolved_slots, dict):
+            candidates.extend(
+                [
+                    resolved_slots.get("binding_pairs"),
+                    (resolved_slots.get("structure_schema") or {}).get("binding_pairs")
+                    if isinstance(resolved_slots.get("structure_schema"), dict)
+                    else None,
+                ]
+            )
+        if isinstance(control_logic, dict):
+            candidates.extend(
+                [
+                    control_logic.get("binding_pairs"),
+                    (control_logic.get("sentence_order") or {}).get("binding_pairs")
+                    if isinstance(control_logic.get("sentence_order"), dict)
+                    else None,
+                ]
+            )
+        if isinstance(source_question, dict):
+            candidates.extend(
+                [
+                    source_question.get("binding_pairs"),
+                    (source_question.get("control_logic") or {}).get("binding_pairs")
+                    if isinstance(source_question.get("control_logic"), dict)
+                    else None,
+                ]
+            )
+        if isinstance(source_question_analysis, dict):
+            structure_constraints = source_question_analysis.get("structure_constraints")
+            candidates.extend(
+                [
+                    source_question_analysis.get("binding_pairs"),
+                    structure_constraints.get("binding_pairs") if isinstance(structure_constraints, dict) else None,
+                    source_question_analysis.get("control_logic"),
+                ]
+            )
+        if isinstance(validator_contract, dict):
+            sentence_order_contract = validator_contract.get("sentence_order")
+            structure_contract = validator_contract.get("structure_constraints")
+            candidates.extend(
+                [
+                    validator_contract.get("binding_pairs"),
+                    sentence_order_contract.get("binding_pairs") if isinstance(sentence_order_contract, dict) else None,
+                    structure_contract.get("binding_pairs") if isinstance(structure_contract, dict) else None,
+                ]
+            )
+
+        pairs: list[tuple[int, int]] = []
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if isinstance(candidate, dict):
+                nested = candidate.get("binding_pairs")
+                if nested is not None:
+                    candidates.append(nested)
+                continue
+            if not isinstance(candidate, list):
+                continue
+            for item in candidate:
+                pair = self._coerce_binding_pair(item)
+                if pair is not None and pair not in pairs:
+                    pairs.append(pair)
+        return pairs
+
+    def _coerce_binding_pair(self, value: Any) -> tuple[int, int] | None:
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            left = self._coerce_int(value[0])
+            right = self._coerce_int(value[1])
+            if left is not None and right is not None:
+                return left, right
+            return None
+        if isinstance(value, str):
+            numbers = [self._coerce_int(part) for part in re.findall(r"\d+", value)]
+            if len(numbers) >= 2 and numbers[0] is not None and numbers[1] is not None:
+                return numbers[0], numbers[1]
+            return None
+        if isinstance(value, dict):
+            aliases = (
+                ("before", "after"),
+                ("first", "second"),
+                ("left", "right"),
+                ("source", "target"),
+                ("from", "to"),
+                ("a", "b"),
+            )
+            for left_key, right_key in aliases:
+                if left_key in value and right_key in value:
+                    left = self._coerce_int(value.get(left_key))
+                    right = self._coerce_int(value.get(right_key))
+                    if left is not None and right is not None:
+                        return left, right
+        return None
+
+    def _extract_sentence_order_roles(self, context: dict[str, Any]) -> dict[int, str]:
+        roles: dict[int, str] = {}
+        candidates: list[Any] = []
+        resolved_slots = context.get("resolved_slots")
+        control_logic = context.get("control_logic")
+        source_question = context.get("source_question")
+        source_question_analysis = context.get("source_question_analysis")
+        validator_contract = context.get("validator_contract")
+
+        if isinstance(resolved_slots, dict):
+            candidates.extend(
+                [
+                    resolved_slots.get("sentence_roles"),
+                    (resolved_slots.get("structure_schema") or {}).get("sentence_roles")
+                    if isinstance(resolved_slots.get("structure_schema"), dict)
+                    else None,
+                ]
+            )
+        if isinstance(control_logic, dict):
+            candidates.extend([control_logic.get("sentence_roles"), control_logic.get("roles")])
+        if isinstance(source_question, dict):
+            candidates.extend(
+                [
+                    source_question.get("sentence_roles"),
+                    (source_question.get("control_logic") or {}).get("sentence_roles")
+                    if isinstance(source_question.get("control_logic"), dict)
+                    else None,
+                ]
+            )
+        if isinstance(source_question_analysis, dict):
+            structure_constraints = source_question_analysis.get("structure_constraints")
+            candidates.extend(
+                [
+                    source_question_analysis.get("sentence_roles"),
+                    structure_constraints.get("sentence_roles") if isinstance(structure_constraints, dict) else None,
+                ]
+            )
+        if isinstance(validator_contract, dict):
+            sentence_order_contract = validator_contract.get("sentence_order")
+            structure_contract = validator_contract.get("structure_constraints")
+            candidates.extend(
+                [
+                    validator_contract.get("sentence_roles"),
+                    sentence_order_contract.get("sentence_roles") if isinstance(sentence_order_contract, dict) else None,
+                    structure_contract.get("sentence_roles") if isinstance(structure_contract, dict) else None,
+                ]
+            )
+
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if isinstance(candidate, dict):
+                for raw_key, raw_role in candidate.items():
+                    key = self._coerce_int(raw_key)
+                    role = self._normalize_sentence_order_role(raw_role)
+                    if key is not None and role:
+                        roles[key] = role
+            elif isinstance(candidate, list):
+                for index, raw_role in enumerate(candidate, start=1):
+                    role = self._normalize_sentence_order_role(raw_role)
+                    if role:
+                        roles[index] = role
+        return roles
+
+    def _normalize_sentence_order_role(self, value: Any) -> str:
+        role = str(value or "").strip().lower()
+        if not role:
+            return ""
+        if role in {"summary", "conclusion", "closing", "tail_statement", "action", "countermeasure"}:
+            return "conclusion"
+        if role in {"thesis", "definition", "viewpoint", "opening_anchor"}:
+            return "thesis"
+        if role in {"transition", "connector", "timeline", "dependent"}:
+            return "transition"
+        return role
+
+    def _infer_sentence_order_role(self, text: str) -> str:
+        candidate = (text or "").strip()
+        if not candidate:
+            return ""
+        if candidate.startswith(("因此", "所以", "总之", "可见", "由此", "无论如何")) or any(
+            token in candidate for token in ("因此", "所以", "总之", "可见", "由此", "无论如何")
+        ):
+            return "conclusion"
+        if candidate.startswith(("但是", "然而", "不过", "同时", "此外", "在此基础上", "另一方面", "与此同时", "而")):
+            return "transition"
+        if candidate.startswith(("总体而言", "总的来看", "归根结底", "关键在于", "本质上")):
+            return "thesis"
+        if "是" in candidate and any(token in candidate for token in ("必要条件", "关键", "基础")):
+            return "thesis"
+        return ""
+
+    def _normalize_sentence_fill_function_type(self, value: Any) -> str:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        alias_map = {
+            "bridge_both_sides": "bridge",
+            "opening_summary": "summary",
+            "middle_explanation": "carry_previous",
+            "middle_focus_shift": "lead_next",
+            "ending_summary": "conclusion",
+            "ending_elevation": "conclusion",
+            "inserted_reference": "reference_summary",
+            "comprehensive_match": "bridge",
+        }
+        return alias_map.get(raw, raw)
+
+    def _extract_sentence_fill_constraints(self, context: dict[str, Any]) -> dict[str, Any]:
+        validator_contract = context.get("validator_contract") or {}
+        material_source = context.get("material_source") or {}
+        material_prompt_extras = (
+            material_source.get("prompt_extras")
+            if isinstance(material_source, dict) and isinstance(material_source.get("prompt_extras"), dict)
+            else {}
+        )
+        resolved_slots = context.get("resolved_slots") or {}
+        control_logic = context.get("control_logic") or {}
+
+        sentence_fill_contract = validator_contract.get("sentence_fill") if isinstance(validator_contract, dict) else {}
+        structure_contract = (
+            validator_contract.get("structure_constraints") if isinstance(validator_contract, dict) else {}
+        )
+
+        def lookup(field: str) -> tuple[Any, str]:
+            if field in material_prompt_extras and material_prompt_extras.get(field) not in (None, ""):
+                return material_prompt_extras.get(field), "material_source.prompt_extras"
+            if isinstance(resolved_slots, dict) and resolved_slots.get(field) not in (None, ""):
+                return resolved_slots.get(field), "resolved_slots"
+            if isinstance(sentence_fill_contract, dict) and sentence_fill_contract.get(field) not in (None, ""):
+                return sentence_fill_contract.get(field), "validator_contract"
+            if isinstance(structure_contract, dict) and structure_contract.get(field) not in (None, ""):
+                return structure_contract.get(field), "validator_contract"
+            if isinstance(validator_contract, dict) and validator_contract.get(field) not in (None, ""):
+                return validator_contract.get(field), "validator_contract"
+            if isinstance(control_logic, dict) and control_logic.get(field) not in (None, ""):
+                return control_logic.get(field), "control_logic"
+            return None, "compatibility_disabled"
+
+        position_value, position_source = lookup("blank_position")
+        if position_value in (None, ""):
+            position_value, position_source = lookup("position")
+        function_value, function_source = lookup("function_type")
+        reference_value, reference_source = lookup("reference_anchor")
+        bidirectional_value, bidirectional_source = lookup("bidirectional_check")
+        semantic_scope_value, semantic_scope_source = lookup("semantic_scope")
+
+        contract_position = ""
+        contract_function = ""
+        if isinstance(sentence_fill_contract, dict):
+            contract_position = str(sentence_fill_contract.get("blank_position") or sentence_fill_contract.get("position") or "")
+            contract_function = self._normalize_sentence_fill_function_type(sentence_fill_contract.get("function_type"))
+        if not contract_position and isinstance(structure_contract, dict):
+            contract_position = str(structure_contract.get("blank_position") or structure_contract.get("position") or "")
+        if not contract_function and isinstance(structure_contract, dict):
+            contract_function = self._normalize_sentence_fill_function_type(structure_contract.get("function_type"))
+
+        return {
+            "blank_position": str(position_value or ""),
+            "blank_position_source": position_source,
+            "function_type": self._normalize_sentence_fill_function_type(function_value),
+            "function_type_source": function_source,
+            "reference_anchor": str(reference_value or ""),
+            "reference_anchor_source": reference_source,
+            "bidirectional_check": bidirectional_value if isinstance(bidirectional_value, dict) else {},
+            "bidirectional_check_source": bidirectional_source,
+            "semantic_scope": str(semantic_scope_value or ""),
+            "semantic_scope_source": semantic_scope_source,
+            "contract_blank_position": contract_position,
+            "contract_function_type": contract_function,
+            "runtime_blank_position": str(material_prompt_extras.get("blank_position") or material_prompt_extras.get("position") or ""),
+            "runtime_function_type": self._normalize_sentence_fill_function_type(material_prompt_extras.get("function_type")),
+        }
+
+    def _extract_sentence_fill_blank_context(self, material_text: str) -> tuple[str, str, str]:
+        text = (material_text or "").strip()
+        if not text:
+            return "", "", ""
+        markers = ("____", "___", "[BLANK]", "（  ）", "( )", "（    ）", "（ ）")
+        for marker in markers:
+            idx = text.find(marker)
+            if idx >= 0:
+                return text[:idx].strip(), text[idx + len(marker) :].strip(), marker
+        return text, "", ""
+
+    def _sentence_fill_correct_option_text(self, generated_question: GeneratedQuestion) -> str:
+        answer = str(generated_question.answer or "").strip().upper()
+        options = generated_question.options or {}
+        return str(options.get(answer) or "").strip()
+
+    def _sentence_fill_has_reference_anchor(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        if not candidate:
+            return False
+        return bool(re.search(r"(这(?:一|种)?|该|此)(?:理论|现象|过程|问题|情况|趋势|结果|机制|模式|路径|变化|做法|观点|结论|逻辑|阶段|背景)?", candidate))
+
+    def _sentence_fill_reference_anchor_support(self, *, candidate_text: str, previous_text: str) -> dict[str, Any]:
+        candidate = (candidate_text or "").strip()
+        previous = (previous_text or "").strip()
+        match = re.search(r"(这(?:一|种)?|该|此)(理论|现象|过程|问题|情况|趋势|结果|机制|模式|路径|变化|做法|观点|结论|逻辑|阶段|背景)?", candidate)
+        if not match:
+            return {"has_anchor": False, "passed": False, "anchor": "", "head": ""}
+        head = match.group(2) or ""
+        if not previous:
+            return {"has_anchor": True, "passed": False, "anchor": match.group(0), "head": head}
+        if head:
+            return {
+                "has_anchor": True,
+                "passed": head in previous,
+                "anchor": match.group(0),
+                "head": head,
+            }
+        return {"has_anchor": True, "passed": True, "anchor": match.group(0), "head": head}
+
+    def _sentence_fill_has_conclusion_marker(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        return candidate.startswith(("因此", "所以", "总之", "综上", "由此", "可见", "无论如何", "归根结底")) or any(
+            token in candidate for token in ("因此", "所以", "总之", "综上", "由此", "可见", "无论如何")
+        )
+
+    def _sentence_fill_has_countermeasure_marker(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        return candidate.startswith(("应", "应该", "应当", "需要", "必须", "要", "可通过", "可以通过")) or any(
+            token in candidate for token in ("应该", "应当", "需要", "必须", "可以通过", "需", "要")
+        )
+
+    def _sentence_fill_has_specific_action(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        return any(token in candidate for token in ("通过", "加强", "完善", "建立", "推动", "优化", "提升", "采取", "落实", "构建", "引导", "减少", "增加"))
+
+    def _sentence_fill_has_backward_signal(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        return candidate.startswith(("这", "这种", "这一", "该", "此", "其中", "也就是说", "换言之", "从这个意义上说", "对此")) or any(
+            token in candidate for token in ("也就是说", "换言之", "这意味着", "这一点", "这种情况", "这一理论", "这一过程")
+        )
+
+    def _sentence_fill_has_forward_signal(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        return candidate.startswith(("在此基础上", "同时", "此外", "接下来", "进一步", "由此", "因此", "这意味着", "这也意味着", "例如", "具体来看", "随后", "进而")) or any(
+            token in candidate for token in ("接下来", "进一步", "具体来看", "例如", "由此", "进而", "后文", "下文")
+        )
+
+    def _sentence_fill_support_ratio(self, *, evidence_text: str, candidate_text: str) -> float:
+        return self._compute_support_profile(evidence_text=evidence_text, candidate_text=candidate_text)["supported_token_ratio"]
+
+    def _sentence_fill_directional_validity(
+        self,
+        *,
+        candidate_text: str,
+        previous_text: str,
+        next_text: str,
+    ) -> dict[str, Any]:
+        prev_ratio = self._sentence_fill_support_ratio(evidence_text=previous_text, candidate_text=candidate_text)
+        next_ratio = self._sentence_fill_support_ratio(evidence_text=next_text, candidate_text=candidate_text)
+        previous_valid = bool(previous_text) and (
+            self._sentence_fill_has_backward_signal(candidate_text)
+            or self._sentence_fill_reference_anchor_support(candidate_text=candidate_text, previous_text=previous_text)["passed"]
+            or prev_ratio >= 0.12
+        )
+        next_valid = bool(next_text) and (
+            self._sentence_fill_has_forward_signal(candidate_text)
+            or next_ratio >= 0.12
+        )
+        return {
+            "previous_valid": previous_valid,
+            "next_valid": next_valid,
+            "previous_ratio": prev_ratio,
+            "next_ratio": next_ratio,
+        }
+
+    def _normalize_main_idea_argument_structure(self, value: Any) -> str:
+        raw = str(value or "").strip().lower()
+        if not raw:
+            return ""
+        alias_map = {
+            "turning": "sub_total",
+            "contrast": "sub_total",
+            "sub_total": "sub_total",
+            "cause_effect": "phenomenon_analysis",
+            "phenomenon_analysis": "phenomenon_analysis",
+            "problem_solution": "problem_solution",
+            "example_to_conclusion": "example_conclusion",
+            "example_conclusion": "example_conclusion",
+            "case_to_theme_elevation": "example_conclusion",
+            "final_summary": "total_sub",
+            "explicit_single_center": "total_sub",
+            "total_sub": "total_sub",
+            "parallel": "parallel",
+        }
+        return alias_map.get(raw, raw)
+
+    def _normalize_main_idea_axis_source(self, value: Any) -> str:
+        raw = str(value or "").strip().lower()
+        if not raw:
+            return ""
+        alias_map = {
+            "whole_passage": "global_abstraction",
+            "global_abstraction": "global_abstraction",
+            "transition_after": "transition_after",
+            "after_transition": "transition_after",
+            "conclusion_sentence": "final_summary",
+            "tail_summary": "final_summary",
+            "final_summary": "final_summary",
+            "solution_conclusion": "solution_conclusion",
+            "example_elevation": "example_elevation",
+            "example_conclusion": "example_elevation",
+        }
+        return alias_map.get(raw, raw)
+
+    def _normalize_main_idea_abstraction_level(self, value: Any) -> str:
+        if isinstance(value, (int, float)):
+            if value <= 1:
+                return "low"
+            if value >= 3:
+                return "high"
+            return "medium"
+        raw = str(value or "").strip().lower()
+        alias_map = {
+            "low": "low",
+            "detail": "low",
+            "local": "low",
+            "medium": "medium",
+            "mid": "medium",
+            "high": "high",
+            "global": "high",
+            "abstract": "high",
+        }
+        return alias_map.get(raw, raw)
+
+    def _normalize_main_idea_distractor_types(self, value: Any) -> list[str]:
+        if value in (None, ""):
+            return []
+        raw_items: list[str] = []
+        if isinstance(value, str):
+            raw_items = [item.strip() for item in re.split(r"[,|/]", value) if item.strip()]
+        elif isinstance(value, (list, tuple, set)):
+            raw_items = [str(item or "").strip() for item in value if str(item or "").strip()]
+        alias_map = {
+            "detail": "detail_as_main",
+            "detail_as_main": "detail_as_main",
+            "example_as_main": "example_as_conclusion",
+            "example_as_conclusion": "example_as_conclusion",
+            "scope_shift": "scope_too_narrow",
+            "scope_too_narrow": "scope_too_narrow",
+            "scope_too_wide": "scope_too_wide",
+            "subject_shift": "subject_shift",
+            "focus_shift": "focus_shift",
+        }
+        normalized: list[str] = []
+        for item in raw_items:
+            mapped = alias_map.get(item.lower(), item.lower())
+            if mapped and mapped not in normalized:
+                normalized.append(mapped)
+        return normalized
+
+    def _derive_main_idea_structure_mode(
+        self,
+        *,
+        argument_structure: str,
+        main_axis_source: str,
+        legacy_structure_type: str = "",
+        business_card_id: str = "",
+    ) -> str:
+        legacy = str(legacy_structure_type or "").strip().lower()
+        business_card = str(business_card_id or "").strip().lower()
+        if legacy == "turning" or main_axis_source == "transition_after" or argument_structure == "sub_total" or "turning_relation_focus" in business_card:
+            return "turning"
+        if (
+            legacy in {"cause_effect", "progressive"}
+            and main_axis_source in {"final_summary", "solution_conclusion"}
+        ) or argument_structure in {"phenomenon_analysis", "problem_solution"} or "cause_effect_conclusion_focus" in business_card:
+            return "cause_effect"
+        if (
+            legacy in {"example_to_conclusion", "example_conclusion"}
+            or argument_structure == "example_conclusion"
+            or main_axis_source == "example_elevation"
+            or "case_to_theme" in business_card
+            or "example" in business_card
+        ):
+            return "example_to_conclusion"
+        if legacy in {"final_summary", "explicit_single_center"} or main_axis_source == "final_summary" or argument_structure == "total_sub":
+            return "final_summary"
+        return ""
+
+    def _extract_main_idea_constraints(self, context: dict[str, Any]) -> dict[str, Any]:
+        validator_contract = context.get("validator_contract") or {}
+        material_source = context.get("material_source") or {}
+        resolved_slots = context.get("resolved_slots") or {}
+        control_logic = context.get("control_logic") or {}
+
+        prompt_extras = (
+            material_source.get("prompt_extras")
+            if isinstance(material_source, dict) and isinstance(material_source.get("prompt_extras"), dict)
+            else {}
+        )
+        type_slots = (
+            (material_source.get("slot_projection") or {}).get("type_slots")
+            if isinstance(material_source, dict) and isinstance(material_source.get("slot_projection"), dict)
+            else {}
+        )
+        resolved_structure = (
+            resolved_slots.get("structure_schema")
+            if isinstance(resolved_slots, dict) and isinstance(resolved_slots.get("structure_schema"), dict)
+            else {}
+        )
+        control_main_idea = (
+            control_logic.get("main_idea")
+            if isinstance(control_logic, dict) and isinstance(control_logic.get("main_idea"), dict)
+            else {}
+        )
+        control_center = (
+            control_logic.get("center_understanding")
+            if isinstance(control_logic, dict) and isinstance(control_logic.get("center_understanding"), dict)
+            else {}
+        )
+        center_contract = (
+            validator_contract.get("center_understanding")
+            if isinstance(validator_contract, dict) and isinstance(validator_contract.get("center_understanding"), dict)
+            else {}
+        )
+        structure_contract = (
+            validator_contract.get("structure_schema")
+            if isinstance(validator_contract, dict) and isinstance(validator_contract.get("structure_schema"), dict)
+            else {}
+        )
+        main_idea_contract = (
+            validator_contract.get("main_idea")
+            if isinstance(validator_contract, dict) and isinstance(validator_contract.get("main_idea"), dict)
+            else {}
+        )
+
+        runtime_sources = [
+            (prompt_extras, "material_source.prompt_extras"),
+            (type_slots, "material_source.slot_projection.type_slots"),
+            (resolved_slots, "resolved_slots"),
+            (resolved_structure, "resolved_slots.structure_schema"),
+            (control_center, "control_logic.center_understanding"),
+            (control_main_idea, "control_logic.main_idea"),
+            (control_logic if isinstance(control_logic, dict) else {}, "control_logic"),
+        ]
+        contract_sources = [
+            (center_contract, "validator_contract.center_understanding"),
+            (structure_contract, "validator_contract.structure_schema"),
+            (main_idea_contract, "validator_contract.main_idea"),
+            (validator_contract if isinstance(validator_contract, dict) else {}, "validator_contract"),
+        ]
+
+        def read_field(sources: list[tuple[dict[str, Any], str]], aliases: tuple[str, ...]) -> tuple[Any, str]:
+            for payload, source in sources:
+                if not isinstance(payload, dict):
+                    continue
+                for alias in aliases:
+                    candidate = payload.get(alias)
+                    if candidate not in (None, "", []):
+                        return candidate, f"{source}.{alias}"
+            return None, "compatibility_disabled"
+
+        runtime_argument_raw, runtime_argument_source = read_field(runtime_sources, ("argument_structure", "structure_type"))
+        runtime_axis_raw, runtime_axis_source = read_field(runtime_sources, ("main_axis_source", "main_point_source"))
+        runtime_abstraction_raw, runtime_abstraction_source = read_field(runtime_sources, ("abstraction_level",))
+        runtime_distractors_raw, runtime_distractor_source = read_field(runtime_sources, ("distractor_types", "distractor_modes"))
+        contract_argument_raw, contract_argument_source = read_field(contract_sources, ("argument_structure", "structure_type"))
+        contract_axis_raw, contract_axis_source = read_field(contract_sources, ("main_axis_source", "main_point_source"))
+        contract_abstraction_raw, contract_abstraction_source = read_field(contract_sources, ("abstraction_level",))
+        contract_distractors_raw, contract_distractor_source = read_field(contract_sources, ("distractor_types", "distractor_modes"))
+        runtime_structure_type, _ = read_field(runtime_sources, ("structure_type",))
+        contract_structure_type, _ = read_field(contract_sources, ("structure_type",))
+
+        business_card_id = str(prompt_extras.get("business_feature_card_id") or "")
+        runtime_argument = self._normalize_main_idea_argument_structure(runtime_argument_raw)
+        contract_argument = self._normalize_main_idea_argument_structure(contract_argument_raw)
+        runtime_axis = self._normalize_main_idea_axis_source(runtime_axis_raw)
+        contract_axis = self._normalize_main_idea_axis_source(contract_axis_raw)
+        runtime_abstraction = self._normalize_main_idea_abstraction_level(runtime_abstraction_raw)
+        contract_abstraction = self._normalize_main_idea_abstraction_level(contract_abstraction_raw)
+
+        runtime_structure_mode = self._derive_main_idea_structure_mode(
+            argument_structure=runtime_argument,
+            main_axis_source=runtime_axis,
+            legacy_structure_type=str(runtime_structure_type or ""),
+            business_card_id=business_card_id,
+        )
+        contract_structure_mode = self._derive_main_idea_structure_mode(
+            argument_structure=contract_argument,
+            main_axis_source=contract_axis,
+            legacy_structure_type=str(contract_structure_type or ""),
+            business_card_id=business_card_id,
+        )
+
+        return {
+            "runtime_argument_structure": runtime_argument,
+            "runtime_argument_structure_source": runtime_argument_source,
+            "runtime_main_axis_source": runtime_axis,
+            "runtime_main_axis_source_source": runtime_axis_source,
+            "runtime_abstraction_level": runtime_abstraction,
+            "runtime_abstraction_level_source": runtime_abstraction_source,
+            "runtime_distractor_types": self._normalize_main_idea_distractor_types(runtime_distractors_raw),
+            "runtime_distractor_types_source": runtime_distractor_source,
+            "runtime_structure_mode": runtime_structure_mode,
+            "contract_argument_structure": contract_argument,
+            "contract_argument_structure_source": contract_argument_source,
+            "contract_main_axis_source": contract_axis,
+            "contract_main_axis_source_source": contract_axis_source,
+            "contract_abstraction_level": contract_abstraction,
+            "contract_abstraction_level_source": contract_abstraction_source,
+            "contract_distractor_types": self._normalize_main_idea_distractor_types(contract_distractors_raw),
+            "contract_distractor_types_source": contract_distractor_source,
+            "contract_structure_mode": contract_structure_mode,
+            "effective_argument_structure": runtime_argument or contract_argument,
+            "effective_main_axis_source": runtime_axis or contract_axis,
+            "effective_abstraction_level": runtime_abstraction or contract_abstraction,
+            "effective_distractor_types": self._normalize_main_idea_distractor_types(runtime_distractors_raw)
+            or self._normalize_main_idea_distractor_types(contract_distractors_raw),
+            "effective_structure_mode": runtime_structure_mode or contract_structure_mode,
+            "business_card_id": business_card_id,
+        }
+
+    def _main_idea_extract_marker_clause(self, text: str, markers: tuple[str, ...], *, after: bool) -> str:
+        candidate = (text or "").strip()
+        if not candidate:
+            return ""
+        best_index = -1
+        best_marker = ""
+        for marker in markers:
+            idx = candidate.rfind(marker)
+            if idx > best_index:
+                best_index = idx
+                best_marker = marker
+        if best_index < 0:
+            return candidate
+        if after:
+            extracted = candidate[best_index + len(best_marker) :].strip(" ，,：:")
+        else:
+            extracted = candidate[:best_index].strip(" ，,：:")
+        return extracted or candidate
+
+    def _main_idea_has_example_marker(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        return any(token in candidate for token in ("例如", "比如", "譬如", "以此为例", "以...为例", "案例", "个案", "实验", "一项研究"))
+
+    def _main_idea_has_summary_marker(self, text: str) -> bool:
+        candidate = (text or "").strip()
+        return any(token in candidate for token in ("总的来看", "总之", "综上", "可见", "由此", "因此", "这表明", "这说明", "归根结底", "关键在于", "更值得关注的是"))
+
+    def _build_main_idea_structure_profile(self, *, material_text: str, structure_mode: str) -> dict[str, Any]:
+        units = self._split_material_units(material_text)
+        if not units:
+            return {
+                "detected": False,
+                "mode": structure_mode,
+                "units": [],
+                "axis_text": "",
+                "axis_unit_index": -1,
+                "background_text": "",
+                "example_text": "",
+            }
+
+        turning_markers = ("但是", "然而", "不过", "但", "却", "事实上", "其实")
+        conclusion_markers = ("因此", "所以", "由此", "可见", "这表明", "这说明", "意味着", "总的来看", "总之", "综上")
+        profile = {
+            "detected": False,
+            "mode": structure_mode,
+            "units": units,
+            "axis_text": units[-1],
+            "axis_unit_index": len(units) - 1,
+            "background_text": " ".join(units[:-1]).strip(),
+            "example_text": "",
+        }
+
+        if structure_mode == "turning":
+            for index in range(len(units) - 1, -1, -1):
+                unit = units[index]
+                if any(marker in unit for marker in turning_markers):
+                    profile["detected"] = True
+                    profile["axis_unit_index"] = index
+                    profile["axis_text"] = self._main_idea_extract_marker_clause(unit, turning_markers, after=True)
+                    prefix = self._main_idea_extract_marker_clause(unit, turning_markers, after=False)
+                    background_parts = units[:index]
+                    if prefix and prefix != unit:
+                        background_parts.append(prefix)
+                    profile["background_text"] = " ".join(part for part in background_parts if part).strip()
+                    return profile
+            return profile
+
+        if structure_mode == "cause_effect":
+            for index in range(len(units) - 1, -1, -1):
+                unit = units[index]
+                if any(marker in unit for marker in conclusion_markers):
+                    profile["detected"] = True
+                    profile["axis_unit_index"] = index
+                    profile["axis_text"] = self._main_idea_extract_marker_clause(unit, conclusion_markers, after=True)
+                    profile["background_text"] = " ".join(units[:index]).strip()
+                    return profile
+            profile["detected"] = len(units) >= 2
+            return profile
+
+        if structure_mode == "example_to_conclusion":
+            example_units = [unit for unit in units[:-1] if self._main_idea_has_example_marker(unit)]
+            for index in range(len(units) - 1, -1, -1):
+                unit = units[index]
+                if index > 0 and (self._main_idea_has_summary_marker(unit) or any(token in unit for token in ("本质上", "归根结底", "更值得看到的是"))):
+                    profile["axis_unit_index"] = index
+                    profile["axis_text"] = self._main_idea_extract_marker_clause(unit, conclusion_markers + ("更值得看到的是",), after=True)
+                    break
+            profile["background_text"] = " ".join(units[: profile["axis_unit_index"]]).strip()
+            profile["example_text"] = " ".join(example_units or units[: max(profile["axis_unit_index"], 1)]).strip()
+            profile["detected"] = bool(profile["example_text"] and profile["axis_unit_index"] > 0)
+            return profile
+
+        if structure_mode == "final_summary":
+            profile["axis_text"] = units[-1]
+            profile["axis_unit_index"] = len(units) - 1
+            profile["background_text"] = " ".join(units[:-1]).strip()
+            profile["detected"] = len(units) >= 2 and self._main_idea_has_summary_marker(units[-1])
+            return profile
+
+        return profile
+
+    def _profile_best_support(self, *, units: list[str], candidate_text: str) -> tuple[int, dict[str, Any]]:
+        best_index = -1
+        best_profile = {"shared_token_count": 0, "candidate_token_count": 0, "supported_token_ratio": 0.0}
+        for index, unit in enumerate(units):
+            support = self._compute_support_profile(evidence_text=unit, candidate_text=candidate_text)
+            if (
+                support["shared_token_count"] > best_profile["shared_token_count"]
+                or (
+                    support["shared_token_count"] == best_profile["shared_token_count"]
+                    and support["supported_token_ratio"] > best_profile["supported_token_ratio"]
+                )
+            ):
+                best_index = index
+                best_profile = support
+        return best_index, best_profile
+
+    def _main_idea_option_profile(
+        self,
+        *,
+        option_text: str,
+        material_text: str,
+        structure_profile: dict[str, Any],
+    ) -> dict[str, Any]:
+        units = structure_profile.get("units") or []
+        axis_text = str(structure_profile.get("axis_text") or "")
+        background_text = str(structure_profile.get("background_text") or "")
+        example_text = str(structure_profile.get("example_text") or "")
+        axis_support = self._compute_support_profile(evidence_text=axis_text, candidate_text=option_text)
+        material_support = self._compute_support_profile(evidence_text=material_text, candidate_text=option_text)
+        background_support = self._compute_support_profile(evidence_text=background_text, candidate_text=option_text)
+        example_support = self._compute_support_profile(evidence_text=example_text, candidate_text=option_text)
+        best_index, best_unit_support = self._profile_best_support(units=units, candidate_text=option_text)
+        option_tokens = self._extract_tokens(option_text)
+        generic_markers = ("意义", "价值", "启示", "发展", "趋势", "现代化", "建设", "整体进步", "重要性")
+        detail_markers = ("例如", "比如", "案例", "实验", "个案", "某个", "某地", "某人", "一种", "一项", "一个")
+        generic_like = any(token in option_text for token in generic_markers)
+        detail_like = any(token in option_text for token in detail_markers) or self._main_idea_has_example_marker(option_text)
+        local_dominant = (
+            best_index >= 0
+            and best_index != structure_profile.get("axis_unit_index")
+            and best_unit_support["shared_token_count"] >= max(2, axis_support["shared_token_count"])
+            and best_unit_support["supported_token_ratio"] >= axis_support["supported_token_ratio"] + 0.08
+        )
+        low_abstraction = detail_like or local_dominant
+        over_abstract = bool(
+            generic_like
+            and material_support["shared_token_count"] < 2
+            and material_support["supported_token_ratio"] < 0.18
+            and len(option_tokens) >= 3
+        )
+        axis_aligned = bool(
+            axis_support["shared_token_count"] >= 2
+            or axis_support["supported_token_ratio"] >= 0.18
+        )
+        return {
+            "axis_support": axis_support,
+            "material_support": material_support,
+            "background_support": background_support,
+            "example_support": example_support,
+            "best_unit_index": best_index,
+            "best_unit_support": best_unit_support,
+            "low_abstraction": low_abstraction,
+            "over_abstract": over_abstract,
+            "axis_aligned": axis_aligned,
+            "local_dominant": local_dominant,
+            "example_dominant": example_support["shared_token_count"] >= max(2, axis_support["shared_token_count"])
+            and example_support["supported_token_ratio"] >= axis_support["supported_token_ratio"],
+        }
+
     def validate(
         self,
         *,
@@ -41,6 +900,8 @@ class QuestionValidatorService:
         difficulty_fit: dict[str, Any] | Any | None = None,
         source_question: dict[str, Any] | None = None,
         source_question_analysis: dict[str, Any] | None = None,
+        resolved_slots: dict[str, Any] | None = None,
+        control_logic: dict[str, Any] | None = None,
     ) -> ValidationResult:
         if generated_question is None:
             return ValidationResult(
@@ -65,6 +926,8 @@ class QuestionValidatorService:
             "business_subtype": business_subtype,
             "source_question": source_question or {},
             "source_question_analysis": source_question_analysis or {},
+            "resolved_slots": resolved_slots or {},
+            "control_logic": control_logic or {},
         }
 
         errors, warnings, checks = self._validate_common(generated_question, material_text or "", context)
@@ -386,31 +1249,148 @@ class QuestionValidatorService:
             option_diversity_requirement_source = (
                 "validator_contract" if contract_enforce_option_diversity is not None else "compatibility_disabled"
             )
-            checks["title_selection_title_like"] = {
-                "passed": True if not enforce_title_like else not long_sentence_like,
-                "correct_option_length": len(correct_text),
-                "correct_option_text": correct_text,
-                "required": enforce_title_like,
-                "source": title_like_requirement_source,
-            }
-            checks["title_selection_material_fit"] = {
-                "passed": True if not enforce_material_fit else len(marker_hits) < 2,
-                "marker_hits": marker_hits,
-                "required": enforce_material_fit,
-                "source": material_fit_requirement_source,
-            }
-            checks["title_selection_option_diversity"] = {
-                "passed": True if not enforce_option_diversity else not fragment_heavy,
-                "avg_option_length": avg_len,
-                "required": enforce_option_diversity,
-                "source": option_diversity_requirement_source,
-            }
+            checks["title_selection_title_like"] = self._build_contract_gated_check(
+                active=enforce_title_like,
+                passed=not long_sentence_like,
+                source=title_like_requirement_source,
+                correct_option_length=len(correct_text),
+                correct_option_text=correct_text,
+            )
+            checks["title_selection_material_fit"] = self._build_contract_gated_check(
+                active=enforce_material_fit,
+                passed=len(marker_hits) < 2,
+                source=material_fit_requirement_source,
+                marker_hits=marker_hits,
+            )
+            checks["title_selection_option_diversity"] = self._build_contract_gated_check(
+                active=enforce_option_diversity,
+                passed=not fragment_heavy,
+                source=option_diversity_requirement_source,
+                avg_option_length=avg_len,
+            )
             if enforce_title_like and long_sentence_like:
                 errors.append("title_selection correct option reads like a long summary sentence rather than a title.")
             if enforce_material_fit and len(marker_hits) >= 2:
                 errors.append("title_selection material is too close to a meeting-summary or report-style passage and should not be used directly.")
             if enforce_option_diversity and fragment_heavy:
                 warnings.append("title_selection options are overly uniform and mostly look like fragment extraction rather than layered title design.")
+
+        center_constraints = self._extract_main_idea_constraints(context)
+        center_contract = (
+            context.get("validator_contract", {}).get("center_understanding")
+            if isinstance(context.get("validator_contract"), dict)
+            and isinstance(context.get("validator_contract", {}).get("center_understanding"), dict)
+            else {}
+        )
+        is_center_understanding = (
+            not is_title_selection
+            and (
+                business_subtype == "center_understanding"
+                or bool(center_contract)
+                or bool(center_constraints["effective_structure_mode"])
+                or bool(center_constraints["effective_main_axis_source"])
+            )
+        )
+        checks["center_understanding_constraint_read"] = {
+            "passed": True if is_center_understanding else None,
+            "required": is_center_understanding,
+            "source": "validator_runtime_alignment" if is_center_understanding else "compatibility_disabled",
+            "runtime_argument_structure": center_constraints["runtime_argument_structure"],
+            "runtime_main_axis_source": center_constraints["runtime_main_axis_source"],
+            "runtime_abstraction_level": center_constraints["runtime_abstraction_level"],
+            "runtime_distractor_types": center_constraints["runtime_distractor_types"],
+            "contract_argument_structure": center_constraints["contract_argument_structure"],
+            "contract_main_axis_source": center_constraints["contract_main_axis_source"],
+            "contract_abstraction_level": center_constraints["contract_abstraction_level"],
+            "contract_distractor_types": center_constraints["contract_distractor_types"],
+        }
+
+        if is_center_understanding:
+            if (
+                center_constraints["runtime_argument_structure"]
+                and center_constraints["contract_argument_structure"]
+                and center_constraints["runtime_argument_structure"] != center_constraints["contract_argument_structure"]
+            ):
+                self._append_unique_error(errors, "argument_structure_mismatch")
+            if (
+                center_constraints["runtime_main_axis_source"]
+                and center_constraints["contract_main_axis_source"]
+                and center_constraints["runtime_main_axis_source"] != center_constraints["contract_main_axis_source"]
+            ):
+                self._append_unique_error(errors, "main_axis_mismatch")
+            if (
+                center_constraints["runtime_abstraction_level"]
+                and center_constraints["contract_abstraction_level"]
+                and center_constraints["runtime_abstraction_level"] != center_constraints["contract_abstraction_level"]
+            ):
+                self._append_unique_error(errors, "abstraction_level_mismatch")
+
+            structure_profile = self._build_main_idea_structure_profile(
+                material_text=material_text,
+                structure_mode=center_constraints["effective_structure_mode"],
+            )
+            checks["center_understanding_argument_structure"] = {
+                "passed": structure_profile["detected"] if center_constraints["effective_structure_mode"] else None,
+                "required": bool(center_constraints["effective_structure_mode"]),
+                "source": center_constraints["runtime_argument_structure_source"]
+                if center_constraints["runtime_argument_structure"]
+                else center_constraints["contract_argument_structure_source"],
+                "structure_mode": center_constraints["effective_structure_mode"],
+                "axis_unit_index": structure_profile["axis_unit_index"],
+                "axis_text": structure_profile["axis_text"],
+            }
+            if center_constraints["effective_structure_mode"] and not structure_profile["detected"]:
+                self._append_unique_error(errors, "argument_structure_mismatch")
+
+            options = generated_question.options or {}
+            correct_text = (options.get(generated_question.answer or "", "") or "").strip()
+            option_profile = self._main_idea_option_profile(
+                option_text=correct_text,
+                material_text=material_text,
+                structure_profile=structure_profile,
+            )
+            checks["center_understanding_main_axis_alignment"] = {
+                "passed": option_profile["axis_aligned"],
+                "required": True,
+                "source": center_constraints["runtime_main_axis_source_source"]
+                if center_constraints["runtime_main_axis_source"]
+                else center_constraints["contract_main_axis_source_source"],
+                "axis_support": option_profile["axis_support"],
+                "background_support": option_profile["background_support"],
+                "example_support": option_profile["example_support"],
+                "best_unit_index": option_profile["best_unit_index"],
+            }
+            if not option_profile["axis_aligned"]:
+                self._append_unique_error(errors, "main_axis_mismatch")
+
+            if center_constraints["effective_structure_mode"] == "turning":
+                if (
+                    option_profile["background_support"]["shared_token_count"] >= max(2, option_profile["axis_support"]["shared_token_count"])
+                    and option_profile["background_support"]["supported_token_ratio"] >= option_profile["axis_support"]["supported_token_ratio"]
+                ):
+                    self._append_unique_error(errors, "main_axis_mismatch")
+
+            if center_constraints["effective_structure_mode"] in {"cause_effect", "final_summary"} and option_profile["local_dominant"]:
+                self._append_unique_error(errors, "local_point_as_main_axis")
+
+            if center_constraints["effective_structure_mode"] == "example_to_conclusion" and option_profile["example_dominant"]:
+                self._append_unique_error(errors, "example_promoted_to_main_idea")
+
+            expected_abstraction = center_constraints["effective_abstraction_level"] or "medium"
+            checks["center_understanding_abstraction_level"] = {
+                "passed": not option_profile["low_abstraction"] and not option_profile["over_abstract"],
+                "required": True,
+                "source": center_constraints["runtime_abstraction_level_source"]
+                if center_constraints["runtime_abstraction_level"]
+                else center_constraints["contract_abstraction_level_source"],
+                "expected_level": expected_abstraction,
+                "low_abstraction": option_profile["low_abstraction"],
+                "over_abstract": option_profile["over_abstract"],
+            }
+            if expected_abstraction in {"medium", "high"} and option_profile["low_abstraction"]:
+                self._append_unique_error(errors, "abstraction_level_mismatch")
+            if option_profile["over_abstract"]:
+                self._append_unique_error(errors, "abstraction_level_mismatch")
 
         return errors, warnings, checks
 
@@ -536,11 +1516,11 @@ class QuestionValidatorService:
                     for mode in raw_required_reasoning_modes
                     if str(mode).strip()
                 }
-        expected_sortable_unit_count = contract_sortable_unit_count or int(structure_constraints.get("sortable_unit_count") or 0)
+        expected_sortable_unit_count = contract_sortable_unit_count
         expected_sortable_unit_count_source = (
             "validator_contract"
             if contract_sortable_unit_count is not None
-            else ("compatibility_source_question_analysis" if expected_sortable_unit_count else "compatibility_disabled")
+            else "compatibility_disabled"
         )
         unique_opener_min_score = contract_unique_opener_min_score
         unique_opener_min_score_source = (
@@ -562,33 +1542,17 @@ class QuestionValidatorService:
         function_overlap_max_source = (
             "validator_contract" if contract_function_overlap_max is not None else "compatibility_disabled"
         )
-        expected_binding_pair_count = (
-            contract_expected_binding_pair_count
-            if contract_expected_binding_pair_count is not None
-            else (
-                int(structure_constraints.get("expected_binding_pair_count") or 0)
-                if structure_constraints.get("expected_binding_pair_count") not in (None, "")
-                else None
-            )
-        )
+        expected_binding_pair_count = contract_expected_binding_pair_count
         expected_binding_pair_count_source = (
             "validator_contract"
             if contract_expected_binding_pair_count is not None
-            else ("compatibility_source_question_analysis" if expected_binding_pair_count is not None else "compatibility_disabled")
+            else "compatibility_disabled"
         )
-        expected_unique_answer_strength = (
-            contract_expected_unique_answer_strength
-            if contract_expected_unique_answer_strength is not None
-            else (
-                float(structure_constraints.get("expected_unique_answer_strength") or 0.0)
-                if structure_constraints.get("expected_unique_answer_strength") not in (None, "")
-                else None
-            )
-        )
+        expected_unique_answer_strength = contract_expected_unique_answer_strength
         expected_unique_answer_strength_source = (
             "validator_contract"
             if contract_expected_unique_answer_strength is not None
-            else ("compatibility_source_question_analysis" if expected_unique_answer_strength is not None else "compatibility_disabled")
+            else "compatibility_disabled"
         )
         correct_order = list(generated_question.correct_order or [])
         original_sentences = list(generated_question.original_sentences or [])
@@ -600,54 +1564,60 @@ class QuestionValidatorService:
         }
         answer = str(generated_question.answer or "").strip().upper()
         analysis_orders = self._extract_reference_order_sequences(generated_question.analysis or "")
+        ordered_units = self._resolve_sentence_order_units_for_sequence(
+            original_sentences=original_sentences,
+            order=correct_order,
+        )
+        binding_pairs = self._extract_sentence_order_binding_pairs(context)
+        explicit_roles = self._extract_sentence_order_roles(context)
 
         checks = {
             "sentence_order_signal": {"passed": has_order_signal},
             "sentence_order_exam_style_prompt": {"passed": stem_exam_style},
             "sentence_order_material_unit_count": {"passed": material_unit_count >= 4, "count": material_unit_count},
             "sentence_order_option_unit_counts": {"passed": bool(option_unit_counts), "counts": option_unit_counts},
-            "sentence_order_unique_opener": {
-                "passed": True if unique_opener_min_score is None else orderability["unique_opener_score"] >= unique_opener_min_score,
-                "score": orderability["unique_opener_score"],
-                "threshold": unique_opener_min_score,
-                "source": unique_opener_min_score_source,
-                "required": unique_opener_min_score is not None,
-            },
-            "sentence_order_binding_pairs": {
-                "passed": True if expected_binding_pair_count is None else orderability["binding_pair_count"] >= expected_binding_pair_count,
-                "count": orderability["binding_pair_count"],
-                "expected": expected_binding_pair_count,
-                "source": expected_binding_pair_count_source,
-                "required": expected_binding_pair_count is not None,
-            },
-            "sentence_order_closure": {
-                "passed": True if closure_min_score is None else (orderability["has_closing_role"] and orderability["context_closure_score"] >= closure_min_score),
-                "context_closure_score": orderability["context_closure_score"],
-                "expected": closure_min_score,
-                "source": closure_min_score_source,
-                "required": closure_min_score is not None,
-            },
-            "sentence_order_exchange_risk": {
-                "passed": True if exchange_risk_max is None else orderability["exchange_risk"] <= exchange_risk_max,
-                "score": orderability["exchange_risk"],
-                "expected": exchange_risk_max,
-                "source": exchange_risk_max_source,
-                "required": exchange_risk_max is not None,
-            },
-            "sentence_order_multi_path_risk": {
-                "passed": True if multi_path_risk_max is None else orderability["multi_path_risk"] <= multi_path_risk_max,
-                "score": orderability["multi_path_risk"],
-                "expected": multi_path_risk_max,
-                "source": multi_path_risk_max_source,
-                "required": multi_path_risk_max is not None,
-            },
-            "sentence_order_function_overlap": {
-                "passed": True if function_overlap_max is None else orderability["function_overlap_score"] <= function_overlap_max,
-                "score": orderability["function_overlap_score"],
-                "expected": function_overlap_max,
-                "source": function_overlap_max_source,
-                "required": function_overlap_max is not None,
-            },
+            "sentence_order_unique_opener": self._build_contract_gated_check(
+                active=unique_opener_min_score is not None,
+                passed=orderability["unique_opener_score"] >= (unique_opener_min_score or 0.0),
+                source=unique_opener_min_score_source,
+                score=orderability["unique_opener_score"],
+                threshold=unique_opener_min_score,
+            ),
+            "sentence_order_binding_pairs": self._build_contract_gated_check(
+                active=expected_binding_pair_count is not None,
+                passed=orderability["binding_pair_count"] >= (expected_binding_pair_count or 0),
+                source=expected_binding_pair_count_source,
+                count=orderability["binding_pair_count"],
+                expected=expected_binding_pair_count,
+            ),
+            "sentence_order_closure": self._build_contract_gated_check(
+                active=closure_min_score is not None,
+                passed=orderability["has_closing_role"] and orderability["context_closure_score"] >= (closure_min_score or 0.0),
+                source=closure_min_score_source,
+                context_closure_score=orderability["context_closure_score"],
+                expected=closure_min_score,
+            ),
+            "sentence_order_exchange_risk": self._build_contract_gated_check(
+                active=exchange_risk_max is not None,
+                passed=orderability["exchange_risk"] <= (exchange_risk_max if exchange_risk_max is not None else 1.0),
+                source=exchange_risk_max_source,
+                score=orderability["exchange_risk"],
+                expected=exchange_risk_max,
+            ),
+            "sentence_order_multi_path_risk": self._build_contract_gated_check(
+                active=multi_path_risk_max is not None,
+                passed=orderability["multi_path_risk"] <= (multi_path_risk_max if multi_path_risk_max is not None else 1.0),
+                source=multi_path_risk_max_source,
+                score=orderability["multi_path_risk"],
+                expected=multi_path_risk_max,
+            ),
+            "sentence_order_function_overlap": self._build_contract_gated_check(
+                active=function_overlap_max is not None,
+                passed=orderability["function_overlap_score"] <= (function_overlap_max if function_overlap_max is not None else 1.0),
+                source=function_overlap_max_source,
+                score=orderability["function_overlap_score"],
+                expected=function_overlap_max,
+            ),
             "sentence_order_original_sentences": {
                 "passed": (
                     len(original_sentences) == expected_sortable_unit_count
@@ -672,25 +1642,20 @@ class QuestionValidatorService:
         if not stem_exam_style:
             warnings.append("sentence_order stem does not look like a standard ordering prompt.")
         if material_unit_count < 4:
-            errors.append("sentence_order material does not preserve enough sortable units.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if option_unit_counts and len(set(option_unit_counts)) > 1:
-            errors.append("sentence_order options do not use a consistent sortable-unit set.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if expected_sortable_unit_count:
             if len(original_sentences) != expected_sortable_unit_count:
-                errors.append(f"sentence_order original_sentences must contain exactly {expected_sortable_unit_count} units.")
+                self._append_unique_error(errors, "sentence_count_mismatch")
         elif len(original_sentences) < 2:
-            errors.append("sentence_order original_sentences must contain at least 2 units.")
+            self._append_unique_error(errors, "sentence_count_mismatch")
         if not correct_order or (expected_order_sequence and sorted(correct_order) != expected_order_sequence):
-            if expected_order_sequence:
-                errors.append(
-                    f"sentence_order correct_order must be a single truth source covering {len(expected_order_sequence)} sortable units."
-                )
-            else:
-                errors.append("sentence_order correct_order must be a non-empty ordering truth source.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         correct_option_letters = [key for key, sequence in option_orders.items() if sequence == correct_order]
         checks["sentence_order_single_truth_option"] = {"passed": len(correct_option_letters) == 1, "matching_letters": correct_option_letters}
         if len(correct_option_letters) != 1:
-            errors.append("sentence_order options must contain exactly one option derived from correct_order.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         checks["sentence_order_answer_binding"] = {
             "passed": bool(answer and answer in option_orders and option_orders.get(answer) == correct_order),
             "answer": answer,
@@ -698,16 +1663,16 @@ class QuestionValidatorService:
             "correct_order": correct_order,
         }
         if answer not in option_orders or option_orders.get(answer) != correct_order:
-            errors.append("sentence_order answer does not point to the option derived from correct_order.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         checks["sentence_order_analysis_binding"] = {
             "passed": bool(analysis_orders and analysis_orders[0] == correct_order),
             "analysis_orders": analysis_orders,
             "correct_order": correct_order,
         }
         if not analysis_orders or analysis_orders[0] != correct_order:
-            errors.append("sentence_order analysis must explicitly explain the same correct_order as the answer.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if len(analysis_orders) > 1 and any(sequence != correct_order for sequence in analysis_orders[1:]):
-            errors.append("sentence_order analysis contains conflicting ordering sequences.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if expected_sortable_unit_count:
             aligned = option_unit_count == expected_sortable_unit_count or material_unit_count == expected_sortable_unit_count
             checks["sentence_order_reference_unit_alignment"] = {
@@ -718,40 +1683,111 @@ class QuestionValidatorService:
                 "source": expected_sortable_unit_count_source,
             }
             if not aligned:
-                errors.append(
-                    f"sentence_order should preserve the reference sortable-unit count ({expected_sortable_unit_count}), but generated result drifted."
-                )
+                self._append_unique_error(errors, "sentence_count_mismatch")
         if unique_opener_min_score is not None and orderability["unique_opener_score"] < unique_opener_min_score:
-            errors.append("sentence_order material does not show a strong enough unique opener candidate.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if expected_binding_pair_count is not None and orderability["binding_pair_count"] < expected_binding_pair_count:
-            errors.append("sentence_order material lacks enough deterministic binding pairs to support a unique-best sequence.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if closure_min_score is not None and (not orderability["has_closing_role"] or orderability["context_closure_score"] < closure_min_score):
-            errors.append("sentence_order material does not form a clear closing or closure role.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if exchange_risk_max is not None and orderability["exchange_risk"] > exchange_risk_max:
-            errors.append("sentence_order material remains too readable after key-unit exchange and is not uniquely orderable enough.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if multi_path_risk_max is not None and orderability["multi_path_risk"] > multi_path_risk_max:
-            errors.append("sentence_order material admits too many near-plausible ordering paths.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if function_overlap_max is not None and orderability["function_overlap_score"] > function_overlap_max:
-            errors.append("sentence_order material has overly similar unit functions, so the options feel interchangeable.")
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if expected_unique_answer_strength is not None:
             unique_strength_ok = orderability["unique_answer_strength"] + 0.06 >= expected_unique_answer_strength
-            checks["sentence_order_unique_answer_strength"] = {
-                "passed": unique_strength_ok,
-                "score": orderability["unique_answer_strength"],
-                "expected": expected_unique_answer_strength,
-                "source": expected_unique_answer_strength_source,
-            }
+            checks["sentence_order_unique_answer_strength"] = self._build_contract_gated_check(
+                active=True,
+                passed=unique_strength_ok,
+                source=expected_unique_answer_strength_source,
+                score=orderability["unique_answer_strength"],
+                expected=expected_unique_answer_strength,
+            )
             if not unique_strength_ok:
-                errors.append("sentence_order material does not reach the reference question's unique-answer strength.")
-        logic_modes = structure_constraints.get("logic_modes") or []
+                self._append_unique_error(errors, "ordering_chain_incomplete")
+
+        legal_head_required = bool(
+            isinstance(sentence_order_contract, dict) and sentence_order_contract.get("require_legal_head")
+        )
+        legal_tail_required = bool(
+            isinstance(sentence_order_contract, dict) and sentence_order_contract.get("require_legal_tail")
+        )
+        binding_pairs_required = bool(
+            isinstance(sentence_order_contract, dict) and sentence_order_contract.get("require_binding_pairs_intact")
+        )
+        complete_ordering_required = bool(
+            isinstance(sentence_order_contract, dict) and sentence_order_contract.get("require_complete_ordering_chain")
+        )
+
+        illegal_head = False
+        if legal_head_required and ordered_units:
+            illegal_head = self._sentence_order_head_is_illegal(ordered_units[0][1])
+            checks["sentence_order_head_enforcement"] = {
+                "passed": not illegal_head,
+                "unit_index": ordered_units[0][0],
+                "text": ordered_units[0][1],
+            }
+            if illegal_head:
+                self._append_unique_error(errors, "illegal_head")
+
+        illegal_tail = False
+        if legal_tail_required and ordered_units:
+            illegal_tail = self._sentence_order_tail_is_illegal(ordered_units[-1][1])
+            checks["sentence_order_tail_enforcement"] = {
+                "passed": not illegal_tail,
+                "unit_index": ordered_units[-1][0],
+                "text": ordered_units[-1][1],
+            }
+            if illegal_tail:
+                self._append_unique_error(errors, "illegal_tail")
+
+        binding_violations: list[dict[str, int]] = []
+        if binding_pairs_required and binding_pairs and ordered_units:
+            positions = {unit_index: position for position, (unit_index, _) in enumerate(ordered_units)}
+            for left, right in binding_pairs:
+                if left in positions and right in positions and positions[left] > positions[right]:
+                    binding_violations.append({"before": left, "after": right})
+            checks["sentence_order_binding_enforcement"] = {
+                "passed": not binding_violations,
+                "binding_pairs": [{"before": left, "after": right} for left, right in binding_pairs],
+                "violations": binding_violations,
+            }
+            if binding_violations:
+                self._append_unique_error(errors, "binding_violation")
+
+        role_violations: list[dict[str, Any]] = []
+        if complete_ordering_required and ordered_units:
+            ordered_roles: list[dict[str, Any]] = []
+            for position, (unit_index, text) in enumerate(ordered_units):
+                explicit_role = explicit_roles.get(unit_index, "")
+                role = explicit_role or self._infer_sentence_order_role(text)
+                ordered_roles.append(
+                    {
+                        "unit_index": unit_index,
+                        "position": position,
+                        "role": role,
+                        "text": text,
+                        "source": "explicit" if explicit_role else ("inferred" if role else "missing"),
+                    }
+                )
+            for entry in ordered_roles[:-1]:
+                if entry["role"] == "conclusion":
+                    role_violations.append({"type": "conclusion_not_last", "unit_index": entry["unit_index"]})
+            if ordered_roles and ordered_roles[-1]["role"] == "thesis":
+                role_violations.append({"type": "thesis_not_last_allowed", "unit_index": ordered_roles[-1]["unit_index"]})
+            if ordered_roles and ordered_roles[0]["role"] == "transition" and not illegal_head:
+                role_violations.append({"type": "transition_not_first_allowed", "unit_index": ordered_roles[0]["unit_index"]})
+            checks["sentence_order_role_enforcement"] = {
+                "passed": not role_violations,
+                "roles": ordered_roles,
+                "violations": role_violations,
+            }
+            if role_violations:
+                self._append_unique_error(errors, "role_order_conflict")
         required_reasoning_modes = set(contract_required_reasoning_modes)
         reasoning_modes_source = "validator_contract" if contract_required_reasoning_modes else "compatibility_disabled"
-        if not required_reasoning_modes:
-            # Compatibility only for legacy source-question flows that still
-            # lack explicit validator_contract reasoning requirements.
-            required_reasoning_modes = {str(mode).strip() for mode in logic_modes if str(mode).strip()}
-            if required_reasoning_modes:
-                reasoning_modes_source = "compatibility_source_question_analysis"
         timeline_reasoning_required = bool(required_reasoning_modes.intersection({"timeline_sequence", "temporal_chain"}))
         binding_reasoning_required = bool(required_reasoning_modes.intersection({"deterministic_binding", "binding_clue", "binding_pairs"}))
         head_tail_reasoning_required = bool(required_reasoning_modes.intersection({"head_tail_roles", "opener_closure_roles"}))
@@ -774,11 +1810,11 @@ class QuestionValidatorService:
             if not analysis_has_binding:
                 warnings.append("reference question relies on deterministic binding, but analysis does not clearly explain the binding clues.")
         analysis_has_head_tail = any(token in generated_question.analysis for token in ("首句", "尾句", "收束", "总结"))
-        checks["sentence_order_head_tail_reasoning"] = {
-            "passed": analysis_has_head_tail if head_tail_reasoning_required else True,
-            "required": head_tail_reasoning_required,
-            "source": reasoning_modes_source,
-        }
+        checks["sentence_order_head_tail_reasoning"] = self._build_contract_gated_check(
+            active=head_tail_reasoning_required,
+            passed=analysis_has_head_tail,
+            source=reasoning_modes_source,
+        )
         if head_tail_reasoning_required and not analysis_has_head_tail:
             warnings.append("sentence_order analysis does not clearly explain opener/closing roles.")
         return errors, warnings, checks
@@ -812,15 +1848,11 @@ class QuestionValidatorService:
                 or ""
             )
         runtime_blank_position = str(material_prompt_extras.get("blank_position") or "")
-        reference_blank_position = (
-            runtime_blank_position
-            or contract_blank_position
-            or str(structure_constraints.get("blank_position") or "")
-        )
+        reference_blank_position = runtime_blank_position or contract_blank_position
         reference_blank_position_source = (
             "material_source.prompt_extras"
             if runtime_blank_position
-            else ("validator_contract" if contract_blank_position else "compatibility_source_question_analysis")
+            else ("validator_contract" if contract_blank_position else "compatibility_disabled")
         )
 
         checks = {
@@ -855,11 +1887,11 @@ class QuestionValidatorService:
                 or ""
             )
         runtime_function_type = str(material_prompt_extras.get("function_type") or "")
-        function_type = runtime_function_type or contract_function_type or str(structure_constraints.get("function_type") or "")
+        function_type = runtime_function_type or contract_function_type
         function_type_source = (
             "material_source.prompt_extras"
             if runtime_function_type
-            else ("validator_contract" if contract_function_type else "compatibility_source_question_analysis")
+            else ("validator_contract" if contract_function_type else "compatibility_disabled")
         )
         if function_type == "bridge_both_sides":
             analysis_has_bridge = any(token in generated_question.analysis for token in ("承上启下", "承前启后", "前文", "后文"))
@@ -870,6 +1902,199 @@ class QuestionValidatorService:
             }
             if not analysis_has_bridge:
                 warnings.append("reference fill question is bridge-oriented, but analysis does not clearly explain both-side linkage.")
+        return errors, warnings, checks
+
+    def _validate_sentence_fill(
+        self,
+        generated_question: GeneratedQuestion,
+        context: dict[str, Any],
+    ) -> tuple[list[str], list[str], dict[str, Any]]:
+        stem = generated_question.stem
+        material_text = str(context.get("material_text") or "")
+        constraints = self._extract_sentence_fill_constraints(context)
+        correct_text = self._sentence_fill_correct_option_text(generated_question)
+        previous_text, next_text, blank_marker = self._extract_sentence_fill_blank_context(material_text)
+
+        has_blank_signal = any(token in material_text for token in ("____", "___", "[BLANK]", "?  ?", "( )", "? ?"))
+        has_fill_prompt = any(token in stem for token in ("??", "????", "??", "???", "????????"))
+        blank_position = self._detect_blank_position(material_text)
+        reference_blank_position = constraints["blank_position"]
+        reference_blank_position_source = constraints["blank_position_source"]
+
+        checks = {
+            "sentence_fill_gap_signal": {"passed": has_blank_signal},
+            "sentence_fill_exam_style_prompt": {"passed": has_fill_prompt},
+            "sentence_fill_blank_position": {"passed": bool(blank_position), "blank_position": blank_position},
+            "sentence_fill_correct_option_text": {"passed": bool(correct_text), "text": correct_text},
+        }
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        if not has_blank_signal:
+            errors.append("sentence_fill material does not show an obvious blank marker.")
+        if not has_fill_prompt:
+            warnings.append("sentence_fill stem does not look like a standard fill-in-the-blank prompt.")
+
+        if reference_blank_position:
+            aligned = blank_position == reference_blank_position
+            checks["sentence_fill_blank_position_alignment"] = {
+                "passed": aligned,
+                "reference_blank_position": reference_blank_position,
+                "generated_blank_position": blank_position,
+                "source": reference_blank_position_source,
+            }
+            if not aligned:
+                self._append_unique_error(errors, "position_function_mismatch")
+
+        function_type = constraints["function_type"]
+        function_type_source = constraints["function_type_source"]
+        reference_anchor_mode = constraints["reference_anchor"]
+        bidirectional_contract = constraints["bidirectional_check"]
+        checks["sentence_fill_function_type"] = {
+            "passed": bool(function_type),
+            "function_type": function_type,
+            "source": function_type_source,
+        }
+        checks["sentence_fill_reference_anchor_contract"] = {
+            "reference_anchor": reference_anchor_mode,
+            "source": constraints["reference_anchor_source"],
+        }
+        checks["sentence_fill_bidirectional_contract"] = {
+            "bidirectional_check": bidirectional_contract,
+            "source": constraints["bidirectional_check_source"],
+        }
+
+        runtime_function_type = constraints["runtime_function_type"]
+        contract_function_type = constraints["contract_function_type"]
+        if runtime_function_type and contract_function_type:
+            checks["sentence_fill_function_alignment"] = {
+                "passed": runtime_function_type == contract_function_type,
+                "runtime_function_type": runtime_function_type,
+                "contract_function_type": contract_function_type,
+            }
+            if runtime_function_type != contract_function_type:
+                self._append_unique_error(errors, "position_function_mismatch")
+
+        runtime_position = constraints["runtime_blank_position"]
+        contract_position = constraints["contract_blank_position"]
+        if runtime_position and contract_position:
+            checks["sentence_fill_position_alignment"] = {
+                "passed": runtime_position == contract_position,
+                "runtime_blank_position": runtime_position,
+                "contract_blank_position": contract_position,
+            }
+            if runtime_position != contract_position:
+                self._append_unique_error(errors, "position_function_mismatch")
+
+        directional = self._sentence_fill_directional_validity(
+            candidate_text=correct_text,
+            previous_text=previous_text,
+            next_text=next_text,
+        )
+        checks["sentence_fill_bidirectional_runtime"] = {
+            **directional,
+            "blank_marker": blank_marker,
+        }
+
+        anchor_support = self._sentence_fill_reference_anchor_support(
+            candidate_text=correct_text,
+            previous_text=previous_text,
+        )
+        checks["sentence_fill_reference_anchor"] = anchor_support
+
+        anchor_required = function_type == "reference_summary" or reference_anchor_mode == "required"
+        if anchor_required and (not anchor_support["has_anchor"] or not anchor_support["passed"]):
+            self._append_unique_error(errors, "reference_anchor_missing")
+
+        if function_type == "bridge":
+            analysis_has_bridge = any(token in generated_question.analysis for token in ("承上启下", "承前启后", "前文", "后文"))
+            checks["sentence_fill_bridge_reasoning"] = {
+                "passed": analysis_has_bridge,
+                "function_type": function_type,
+                "source": function_type_source,
+            }
+            if not analysis_has_bridge:
+                warnings.append("reference fill question is bridge-oriented, but analysis does not clearly explain both-side linkage.")
+
+        if function_type == "topic_intro":
+            if blank_position and blank_position != "opening":
+                self._append_unique_error(errors, "position_function_mismatch")
+            if (
+                self._sentence_fill_has_conclusion_marker(correct_text)
+                or self._sentence_fill_has_countermeasure_marker(correct_text)
+                or anchor_support["has_anchor"]
+            ):
+                self._append_unique_error(errors, "position_function_mismatch")
+            if next_text and not directional["next_valid"]:
+                self._append_unique_error(errors, "position_function_mismatch")
+
+        if function_type == "summary" and blank_position == "opening":
+            if (
+                self._sentence_fill_has_conclusion_marker(correct_text)
+                or self._sentence_fill_has_countermeasure_marker(correct_text)
+                or anchor_support["has_anchor"]
+            ):
+                self._append_unique_error(errors, "position_function_mismatch")
+            if next_text and not directional["next_valid"]:
+                self._append_unique_error(errors, "function_scope_mismatch")
+
+        if function_type == "carry_previous":
+            if blank_position and blank_position != "middle":
+                self._append_unique_error(errors, "position_function_mismatch")
+            if not directional["previous_valid"]:
+                self._append_unique_error(errors, "position_function_mismatch")
+            if self._sentence_fill_has_conclusion_marker(correct_text) or self._sentence_fill_has_countermeasure_marker(correct_text):
+                self._append_unique_error(errors, "function_scope_mismatch")
+            if next_text and not directional["next_valid"]:
+                warnings.append("carry_previous option links weakly to following context.")
+
+        if function_type == "lead_next":
+            if blank_position and blank_position != "middle":
+                self._append_unique_error(errors, "position_function_mismatch")
+            if not directional["next_valid"]:
+                self._append_unique_error(errors, "position_function_mismatch")
+            if anchor_support["has_anchor"] and not self._sentence_fill_has_forward_signal(correct_text):
+                self._append_unique_error(errors, "function_scope_mismatch")
+            if self._sentence_fill_has_conclusion_marker(correct_text):
+                self._append_unique_error(errors, "function_scope_mismatch")
+            if previous_text and not directional["previous_valid"]:
+                warnings.append("lead_next option links weakly to previous context.")
+
+        if function_type == "bridge":
+            if blank_position and blank_position != "middle":
+                self._append_unique_error(errors, "position_function_mismatch")
+            if not directional["previous_valid"] or not directional["next_valid"]:
+                self._append_unique_error(errors, "bidirectional_failure")
+            if self._sentence_fill_has_conclusion_marker(correct_text) or self._sentence_fill_has_countermeasure_marker(correct_text):
+                self._append_unique_error(errors, "function_scope_mismatch")
+
+        if function_type == "reference_summary":
+            if blank_position not in {"middle", "inserted", "mixed"}:
+                self._append_unique_error(errors, "position_function_mismatch")
+            if not directional["previous_valid"] or not directional["next_valid"]:
+                self._append_unique_error(errors, "bidirectional_failure")
+            if not anchor_support["has_anchor"] or not anchor_support["passed"]:
+                self._append_unique_error(errors, "reference_anchor_missing")
+
+        if function_type in {"conclusion", "summary"} and blank_position == "ending":
+            if self._sentence_fill_has_forward_signal(correct_text) or any(token in correct_text for token in ("例如", "比如", "首先", "其次")):
+                self._append_unique_error(errors, "position_function_mismatch")
+            if not self._sentence_fill_has_conclusion_marker(correct_text) and next_text:
+                warnings.append("ending summary lacks a strong closure marker.")
+
+        if function_type == "countermeasure":
+            if blank_position and blank_position != "ending":
+                self._append_unique_error(errors, "position_function_mismatch")
+            if not self._sentence_fill_has_countermeasure_marker(correct_text):
+                self._append_unique_error(errors, "position_function_mismatch")
+            elif not self._sentence_fill_has_specific_action(correct_text):
+                self._append_unique_error(errors, "function_scope_mismatch")
+
+        if isinstance(bidirectional_contract, dict):
+            require_previous = bidirectional_contract.get("previous_valid") is True
+            require_next = bidirectional_contract.get("next_valid") is True
+            if (require_previous and not directional["previous_valid"]) or (require_next and not directional["next_valid"]):
+                self._append_unique_error(errors, "bidirectional_failure")
         return errors, warnings, checks
 
     def _build_difficulty_review(self, difficulty_fit: dict[str, Any]) -> dict[str, Any]:

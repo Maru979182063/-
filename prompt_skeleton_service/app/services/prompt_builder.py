@@ -6,6 +6,12 @@ from app.schemas.config import BusinessSubtypeConfig, FewshotExampleConfig, Patt
 
 
 class PromptBuilderService:
+    NON_PROMPTABLE_EXTRA_CONSTRAINT_KEYS = {
+        "source_question_style_summary",
+        "reference_business_cards",
+        "reference_query_terms",
+    }
+
     def build(
         self,
         *,
@@ -184,22 +190,29 @@ class PromptBuilderService:
         parts.extend(
             [
                 (
-                    f"Unified skeleton anchor={skeleton['anchor_type']}, "
+                    f"Configured skeleton anchor={skeleton['anchor_type']}, "
                     f"operation={skeleton['operation_type']}, target={skeleton['target_type']}."
                 ),
+                f"Configured difficulty target: {self._summarize_difficulty_target(difficulty_target)}",
                 (
-                    "Correct option requirements: "
-                    f"{generation_summary['correct_logic']}; core={generation_summary['generation_core']}."
+                    "Configured control logic: "
+                    f"difficulty_source={control_summary['difficulty_source']}; "
+                    f"option_confusion={control_summary['option_confusion']}; "
+                    f"passage={control_summary['passage']}; "
+                    f"correct_option={control_summary['correct_option']}; "
+                    f"wrong_options={control_summary['wrong_options']}; "
+                    f"special_fields={control_summary['special_fields']}."
                 ),
                 (
-                    "Wrong option requirements: "
-                    f"{control_summary['wrong_options']}; distractor pattern={generation_summary['distractor_pattern']}; "
-                    f"confusion level={control_summary['option_confusion']}. "
-                    "Apply this confusion level to all wrong options as a whole, so each distractor should stay reasonably close "
-                    "to the correct answer instead of leaving only one plausible distractor."
+                    "Configured generation logic: "
+                    f"core={generation_summary['generation_core']}; "
+                    f"processing={generation_summary['processing_type']}; "
+                    f"correct_logic={generation_summary['correct_logic']}; "
+                    f"traps={generation_summary['high_freq_traps']}; "
+                    f"distractors={generation_summary['distractor_pattern']}; "
+                    f"analysis_steps={generation_summary['analysis_steps']}."
                 ),
-                f"Difficulty execution rule: {self._summarize_difficulty_target(difficulty_target)}",
-                "Output format requirements: return a structured package containing passage, stem, options, answer, and concise rationale.",
+                "Output contract: return the structured fields required by the caller.",
             ]
         )
         return "\n".join(parts)
@@ -219,40 +232,28 @@ class PromptBuilderService:
         generation_summary: dict[str, str],
         extra_constraints: dict[str, Any] | None,
     ) -> str:
+        prompt_safe_constraints = self._filter_prompt_safe_extra_constraints(extra_constraints)
         return "\n".join(
             [
                 f"Current question_type: {question_type}",
                 f"Current business_subtype: {business_subtype or 'not specified'}",
                 f"Current selected_pattern: {pattern.pattern_id} ({pattern.pattern_name})",
-                f"Target difficulty: {difficulty_target}",
-                f"Difficulty rendering instruction: {self._summarize_difficulty_target(difficulty_target)}",
+                f"Configured difficulty target: {self._summarize_difficulty_target(difficulty_target)}",
                 f"Topic: {topic or 'not specified'}",
                 f"Count: {count}",
                 f"Passage style: {passage_style or 'not specified'}",
-                f"Extra constraints: {self._summarize_kv_dict(extra_constraints or {})}",
-                (
-                    "Required review overrides: "
-                    f"{self._summarize_kv_dict((extra_constraints or {}).get('required_review_overrides') or {})}. "
-                    "These override values are mandatory and should be reflected explicitly in the regenerated question."
-                ),
-                (
-                    "Wrong-option confusion profile: "
-                    f"{self._summarize_value((extra_constraints or {}).get('wrong_option_confusion_profile'))}. "
-                    "The strongest distractor should still read as reasonable and textually relevant, and lose only because "
-                    "it is not the best-supported choice in the original passage."
-                ),
+                f"Extra constraints: {self._summarize_kv_dict(prompt_safe_constraints)}",
                 f"Slots summary: {slots_summary}",
                 (
-                    "Control logic summary: "
+                    "Configured control logic summary: "
                     f"difficulty source={control_summary['difficulty_source']}; "
                     f"passage={control_summary['passage']}; "
                     f"correct option={control_summary['correct_option']}; "
                     f"wrong options={control_summary['wrong_options']}; "
-                    f"special fields={control_summary['special_fields']}. "
-                    "The configured option confusion should affect the full set of wrong options, not just one pairwise combination."
+                    f"special fields={control_summary['special_fields']}."
                 ),
                 (
-                    "Generation logic summary: "
+                    "Configured generation logic summary: "
                     f"core={generation_summary['generation_core']}; "
                     f"processing={generation_summary['processing_type']}; "
                     f"correct logic={generation_summary['correct_logic']}; "
@@ -319,18 +320,14 @@ class PromptBuilderService:
             return "none"
         return "; ".join(f"{key}={self._summarize_value(value)}" for key, value in data.items())
 
+    def _filter_prompt_safe_extra_constraints(self, extra_constraints: dict[str, Any] | None) -> dict[str, Any]:
+        if not extra_constraints:
+            return {}
+        return {
+            key: value
+            for key, value in extra_constraints.items()
+            if str(key) not in self.NON_PROMPTABLE_EXTRA_CONSTRAINT_KEYS
+        }
+
     def _summarize_difficulty_target(self, difficulty_target: str) -> str:
-        if difficulty_target == "easy":
-            return (
-                "keep the main clue explicit, allow one clearer elimination path, and keep distractors related but not overly compressed "
-                "toward the correct answer."
-            )
-        if difficulty_target == "hard":
-            return (
-                "raise abstraction and reasoning depth substantially, reduce overt clue visibility, and make all wrong options stay close to the correct answer. "
-                "All three distractors should remain plausible at first glance, and the strongest distractor should look fully reasonable and fail only because the original passage does not support it best."
-            )
-        return (
-            "keep the core clue available but not overtly obvious, and ensure multiple distractors remain topic-aligned and noticeably close "
-            "to the correct answer, without leaving obvious throwaway options."
-        )
+        return str(difficulty_target or "not specified")

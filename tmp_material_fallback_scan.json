@@ -1,0 +1,122 @@
+[
+  {
+    "article_id": "article_1546cccaa2d740c6a4519712fae411a4",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 2701,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 3
+  },
+  {
+    "article_id": "article_829c4d749e554a8b8e44a2a7516ed4a2",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 2925,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 3
+  },
+  {
+    "article_id": "article_6cd58fd921f3476b913fc90b2a935d59",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 2852,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 3
+  },
+  {
+    "article_id": "article_15ba763b59d5423f98e6b6959c414be3",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 1591,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 3
+  },
+  {
+    "article_id": "article_ea1020e38a7a42d9bbc303b3514781d4",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 2465,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 3
+  },
+  {
+    "article_id": "article_88655c9aabc14d1aac8f35c90de65ff1",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 593,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 3
+  },
+  {
+    "article_id": "article_be44c9c4e5bd48599d515510a88e5306",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 2205,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 5
+  },
+  {
+    "article_id": "article_792b4a872a8c4ac8ad6cfbc089b1bfe2",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 344,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 2
+  },
+  {
+    "article_id": "article_25c2cfcf496a42e8ad9941936868d201",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 385,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 1
+  },
+  {
+    "article_id": "article_7b152eae1d624878a6aaae72129c82ff",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 518,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 2
+  },
+  {
+    "article_id": "article_f64807d5abc849cf810cf29dd0bbcde3",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 706,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 3
+  },
+  {
+    "article_id": "article_74d39f70cea546239f65565255b9e254",
+    "title": "全部导航",
+    "domain": "理论评论",
+    "clean_len": 1951,
+    "generation_mode": "v2_primary",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "candidate_span_count": 2
+  }
+]

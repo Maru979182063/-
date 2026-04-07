@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock
 
@@ -97,6 +98,117 @@ class QuestionGenerationUnitTest(TestCase):
         self.assertIsNone(warning)
         self.assertEqual(decode_request.question_focus, "sentence_order")
         self.assertEqual(decode_request.special_question_types, ["dual_anchor_lock"])
+
+    def test_decode_request_does_not_infer_focus_from_source_question(self) -> None:
+        self.service.source_question_analyzer = Mock()
+        request = QuestionGenerateRequest.model_validate(
+            {
+                "question_focus": "",
+                "difficulty_level": "medium",
+                "count": 1,
+                "source_question": {
+                    "stem": "根据下列材料，下列标题最恰当的一项是？",
+                    "options": {"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+                },
+            }
+        )
+
+        decode_request, warning = self.service._build_decode_request(request)
+
+        self.service.source_question_analyzer.infer_request_target.assert_not_called()
+        self.assertIsNone(warning)
+        self.assertEqual(decode_request.question_focus, "")
+
+    def test_build_request_snapshot_keeps_explicit_pattern_only(self) -> None:
+        request = QuestionGenerateRequest.model_validate(
+            {
+                "question_focus": "sentence_fill",
+                "difficulty_level": "medium",
+                "count": 1,
+            }
+        )
+
+        snapshot = self.service._build_request_snapshot(
+            request,
+            {
+                "question_type": "sentence_fill",
+                "business_subtype": None,
+                "pattern_id": None,
+                "difficulty_target": "medium",
+                "extra_constraints": {},
+            },
+            {"mapping_source": "focus", "selected_special_type": None},
+            request_id="req-1",
+            source_question_analysis={
+                "topic": "topic-x",
+                "business_card_ids": ["card-a"],
+                "query_terms": ["term-a"],
+                "style_summary": {"tone": "formal"},
+                "structure_constraints": {"blank_position": "opening"},
+            },
+            question_card_binding={"question_card_id": "question.card"},
+        )
+
+        self.assertIsNone(snapshot["pattern_id"])
+        self.assertEqual(snapshot["extra_constraints"], {})
+        self.assertEqual(snapshot["source_question_analysis"]["business_card_ids"], ["card-a"])
+
+    def test_build_request_snapshot_keeps_explicit_constraints_without_reference_sidechannel(self) -> None:
+        request = QuestionGenerateRequest.model_validate(
+            {
+                "question_focus": "main_idea",
+                "difficulty_level": "medium",
+                "count": 1,
+                "extra_constraints": {"validator_contract": {"main_idea": {"enforce_alignment": True}}},
+                "source_question": {
+                    "stem": "根据材料选择标题",
+                    "options": {"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+                },
+            }
+        )
+
+        snapshot = self.service._build_request_snapshot(
+            request,
+            {
+                "question_type": "main_idea",
+                "business_subtype": "title_selection",
+                "pattern_id": "pattern.alpha",
+                "difficulty_target": "medium",
+                "extra_constraints": {},
+            },
+            {"mapping_source": "focus", "selected_special_type": None},
+            request_id="req-2",
+            source_question_analysis={
+                "topic": "topic-x",
+                "business_card_ids": ["card-a"],
+                "query_terms": ["term-a"],
+                "style_summary": {"tone": "formal"},
+            },
+            question_card_binding={"question_card_id": "question.card"},
+        )
+
+        self.assertEqual(
+            snapshot["extra_constraints"],
+            {"validator_contract": {"main_idea": {"enforce_alignment": True}}},
+        )
+        self.assertEqual(snapshot["source_question_analysis"]["query_terms"], ["term-a"])
+
+    def test_effective_difficulty_target_does_not_raise_for_reference_question(self) -> None:
+        self.assertEqual(
+            self.service._effective_difficulty_target("easy", use_reference_question=True),
+            "easy",
+        )
+
+    def test_generation_source_has_single_active_definition_for_override_cleanup(self) -> None:
+        file_path = Path("C:/Users/Maru/Documents/agent/prompt_skeleton_service/app/services/question_generation.py")
+        text = file_path.read_text(encoding="utf-8")
+
+        self.assertEqual(text.count("def _build_reference_hard_constraints("), 1)
+        self.assertEqual(text.count("def _legacy_reference_hard_constraint_residuals("), 1)
+        self.assertEqual(text.count("def _refine_material_if_needed("), 1)
+        self.assertEqual(text.count("def _clean_material_text("), 1)
+        self.assertEqual(text.count("def _strip_material_template_labels("), 1)
+        self.assertEqual(text.count("def _needs_material_refinement("), 1)
 
     def test_list_replacement_materials_preserves_question_card_id(self) -> None:
         self.service.material_bridge = Mock()

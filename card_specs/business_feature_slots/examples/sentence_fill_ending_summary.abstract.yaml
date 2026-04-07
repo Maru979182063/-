@@ -17,6 +17,25 @@ feature_signature:
   business_function: summarize_previous_text
   relation_focus: 结尾空句要对前文主线做收束总结
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_fill
+  structure_schema:
+    position: ending
+    function_type: conclusion
+    reference_anchor: none
+    bidirectional_check:
+      previous_valid: true
+      next_valid: false
+    semantic_scope: paragraph_level
+  uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+  legacy_compatibility:
+    pattern_families:
+      - ending_summary
+    legacy_function_type: ending_summary
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true
@@ -37,14 +56,17 @@ slot_projection:
   pattern_candidates: [ending_summary]
   type_slots:
     blank_position: ending
-    function_type: ending_summary
+    function_type: conclusion
     logic_relation: summary
     context_dependency: low
     bidirectional_validation: low
+    reference_anchor: none
     reference_dependency: low
     abstraction_level: medium
+    semantic_scope: paragraph_level
     distractor_modes: [function_mismatch, overgeneralization, topic_shift]
     distractor_strength: medium
+    uniqueness_source: [function_mismatch, scope_mismatch]
   prompt_extras:
     business_feature_card_id: sentence_fill__ending_summary__abstract
     business_feature_card_label: 语句填空-结尾总结前文

@@ -32,6 +32,14 @@ class QuestionReviewService:
     TEXT_MODIFY_ALLOWED_INPUT_FIELDS = {"material_id", "material_policy", "material_text"}
     MANUAL_EDIT_ALLOWED_INPUT_FIELDS = {"manual_patch"}
     MANUAL_EDIT_ALLOWED_PATCH_FIELDS = {"analysis", "answer", "material_text", "options", "stem"}
+    OPTION_PATCH_FIELDS = {"A", "B", "C", "D"}
+    INTERNAL_EXTRA_CONSTRAINT_FIELDS = {
+        "reference_business_cards",
+        "reference_query_terms",
+        "required_review_overrides",
+        "review_instruction",
+        "source_question_style_summary",
+    }
     RENDER_LIKE_FIELDS = {"analysis", "options", "stem"}
     TRUTH_LIKE_FIELDS = {
         "business_subtype",
@@ -63,6 +71,11 @@ class QuestionReviewService:
         requested_action = self._requested_action(request)
         prior_action_context = self._get_latest_action_context(item_id)
         policy = self._build_action_policy(request)
+        self._validate_action_payload_against_item(
+            item=item,
+            action=request.action,
+            control_overrides=request.control_overrides or {},
+        )
         approval_context = (
             self._build_approval_context(item, prior_action_context)
             if request.action in {"approve", "confirm"}
@@ -87,6 +100,10 @@ class QuestionReviewService:
             semantic_class=policy["semantic_class"],
             trust_level=policy["trust_level"],
             audit_reason=policy.get("upgrade_reason"),
+        )
+        self._enforce_action_result_within_policy(
+            effective_action=preliminary_effective_action,
+            diagnostics=diagnostics,
         )
         statuses = action_result.get("statuses", {})
         to_status = statuses.get("review_status", from_status)
@@ -306,31 +323,22 @@ class QuestionReviewService:
         final_audit_reason = audit_reason
 
         if preliminary_effective_action == "minor_edit":
-            if material_boundary_crossed:
-                final_effective_action = "text_modify"
-                final_semantic_class = "material_regenerate"
-                final_trust_level = "low"
-                final_audit_reason = "minor_edit_result_crossed_material_boundary"
-            elif truth_touched:
-                final_effective_action = "question_modify"
-                final_semantic_class = "control_regenerate"
-                final_trust_level = "medium"
-                final_audit_reason = "minor_edit_result_touched_truth_like_fields"
-            else:
-                final_audit_reason = final_audit_reason or "minor_edit_result_within_render_scope"
+            final_audit_reason = (
+                "minor_edit_result_crossed_material_boundary"
+                if material_boundary_crossed
+                else (
+                    "minor_edit_result_touched_truth_like_fields"
+                    if truth_touched
+                    else (final_audit_reason or "minor_edit_result_within_render_scope")
+                )
+            )
         elif preliminary_effective_action == "question_modify":
-            if material_boundary_crossed:
-                final_effective_action = "text_modify"
-                final_semantic_class = "material_regenerate"
-                final_trust_level = "medium"
-                final_audit_reason = "question_modify_result_became_material_driven"
-            elif truth_touched:
-                final_audit_reason = "question_modify_result_touched_truth_like_fields"
-            else:
-                final_audit_reason = "question_modify_result_render_dominant"
+            final_audit_reason = (
+                "question_modify_result_became_material_driven"
+                if material_boundary_crossed
+                else ("question_modify_result_touched_truth_like_fields" if truth_touched else "question_modify_result_within_scope")
+            )
         elif preliminary_effective_action == "text_modify":
-            final_effective_action = "text_modify"
-            final_semantic_class = "material_regenerate"
             if material_boundary_crossed and truth_touched:
                 final_trust_level = "low"
                 final_audit_reason = "text_modify_result_changed_material_and_truth_like_fields"
@@ -341,7 +349,6 @@ class QuestionReviewService:
                 final_trust_level = "low"
                 final_audit_reason = "text_modify_result_missing_material_boundary_change"
         elif preliminary_effective_action == "manual_edit":
-            final_effective_action = "manual_edit"
             if material_boundary_crossed and truth_touched:
                 final_semantic_class = "manual_override_high_risk"
                 final_trust_level = "low"
@@ -400,9 +407,123 @@ class QuestionReviewService:
         fields: list[str] = []
         for key in sorted(control_overrides.keys()):
             fields.append(key)
+            if key in {"extra_constraints", "type_slots"} and isinstance(control_overrides[key], dict):
+                fields.extend(f"{key}.{sub_key}" for sub_key in sorted(control_overrides[key].keys()))
             if key == "manual_patch" and isinstance(control_overrides[key], dict):
                 fields.extend(f"manual_patch.{sub_key}" for sub_key in sorted(control_overrides[key].keys()))
+                option_patch = control_overrides[key].get("options")
+                if isinstance(option_patch, dict):
+                    fields.extend(f"manual_patch.options.{sub_key}" for sub_key in sorted(option_patch.keys()))
         return fields
+
+    def _validate_action_payload_against_item(
+        self,
+        *,
+        item: dict[str, Any],
+        action: str,
+        control_overrides: dict[str, Any],
+    ) -> None:
+        request_snapshot = item.get("request_snapshot") or {}
+        if action == "question_modify":
+            allowed_extra_constraint_keys = {
+                str(key)
+                for key in (request_snapshot.get("extra_constraints") or {}).keys()
+                if str(key) not in self.INTERNAL_EXTRA_CONSTRAINT_FIELDS
+            }
+            allowed_type_slot_keys = {str(key) for key in (request_snapshot.get("type_slots") or {}).keys()}
+            self._ensure_nested_override_fields(
+                action=action,
+                parent_field="extra_constraints",
+                payload=control_overrides.get("extra_constraints"),
+                allowed_fields=allowed_extra_constraint_keys,
+            )
+            self._ensure_nested_override_fields(
+                action=action,
+                parent_field="type_slots",
+                payload=control_overrides.get("type_slots"),
+                allowed_fields=allowed_type_slot_keys,
+            )
+            return
+        if action == "manual_edit":
+            manual_patch = control_overrides.get("manual_patch")
+            if manual_patch is None:
+                return
+            if not isinstance(manual_patch, dict):
+                raise DomainError(
+                    "manual_edit requires manual_patch to be an object.",
+                    status_code=422,
+                    details={"action": action, "field": "manual_patch"},
+                )
+            options_patch = manual_patch.get("options")
+            if options_patch is None:
+                return
+            if not isinstance(options_patch, dict):
+                raise DomainError(
+                    "manual_edit.options must be an object keyed by option letter.",
+                    status_code=422,
+                    details={"action": action, "field": "manual_patch.options"},
+                )
+            unknown_option_keys = sorted(set(options_patch.keys()) - self.OPTION_PATCH_FIELDS)
+            if unknown_option_keys:
+                raise DomainError(
+                    "manual_edit.options only accepts A/B/C/D.",
+                    status_code=422,
+                    details={
+                        "action": action,
+                        "field": "manual_patch.options",
+                        "disallowed_input_fields": [f"manual_patch.options.{key}" for key in unknown_option_keys],
+                    },
+                )
+
+    def _ensure_nested_override_fields(
+        self,
+        *,
+        action: str,
+        parent_field: str,
+        payload: Any,
+        allowed_fields: set[str],
+    ) -> None:
+        if payload is None:
+            return
+        if not isinstance(payload, dict):
+            raise DomainError(
+                f"{action} requires {parent_field} to be an object.",
+                status_code=422,
+                details={"action": action, "field": parent_field},
+            )
+        disallowed_fields = sorted(set(payload.keys()) - set(allowed_fields))
+        if disallowed_fields:
+            raise DomainError(
+                f"{action} only accepts predeclared nested fields in {parent_field}.",
+                status_code=422,
+                details={
+                    "action": action,
+                    "field": parent_field,
+                    "allowed_input_fields": sorted(allowed_fields),
+                    "disallowed_input_fields": [f"{parent_field}.{field}" for field in disallowed_fields],
+                },
+            )
+
+    def _enforce_action_result_within_policy(
+        self,
+        *,
+        effective_action: str,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        if effective_action == "minor_edit" and (
+            diagnostics["truth_touched"] or diagnostics["material_boundary_crossed"]
+        ):
+            raise DomainError(
+                "minor_edit must stay within render scope and cannot modify truth-like or material-boundary fields.",
+                status_code=422,
+                details=diagnostics,
+            )
+        if effective_action == "question_modify" and diagnostics["material_boundary_crossed"]:
+            raise DomainError(
+                "question_modify cannot cross the material boundary; use text_modify instead.",
+                status_code=422,
+                details=diagnostics,
+            )
 
     def _ensure_allowed_input_fields(
         self,

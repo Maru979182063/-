@@ -12,6 +12,7 @@ class ArticleStatus(StrEnum):
 class CandidateSpanStatus(StrEnum):
     NEW = "new"
     TAGGED = "tagged"
+    GRAY_HOLD = "gray_hold"
     REJECTED = "rejected"
     PROMOTED = "promoted"
 

@@ -6,6 +6,7 @@ card_meta:
   description: 先判断首句与尾句合法性，再锁定整体顺序的业务卡。
   mother_family_id: sentence_order
   enabled: true
+  card_role: supporting_constraint_card
   source: textbook_business_card
   tags:
     - 语句排序题
@@ -20,6 +21,41 @@ feature_signature:
   typical_formats:
     - 将以上几个句子重新排列，语序正确的是……
     - 将以下几个句子重新排列，语序正确的是……
+
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_order
+  structure_schema:
+    sentence_count:
+      mode: fixed
+      value: 6
+    sentence_roles:
+      preferred:
+        - thesis
+        - definition
+        - conclusion
+        - countermeasure
+    head_constraints:
+      must_not_have:
+        - backward_reference
+        - mid_transition
+      preferred_roles:
+        - thesis
+        - definition
+    tail_constraints:
+      must_have:
+        - closure
+      preferred_roles:
+        - conclusion
+        - countermeasure
+    binding_pairs:
+      - local_dependency
+    ordering_logic:
+      - thesis -> explanation -> conclusion
+      - problem -> analysis -> solution
+  uniqueness_source:
+    - closure_position
+    - reference_dependency
 
 retrieval_profile:
   hard_filters:
@@ -51,6 +87,7 @@ slot_projection:
   pattern_candidates:
     - dual_anchor_lock
   type_slots:
+    sentence_count: 6
     opening_anchor_type: explicit_topic
     opening_signal_strength: high
     middle_structure_type: local_binding
@@ -63,7 +100,18 @@ slot_projection:
       - wrong_closing
       - local_binding_break
     distractor_strength: high
+    sentence_roles: [thesis, conclusion]
+    head_constraints:
+      must_not_have: [backward_reference, mid_transition]
+      preferred_roles: [thesis, definition]
+    tail_constraints:
+      must_have: [closure]
+      preferred_roles: [conclusion, countermeasure]
+    binding_pairs: [local_dependency]
+    ordering_logic: thesis -> explanation -> conclusion
+    uniqueness_source: [closure_position, reference_dependency]
   prompt_extras:
     business_feature_card_id: sentence_order__head_tail_lock__abstract
     business_feature_card_label: 语句排序-首尾句锁定
     business_core_rule: 先定首尾句，再补中段顺序
+    supporting_constraint_only: true

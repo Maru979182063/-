@@ -17,6 +17,26 @@ feature_signature:
   business_function: lead_next
   relation_focus: 中间空句主要负责把话题引向后文展开
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_fill
+  structure_schema:
+    position: middle
+    function_type: lead_next
+    reference_anchor: none
+    bidirectional_check:
+      previous_valid: false
+      next_valid: true
+    semantic_scope: sentence_level
+  uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+  legacy_compatibility:
+    pattern_families:
+      - middle_focus_shift
+      - bridge_transition
+    legacy_function_type: bridge
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true
@@ -34,17 +54,20 @@ retrieval_profile:
 slot_projection:
   question_type: sentence_fill
   business_subtype: null
-  pattern_candidates: [bridge_transition, middle_focus_shift]
+  pattern_candidates: [middle_focus_shift, bridge_transition]
   type_slots:
     blank_position: middle
-    function_type: bridge
-    logic_relation: transition
+    function_type: lead_next
+    logic_relation: focus_shift
     context_dependency: medium
     bidirectional_validation: low
+    reference_anchor: none
     reference_dependency: low
     abstraction_level: medium
+    semantic_scope: sentence_level
     distractor_modes: [weak_forward_link, wrong_direction, topic_shift]
     distractor_strength: high
+    uniqueness_source: [function_mismatch, scope_mismatch]
   prompt_extras:
     business_feature_card_id: sentence_fill__middle_lead_next__abstract
     business_feature_card_label: 语句填空-中间启下

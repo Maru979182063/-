@@ -6,6 +6,7 @@ card_meta:
   description: 依靠时间脉络、步骤顺序、动作先后来判断句群顺序的业务卡。
   mother_family_id: sentence_order
   enabled: true
+  card_role: weak_legacy
   source: textbook_business_card
   tags:
     - 语句排序题
@@ -19,6 +20,42 @@ feature_signature:
   relation_focus: 判断时间推进与步骤先后
   typical_formats:
     - 将以上几个句子重新排列，语序正确的是……
+
+schema_alignment:
+  schema_status: weak_legacy
+  canonical_card_type: sentence_order
+  applicability_notes:
+    - 仅适用于步骤链、流程链或时间推进非常显性的窄变体
+    - 不再作为语句排序主卡思路，只保留为补充型 legacy 卡
+  structure_schema:
+    sentence_count:
+      mode: fixed
+      value: 6
+    sentence_roles:
+      preferred:
+        - transition
+        - explanation
+        - conclusion
+    head_constraints:
+      must_not_have:
+        - backward_reference
+      preferred_roles:
+        - definition
+        - thesis
+    tail_constraints:
+      must_have:
+        - closure
+      preferred_roles:
+        - conclusion
+    binding_pairs:
+      - temporal_connector
+      - action_sequence
+    ordering_logic:
+      - step -> step -> result
+      - time_anchor -> process -> closure
+  uniqueness_source:
+    - reference_dependency
+    - closure_position
 
 retrieval_profile:
   hard_filters:
@@ -54,6 +91,7 @@ slot_projection:
     - carry_parallel_expand
     - dual_anchor_lock
   type_slots:
+    sentence_count: 6
     opening_anchor_type: explicit_topic
     opening_signal_strength: medium
     middle_structure_type: parallel_expansion
@@ -66,7 +104,18 @@ slot_projection:
       - block_swap
       - wrong_closing
     distractor_strength: high
+    sentence_roles: [transition, explanation, conclusion]
+    head_constraints:
+      must_not_have: [backward_reference]
+      preferred_roles: [definition, thesis]
+    tail_constraints:
+      must_have: [closure]
+      preferred_roles: [conclusion]
+    binding_pairs: [temporal_connector, action_sequence]
+    ordering_logic: step -> step -> result
+    uniqueness_source: [reference_dependency, closure_position]
   prompt_extras:
     business_feature_card_id: sentence_order__timeline_action_sequence__abstract
     business_feature_card_label: 语句排序-时间与行动顺序
     business_core_rule: 先看时间或步骤线，再排局部承接
+    schema_warning: weak_legacy_variant_only

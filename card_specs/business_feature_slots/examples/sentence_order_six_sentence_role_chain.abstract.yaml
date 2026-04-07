@@ -1,0 +1,160 @@
+schema_version: business_slot.v1
+
+card_meta:
+  business_card_id: sentence_order__six_sentence_role_chain__abstract
+  display_name: 语句排序-六句角色链主卡
+  description: 固定6句的正式排序主卡，以首句合法、尾句收束、角色链完整和绑定不被破坏来保证唯一顺序。
+  mother_family_id: sentence_order
+  enabled: true
+  card_role: primary_card
+  source: textbook_business_card
+  tags:
+    - 语句排序题
+    - 六句固定
+    - 角色链
+    - 唯一性
+
+feature_signature:
+  relation_type: 六句角色链排序
+  sentence_order_scoring_mode: six_sentence_role_chain
+  relation_focus: 六句固定前提下，先判首句、再判尾句、再判角色链、最后校验绑定不被破坏
+  typical_formats:
+    - 将以上6个句子重新排列，语序正确的是……
+  business_axes:
+    - sentence_count
+    - sentence_roles
+    - head_constraints
+    - tail_constraints
+    - binding_pairs
+    - ordering_logic
+    - uniqueness_source
+  solving_focus:
+    role_chain_examples:
+      - thesis -> explanation -> reasoning -> conclusion
+      - problem -> analysis -> solution
+      - definition -> explanation -> example -> conclusion
+    uniqueness_checks:
+      - 首句是否合法
+      - 尾句是否承担收束
+      - 中间角色是否形成完整链
+      - 不可交换绑定是否被破坏
+  extraction_hints:
+    require_explicit_marker: false
+    require_complete_meaning: true
+    min_sentence_count: 6
+    max_sentence_count: 6
+    preferred_paragraph_window:
+      - 1
+
+schema_alignment:
+  schema_status: primary_aligned_v2
+  canonical_card_type: sentence_order
+  structure_schema:
+    sentence_count:
+      mode: fixed
+      value: 6
+    sentence_roles:
+      preferred:
+        - thesis
+        - definition
+        - explanation
+        - reasoning
+        - transition
+        - example
+        - conclusion
+        - countermeasure
+    head_constraints:
+      must_not_have:
+        - backward_reference
+        - mid_transition
+      preferred_roles:
+        - thesis
+        - definition
+    tail_constraints:
+      must_have:
+        - closure
+      preferred_roles:
+        - conclusion
+        - countermeasure
+    binding_pairs:
+      - pronoun_reference
+      - turning_connector
+      - parallel_connector
+      - cause_result_binding
+    ordering_logic:
+      - thesis -> explanation -> reasoning -> conclusion
+      - problem -> analysis -> solution
+      - definition -> explanation -> example -> conclusion
+  uniqueness_source:
+    - role_order_conflict
+    - reference_dependency
+    - closure_position
+    - binding_violation
+
+retrieval_profile:
+  hard_filters:
+    require_complete_unit: true
+    require_sentence_block_group: true
+    fixed_sentence_count: 6
+  soft_filters:
+    preferred_document_genres:
+      - 科普文
+      - 说明文
+      - 评论文
+    preferred_material_structures:
+      - 观点-论证
+      - 问题-对策
+      - 现象-分析
+      - 并列推进
+    preferred_markers:
+      - 因此
+      - 所以
+      - 然而
+      - 同时
+      - 此外
+  ranking_weights:
+    relation_match: 0.20
+    structural_match: 0.34
+    discourse_progression_strength: 0.16
+    context_closure_score: 0.10
+    unique_opener_score: 0.10
+    binding_pair_count: 0.10
+
+slot_projection:
+  question_type: sentence_order
+  business_subtype: null
+  pattern_candidates:
+    - dual_anchor_lock
+    - carry_parallel_expand
+    - viewpoint_reason_action
+    - problem_solution_case_blocks
+  type_slots:
+    sentence_count: 6
+    opening_anchor_type: explicit_topic
+    opening_signal_strength: high
+    middle_structure_type: local_binding
+    local_binding_strength: high
+    closing_anchor_type: conclusion
+    closing_signal_strength: high
+    block_order_complexity: high
+    distractor_modes:
+      - wrong_opening
+      - local_binding_break
+      - wrong_closing
+      - block_swap
+    distractor_strength: high
+    sentence_roles: [thesis, explanation, reasoning, conclusion]
+    head_constraints:
+      must_not_have: [backward_reference, mid_transition]
+      preferred_roles: [thesis, definition]
+    tail_constraints:
+      must_have: [closure]
+      preferred_roles: [conclusion, countermeasure]
+    binding_pairs: [pronoun_reference, turning_connector, cause_result_binding]
+    ordering_logic: thesis -> explanation -> reasoning -> conclusion
+    uniqueness_source: [role_order_conflict, reference_dependency, closure_position, binding_violation]
+  prompt_extras:
+    business_feature_card_id: sentence_order__six_sentence_role_chain__abstract
+    business_feature_card_label: 语句排序-六句角色链主卡
+    business_core_rule: 正式排序题固定6句，答案唯一性来自角色链、首尾合法性与绑定不被破坏
+    canonical_role_chain_card: true

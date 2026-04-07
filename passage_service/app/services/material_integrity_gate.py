@@ -16,12 +16,19 @@ class MaterialIntegrityGate:
 
     def evaluate(self, *, text: str, paragraph_count: int, sentence_count: int) -> dict[str, Any]:
         signals = self._collect_signals(text=text, paragraph_count=paragraph_count, sentence_count=sentence_count)
+        evidence_flags = self._evidence_flags(signals)
         hard_fail_reasons = self._hard_fail_reasons(signals)
         if hard_fail_reasons:
             return {
+                "admission_status": "reject",
+                "admission_reason": ",".join(hard_fail_reasons),
+                "structural_complete": False,
+                "requires_manual_review": False,
+                "evidence_flags": evidence_flags,
                 "rule_passed": False,
                 "needs_llm_review": False,
                 "llm_passed": None,
+                "suitable_for_material": False,
                 "is_complete": False,
                 "is_truncated": signals["is_truncated_signal"],
                 "is_context_dependent": signals["starts_with_context_dependency"],
@@ -31,23 +38,53 @@ class MaterialIntegrityGate:
             }
 
         if not self._needs_llm_review(signals):
+            if not self._can_rule_allow_directly(signals):
+                return {
+                    "admission_status": "gray_hold",
+                    "admission_reason": self._rule_gray_hold_reason(signals),
+                    "structural_complete": self._rule_structural_complete(signals),
+                    "requires_manual_review": True,
+                    "evidence_flags": evidence_flags,
+                    "rule_passed": True,
+                    "needs_llm_review": False,
+                    "llm_passed": None,
+                    "suitable_for_material": None,
+                    "is_complete": True,
+                    "is_truncated": False,
+                    "is_context_dependent": False,
+                    "risk_level": "medium",
+                    "reason": self._rule_gray_hold_reason(signals),
+                    "signals": signals,
+                }
             return {
+                "admission_status": "allow",
+                "admission_reason": "rule_direct_allow",
+                "structural_complete": True,
+                "requires_manual_review": False,
+                "evidence_flags": evidence_flags,
                 "rule_passed": True,
                 "needs_llm_review": False,
                 "llm_passed": None,
+                "suitable_for_material": True,
                 "is_complete": True,
                 "is_truncated": False,
                 "is_context_dependent": False,
                 "risk_level": "low",
-                "reason": "passed_rule_gate",
+                "reason": "rule_direct_allow",
                 "signals": signals,
             }
 
         if not self.config.get("enabled") or not self.provider.is_enabled():
             return {
+                "admission_status": "gray_hold",
+                "admission_reason": "llm_review_deferred_gray_hold",
+                "structural_complete": self._rule_structural_complete(signals),
+                "requires_manual_review": True,
+                "evidence_flags": evidence_flags,
                 "rule_passed": True,
                 "needs_llm_review": True,
                 "llm_passed": None,
+                "suitable_for_material": None,
                 "is_complete": True,
                 "is_truncated": False,
                 "is_context_dependent": False,
@@ -57,16 +94,31 @@ class MaterialIntegrityGate:
             }
 
         llm_result = self._llm_review(text=text, paragraph_count=paragraph_count, sentence_count=sentence_count, signals=signals)
+        suitable_for_material = bool(llm_result.get("suitable_for_material"))
         llm_passed = bool(
             llm_result.get("is_complete")
             and not llm_result.get("is_truncated")
             and not llm_result.get("is_context_dependent")
-            and llm_result.get("suitable_for_material", False)
+            and suitable_for_material
         )
+        admission_status = "allow" if llm_passed else "reject"
+        admission_reason = llm_result.get("reason", "llm_review_completed")
+        if not suitable_for_material:
+            admission_reason = "llm_unsuitable_for_material"
         return {
+            "admission_status": admission_status,
+            "admission_reason": admission_reason,
+            "structural_complete": bool(
+                llm_result.get("is_complete")
+                and not llm_result.get("is_truncated")
+                and not llm_result.get("is_context_dependent")
+            ),
+            "requires_manual_review": False,
+            "evidence_flags": evidence_flags,
             "rule_passed": True,
             "needs_llm_review": True,
             "llm_passed": llm_passed,
+            "suitable_for_material": suitable_for_material,
             "is_complete": bool(llm_result.get("is_complete")),
             "is_truncated": bool(llm_result.get("is_truncated")),
             "is_context_dependent": bool(llm_result.get("is_context_dependent")),
@@ -74,6 +126,53 @@ class MaterialIntegrityGate:
             "reason": llm_result.get("reason", "llm_review_completed"),
             "signals": signals,
         }
+
+    def _rule_structural_complete(self, signals: dict[str, Any]) -> bool:
+        return bool(not signals["is_truncated_signal"] and not signals["starts_with_context_dependency"])
+
+    def _can_rule_allow_directly(self, signals: dict[str, Any]) -> bool:
+        if signals["is_truncated_signal"] or signals["starts_with_context_dependency"]:
+            return False
+        if signals["starts_with_soft_dependency"]:
+            return False
+        if signals["long_without_closure"]:
+            return False
+        if not signals["has_summary_closure"] and (
+            signals["paragraph_count"] >= 2 or signals["sentence_count"] >= 4
+        ):
+            return False
+        return True
+
+    def _rule_gray_hold_reason(self, signals: dict[str, Any]) -> str:
+        if signals["starts_with_soft_dependency"]:
+            return "rule_gray_hold_soft_dependency"
+        if signals["long_without_closure"]:
+            return "rule_gray_hold_no_closure"
+        if not signals["has_summary_closure"] and (
+            signals["paragraph_count"] >= 2 or signals["sentence_count"] >= 4
+        ):
+            return "rule_gray_hold_structural_uncertainty"
+        return "rule_gray_hold_structural_uncertainty"
+
+    def _evidence_flags(self, signals: dict[str, Any]) -> list[str]:
+        flags: list[str] = []
+        if not signals["terminal_punct"]:
+            flags.append("missing_terminal_punctuation")
+        if signals["ellipsis_truncation"]:
+            flags.append("ellipsis_truncation")
+        if signals["trailing_fragment"]:
+            flags.append("trailing_fragment")
+        if signals["half_clause_tail"]:
+            flags.append("half_clause_tail")
+        if signals["starts_with_context_dependency"]:
+            flags.append("starts_with_context_dependency")
+        if signals["starts_with_soft_dependency"]:
+            flags.append("starts_with_soft_dependency")
+        if signals["long_without_closure"]:
+            flags.append("long_without_closure")
+        if not signals["has_summary_closure"]:
+            flags.append("no_summary_closure")
+        return flags
 
     def _collect_signals(self, *, text: str, paragraph_count: int, sentence_count: int) -> dict[str, Any]:
         stripped = text.strip()

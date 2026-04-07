@@ -9,6 +9,8 @@ from app.schemas.item import QuestionItem
 
 
 class MaterialPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     allow_reuse: bool = True
     cooldown_days: int = 0
     preferred_document_genres: list[str] = Field(default_factory=list)
@@ -17,6 +19,8 @@ class MaterialPolicy(BaseModel):
 
 
 class SourceQuestionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     passage: str | None = None
     stem: str
     options: dict[str, str] = Field(default_factory=dict)
@@ -47,7 +51,7 @@ class SourceQuestionParseResponse(BaseModel):
 
 
 class QuestionGenerateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     question_card_id: str | None = None
     question_focus: str = Field(validation_alias=AliasChoices("question_focus", "\u95ee\u9898\u8003\u70b9"))
@@ -159,6 +163,8 @@ class QuestionGenerationBatchResponse(BaseModel):
 
 
 class QuestionReviewActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     action: Literal["minor_edit", "question_modify", "text_modify", "manual_edit", "approve", "confirm", "discard"]
     requested_action: str | None = None
     instruction: str | None = None

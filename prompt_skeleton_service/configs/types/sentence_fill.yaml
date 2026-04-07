@@ -39,6 +39,54 @@ skeleton:
   operation_type: fill_by_function
   target_type: valid_bridge_sentence
 
+structure_schema:
+  position:
+    type: enum
+    values:
+      - opening
+      - middle
+      - ending
+      - inserted
+      - mixed
+  function_type:
+    type: enum
+    values:
+      - summary
+      - topic_intro
+      - carry_previous
+      - lead_next
+      - bridge
+      - reference_summary
+      - countermeasure
+      - conclusion
+  reference_anchor:
+    type: optional
+  bidirectional_check:
+    previous_valid: bool
+    next_valid: bool
+  semantic_scope:
+    type: enum
+    values:
+      - local
+      - sentence_level
+      - paragraph_level
+  uniqueness_source:
+    type: enum_list
+    values:
+      - function_mismatch
+      - reference_failure
+      - scope_mismatch
+
+legacy_slot_mapping:
+  function_type:
+    opening_summary: summary
+    middle_explanation: carry_previous
+    middle_focus_shift: lead_next
+    ending_summary: conclusion
+    ending_elevation: conclusion
+    inserted_reference: reference_summary
+    comprehensive_match: bridge
+
 slot_schema:
   blank_position:
     type: string
@@ -57,14 +105,14 @@ slot_schema:
     required: false
     default: bridge
     allowed:
-      - opening_summary
+      - summary
+      - topic_intro
+      - carry_previous
+      - lead_next
       - bridge
-      - middle_explanation
-      - middle_focus_shift
-      - ending_summary
-      - ending_elevation
-      - inserted_reference
-      - comprehensive_match
+      - reference_summary
+      - countermeasure
+      - conclusion
     description: 空位承担的段落功能
 
   logic_relation:
@@ -77,10 +125,17 @@ slot_schema:
       - explanation
       - focus_shift
       - summary
+      - action
       - elevation
       - reference_match
       - multi_constraint
     description: 与上下文的逻辑关系
+
+  reference_anchor:
+    type: string
+    required: false
+    default: none
+    description: 当前空句是否依赖明确指代锚点或概念回指
 
   context_dependency:
     type: string
@@ -122,6 +177,16 @@ slot_schema:
       - high
     description: 正确项抽象层级
 
+  semantic_scope:
+    type: string
+    required: false
+    default: sentence_level
+    allowed:
+      - local
+      - sentence_level
+      - paragraph_level
+    description: 空句作用范围是局部衔接还是整段统摄
+
   distractor_modes:
     type: array
     required: false
@@ -152,19 +217,36 @@ slot_schema:
       - high
     description: 错误项迷惑强度
 
+  uniqueness_source:
+    type: array
+    required: false
+    default:
+      - function_mismatch
+      - scope_mismatch
+    allowed:
+      - function_mismatch
+      - reference_failure
+      - scope_mismatch
+    description: 正确答案唯一性的主要结构来源
+
 default_slots:
   blank_position: middle
   function_type: bridge
   logic_relation: continuation
   context_dependency: medium
   bidirectional_validation: medium
+  reference_anchor: none
   reference_dependency: low
   abstraction_level: medium
+  semantic_scope: sentence_level
   distractor_modes:
     - function_mismatch
     - weak_forward_link
     - topic_shift
   distractor_strength: high
+  uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 
 fewshot_policy:
   enabled: true
@@ -180,15 +262,17 @@ default_fewshot:
 
 patterns:
   - pattern_id: opening_summary
-    pattern_name: 段首总起型
+    pattern_name: 段首引入/总起型
     enabled: true
     match_rules:
       blank_position:
         - opening
       function_type:
-        - opening_summary
+        - summary
+        - topic_intro
       logic_relation:
         - summary
+        - transition
       abstraction_level:
         - medium
         - high
@@ -233,7 +317,8 @@ patterns:
       reasoning_depth:
         by_slot:
           function_type:
-            opening_summary: 0.46
+            summary: 0.46
+            topic_intro: 0.42
       distractor_similarity:
         by_slot:
           distractor_strength:
@@ -306,15 +391,16 @@ patterns:
             high: 0.70
 
   - pattern_id: middle_focus_shift
-    pattern_name: 中间承接聚焦型
+    pattern_name: 中间启下聚焦型
     enabled: true
     match_rules:
       blank_position:
         - middle
       function_type:
-        - middle_focus_shift
+        - lead_next
       logic_relation:
         - focus_shift
+        - transition
       context_dependency:
         - high
 
@@ -365,15 +451,16 @@ patterns:
             high: 0.82
 
   - pattern_id: middle_explanation
-    pattern_name: 中间解释型
+    pattern_name: 中间承上解释型
     enabled: true
     match_rules:
       blank_position:
         - middle
       function_type:
-        - middle_explanation
+        - carry_previous
       logic_relation:
         - explanation
+        - continuation
 
     control_logic:
       difficulty_source: 概念解释功能
@@ -424,15 +511,17 @@ patterns:
             high: 0.62
 
   - pattern_id: ending_summary
-    pattern_name: 尾句总结型
+    pattern_name: 尾句收束/对策型
     enabled: true
     match_rules:
       blank_position:
         - ending
       function_type:
-        - ending_summary
+        - conclusion
+        - countermeasure
       logic_relation:
         - summary
+        - action
 
     control_logic:
       difficulty_source: 整段主旨概括
@@ -486,7 +575,7 @@ patterns:
       title: 语句填空题示例-尾句总结型
       fit_slots:
         blank_position: ending
-        function_type: ending_summary
+        function_type: conclusion
         logic_relation: summary
         abstraction_level: medium
       input_brief: >
@@ -511,7 +600,7 @@ patterns:
       blank_position:
         - ending
       function_type:
-        - ending_elevation
+        - conclusion
       logic_relation:
         - elevation
       abstraction_level:
@@ -571,7 +660,7 @@ patterns:
       blank_position:
         - inserted
       function_type:
-        - inserted_reference
+        - reference_summary
       logic_relation:
         - reference_match
       reference_dependency:
@@ -630,7 +719,7 @@ patterns:
       title: 语句填空题示例-定位插入型
       fit_slots:
         blank_position: inserted
-        function_type: inserted_reference
+        function_type: reference_summary
         logic_relation: reference_match
         reference_dependency: high
         bidirectional_validation: high
@@ -656,7 +745,8 @@ patterns:
       blank_position:
         - mixed
       function_type:
-        - comprehensive_match
+        - bridge
+        - reference_summary
       logic_relation:
         - multi_constraint
       context_dependency:

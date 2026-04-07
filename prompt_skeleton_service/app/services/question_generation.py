@@ -71,6 +71,13 @@ class QuestionGenerationService:
     MAX_ALIGNMENT_RETRIES = 2
     MAX_QUALITY_REPAIR_RETRIES = 2
     RACE_CANDIDATE_COUNT = 2
+    INTERNAL_EXTRA_CONSTRAINT_FIELDS = {
+        "reference_business_cards",
+        "reference_query_terms",
+        "required_review_overrides",
+        "review_instruction",
+        "source_question_style_summary",
+    }
     def __init__(
         self,
         *,
@@ -364,29 +371,7 @@ class QuestionGenerationService:
         selected_special_types = [item for item in (request.special_question_types or []) if str(item).strip()]
         if current_focus.lower() in {"select", "auto"} or current_focus in {"不指定", "不指定（自动匹配）", "请选择"}:
             current_focus = ""
-        if current_focus or selected_special_types:
-            return request.to_dify_form_input(), None
-        inferred = self.source_question_analyzer.infer_request_target(request.source_question)
-        if not inferred:
-            return request.to_dify_form_input(), None
-
-        target_focus = self._focus_value_for_target(
-            question_type=str(inferred.get("question_type") or ""),
-            business_subtype=inferred.get("business_subtype"),
-        )
-        if not target_focus:
-            return request.to_dify_form_input(), None
-
-        return (
-            DifyFormInput(
-                question_focus=target_focus,
-                difficulty_level=request.difficulty_level,
-                text_direction=request.text_direction,
-                special_question_types=[],
-                count=request.count,
-            ),
-            f"Reference question auto-filled form selection to {target_focus}.",
-        )
+        return request.to_dify_form_input(), None
 
     @staticmethod
     def _focus_value_for_target(*, question_type: str, business_subtype: str | None) -> str | None:
@@ -1213,14 +1198,7 @@ class QuestionGenerationService:
         merged_extra_constraints = deepcopy(standard_request.get("extra_constraints") or {})
         if request.extra_constraints:
             merged_extra_constraints.update(request.extra_constraints)
-        if source_question_analysis:
-            merged_extra_constraints.setdefault("source_question_style_summary", deepcopy(source_question_analysis.get("style_summary") or {}))
-            merged_extra_constraints.setdefault("reference_business_cards", deepcopy(source_question_analysis.get("business_card_ids") or []))
-            merged_extra_constraints.setdefault("reference_query_terms", deepcopy(source_question_analysis.get("query_terms") or []))
-        resolved_pattern_id = standard_request.get("pattern_id") or self._resolve_reference_pattern_id(
-            question_type=standard_request["question_type"],
-            source_question_analysis=source_question_analysis,
-        )
+        resolved_pattern_id = standard_request.get("pattern_id")
         return {
             "request_id": request_id,
             "question_type": standard_request["question_type"],
@@ -1369,36 +1347,6 @@ class QuestionGenerationService:
         return str(path)
 
     def _resolve_reference_pattern_id(self, *, question_type: str, source_question_analysis: dict) -> str | None:
-        if not source_question_analysis:
-            return None
-        structure_constraints = source_question_analysis.get("structure_constraints") or {}
-        business_card_ids = source_question_analysis.get("business_card_ids") or []
-        if question_type == "sentence_fill":
-            blank_position = str(structure_constraints.get("blank_position") or "")
-            function_type = str(structure_constraints.get("function_type") or "")
-            if blank_position == "opening":
-                return "opening_summary"
-            if blank_position == "ending":
-                return "ending_summary"
-            if function_type in {"carry_previous", "lead_next", "bridge_both_sides"}:
-                return "bridge_transition"
-            return "comprehensive_multi_match"
-        if question_type == "sentence_order":
-            logic_modes = set(structure_constraints.get("logic_modes") or [])
-            if any(
-                card_id in business_card_ids
-                for card_id in (
-                    "sentence_order__head_tail_lock__abstract",
-                    "sentence_order__head_tail_logic__abstract",
-                )
-            ):
-                return "dual_anchor_lock"
-            if "timeline_sequence" in logic_modes or "action_sequence" in logic_modes:
-                return "carry_parallel_expand"
-            if "problem_solution" in logic_modes:
-                return "problem_solution_case_blocks"
-            if "viewpoint_explanation" in logic_modes:
-                return "viewpoint_reason_action"
         return None
 
     def _apply_control_overrides(self, request_snapshot: dict, control_overrides: dict, instruction: str | None) -> dict:
@@ -1408,12 +1356,11 @@ class QuestionGenerationService:
         for transient_key in ("material_id", "material_text", "manual_patch"):
             snapshot["type_slots"].pop(transient_key, None)
 
-        reserved_keys = {
+        allowed_top_level_keys = {
             "question_type",
             "business_subtype",
             "pattern_id",
             "difficulty_target",
-            "difficulty_raise_factor",
             "material_id",
             "material_text",
             "manual_patch",
@@ -1425,24 +1372,53 @@ class QuestionGenerationService:
             "fewshot_mode",
             "material_policy",
         }
+        unexpected_top_level_keys = sorted(set(control_overrides.keys()) - allowed_top_level_keys)
+        if unexpected_top_level_keys:
+            raise DomainError(
+                "Review control overrides contain unsupported fields.",
+                status_code=422,
+                details={"disallowed_input_fields": unexpected_top_level_keys},
+            )
         for key in ("question_type", "business_subtype", "pattern_id", "difficulty_target", "topic", "passage_style", "use_fewshot", "fewshot_mode", "material_policy"):
             if key in control_overrides:
                 snapshot[key] = control_overrides[key]
 
-        if "extra_constraints" in control_overrides and isinstance(control_overrides["extra_constraints"], dict):
-            snapshot["extra_constraints"].update(control_overrides["extra_constraints"])
-        if "type_slots" in control_overrides and isinstance(control_overrides["type_slots"], dict):
-            snapshot["type_slots"].update(control_overrides["type_slots"])
-
-        direct_slot_overrides = {key: value for key, value in control_overrides.items() if key not in reserved_keys}
-        snapshot["type_slots"].update(direct_slot_overrides)
-
-        if control_overrides:
-            snapshot["extra_constraints"]["required_review_overrides"] = {
-                key: value
-                for key, value in control_overrides.items()
-                if key not in {"material_id"}
+        if "extra_constraints" in control_overrides:
+            if not isinstance(control_overrides["extra_constraints"], dict):
+                raise DomainError(
+                    "Review extra_constraints overrides must be an object.",
+                    status_code=422,
+                    details={"field": "extra_constraints"},
+                )
+            allowed_extra_keys = {
+                str(key)
+                for key in snapshot["extra_constraints"].keys()
+                if str(key) not in self.INTERNAL_EXTRA_CONSTRAINT_FIELDS
             }
+            unknown_extra_keys = sorted(set(control_overrides["extra_constraints"].keys()) - allowed_extra_keys)
+            if unknown_extra_keys:
+                raise DomainError(
+                    "Review extra_constraints overrides contain unsupported nested fields.",
+                    status_code=422,
+                    details={"disallowed_input_fields": [f"extra_constraints.{key}" for key in unknown_extra_keys]},
+                )
+            snapshot["extra_constraints"].update(control_overrides["extra_constraints"])
+        if "type_slots" in control_overrides:
+            if not isinstance(control_overrides["type_slots"], dict):
+                raise DomainError(
+                    "Review type_slots overrides must be an object.",
+                    status_code=422,
+                    details={"field": "type_slots"},
+                )
+            allowed_type_slot_keys = {str(key) for key in snapshot["type_slots"].keys()}
+            unknown_type_slot_keys = sorted(set(control_overrides["type_slots"].keys()) - allowed_type_slot_keys)
+            if unknown_type_slot_keys:
+                raise DomainError(
+                    "Review type_slots overrides contain unsupported nested fields.",
+                    status_code=422,
+                    details={"disallowed_input_fields": [f"type_slots.{key}" for key in unknown_type_slot_keys]},
+                )
+            snapshot["type_slots"].update(control_overrides["type_slots"])
         if instruction:
             snapshot["extra_constraints"]["review_instruction"] = instruction
         return snapshot
@@ -2089,7 +2065,7 @@ class QuestionGenerationService:
 
         return lines
 
-    def _legacy_reference_hard_constraint_residuals(
+    def _deprecated_reference_hard_constraint_residuals(
         self,
         *,
         question_type: str,
@@ -2678,15 +2654,9 @@ class QuestionGenerationService:
         return numeric
 
     def _effective_difficulty_target(self, difficulty_target: str, *, use_reference_question: bool) -> str:
-        if not use_reference_question:
-            return difficulty_target
-        return {
-            "easy": "medium",
-            "medium": "hard",
-            "hard": "hard",
-        }.get(difficulty_target, difficulty_target)
+        return difficulty_target
 
-    def _build_reference_hard_constraints(self, *, question_type: str | None, structure_constraints: dict[str, object], question_card_binding: dict[str, object] | None = None) -> list[str]:
+    def _deprecated_build_reference_hard_constraints_override(self, *, question_type: str | None, structure_constraints: dict[str, object], question_card_binding: dict[str, object] | None = None) -> list[str]:
         if not question_type or not structure_constraints:
             return []
         formal_facts = self._collect_reference_hard_constraint_facts(
@@ -3081,10 +3051,9 @@ class QuestionGenerationService:
             selection_reason="reference_source_fallback",
         )
 
-    # Clean override implementations for material cleanup and refinement.
-    # These are intentionally placed after the older methods so Python uses these
-    # definitions at runtime even if earlier legacy text blocks remain in file history.
-    def _refine_material_if_needed(self, material: MaterialSelectionResult) -> MaterialSelectionResult:
+    # Legacy helper copies kept only for audit traceability.
+    # They are not used by the active generation path.
+    def _legacy_refine_material_if_needed(self, material: MaterialSelectionResult) -> MaterialSelectionResult:
         cleaned_seed = self._clean_material_text(material.text)
         if not cleaned_seed:
             return material
@@ -3143,7 +3112,7 @@ class QuestionGenerationService:
             return cleaned_material
         return cleaned_material
 
-    def _clean_material_text(self, text: str) -> str:
+    def _legacy_clean_material_text(self, text: str) -> str:
         normalized = (text or "").replace("\r\n", "\n").replace("\r", "\n")
         normalized = re.sub(r"\n{3,}", "\n\n", normalized).strip()
         if not normalized:
@@ -3247,7 +3216,7 @@ class QuestionGenerationService:
             signatures.append(signature)
         return False
 
-    def _strip_material_template_labels(self, text: str) -> str:
+    def _legacy_strip_material_template_labels(self, text: str) -> str:
         lines = [line.strip() for line in text.split("\n")]
         cleaned_lines: list[str] = []
         pending_event_label = False
@@ -3278,7 +3247,7 @@ class QuestionGenerationService:
         cleaned = "\n".join(cleaned_lines)
         return re.sub(r"(?:\n\s*){3,}", "\n\n", cleaned).strip()
 
-    def _needs_material_refinement(self, text: str) -> bool:
+    def _legacy_needs_material_refinement(self, text: str) -> bool:
         clean = (text or "").strip()
         if not clean:
             return False

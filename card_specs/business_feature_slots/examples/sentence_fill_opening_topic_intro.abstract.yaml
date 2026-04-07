@@ -17,6 +17,25 @@ feature_signature:
   business_function: topic_introduction
   relation_focus: 开头空句负责引出后文要展开的话题或对象
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_fill
+  structure_schema:
+    position: opening
+    function_type: topic_intro
+    reference_anchor: none
+    bidirectional_check:
+      previous_valid: false
+      next_valid: true
+    semantic_scope: paragraph_level
+  uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+  legacy_compatibility:
+    pattern_families:
+      - opening_summary
+    legacy_function_type: opening_summary
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true
@@ -34,17 +53,20 @@ retrieval_profile:
 slot_projection:
   question_type: sentence_fill
   business_subtype: null
-  pattern_candidates: [opening_summary, bridge_transition]
+  pattern_candidates: [opening_summary]
   type_slots:
     blank_position: opening
-    function_type: opening_summary
+    function_type: topic_intro
     logic_relation: transition
     context_dependency: medium
     bidirectional_validation: low
+    reference_anchor: none
     reference_dependency: low
     abstraction_level: medium
+    semantic_scope: paragraph_level
     distractor_modes: [function_mismatch, topic_shift, wrong_direction]
     distractor_strength: medium
+    uniqueness_source: [function_mismatch, scope_mismatch]
   prompt_extras:
     business_feature_card_id: sentence_fill__opening_topic_intro__abstract
     business_feature_card_label: 语句填空-开头话题引入

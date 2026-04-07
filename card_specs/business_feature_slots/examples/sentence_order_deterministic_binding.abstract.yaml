@@ -6,6 +6,7 @@ card_meta:
   description: 依靠指代词、转折词、并列词等局部强接口来判断句群顺序的业务卡。
   mother_family_id: sentence_order
   enabled: true
+  card_role: supporting_card
   source: textbook_business_card
   tags:
     - 语句排序题
@@ -19,6 +20,41 @@ feature_signature:
   relation_focus: 识别局部句间强关联
   typical_formats:
     - 将以上几个句子重新排列，语序正确的是……
+
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_order
+  structure_schema:
+    sentence_count:
+      mode: fixed
+      value: 6
+    sentence_roles:
+      preferred:
+        - explanation
+        - reasoning
+        - transition
+        - example
+    head_constraints:
+      must_not_have:
+        - orphan_reference
+      preferred_roles:
+        - thesis
+        - definition
+    tail_constraints:
+      must_have:
+        - closure
+      preferred_roles:
+        - conclusion
+    binding_pairs:
+      - pronoun_reference
+      - turning_connector
+      - parallel_connector
+    ordering_logic:
+      - thesis -> explanation -> reasoning -> conclusion
+  uniqueness_source:
+    - reference_dependency
+    - role_order_conflict
+    - binding_violation
 
 retrieval_profile:
   hard_filters:
@@ -53,6 +89,7 @@ slot_projection:
     - dual_anchor_lock
     - carry_parallel_expand
   type_slots:
+    sentence_count: 6
     opening_anchor_type: explicit_topic
     opening_signal_strength: medium
     middle_structure_type: local_binding
@@ -65,6 +102,16 @@ slot_projection:
       - connector_mislead
       - wrong_opening
     distractor_strength: high
+    sentence_roles: [explanation, reasoning, transition]
+    head_constraints:
+      must_not_have: [orphan_reference]
+      preferred_roles: [thesis, definition]
+    tail_constraints:
+      must_have: [closure]
+      preferred_roles: [conclusion]
+    binding_pairs: [pronoun_reference, turning_connector, parallel_connector]
+    ordering_logic: thesis -> explanation -> reasoning -> conclusion
+    uniqueness_source: [reference_dependency, role_order_conflict, binding_violation]
   prompt_extras:
     business_feature_card_id: sentence_order__deterministic_binding__abstract
     business_feature_card_label: 语句排序-确定性捆绑

@@ -53,6 +53,23 @@ feature_signature:
       - 2
       - 3
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: main_idea
+  structure_schema:
+    argument_structure:
+      preferred_values:
+        - parallel
+    main_axis_source: global_abstraction
+    abstraction_level: medium
+    distractor_types:
+      - detail_as_main
+      - scope_too_narrow
+      - scope_too_wide
+  uniqueness_source:
+    - axis_coverage
+    - abstraction_match
+
 retrieval_profile:
   hard_filters:
     logic_relations:
@@ -94,13 +111,17 @@ slot_projection:
     main_point_source: whole_passage
     abstraction_level: medium
     coverage_requirement: integrated
-    target_form: central_meaning
+    target_form: article_task
     distractor_modes:
       - scope_shift
       - undergeneralization
       - fabrication
     distractor_strength: high
     statement_visibility: low
+    argument_structure: parallel
+    main_axis_source: global_abstraction
+    distractor_types: [detail_as_main, scope_too_narrow, scope_too_wide]
+    uniqueness_source: [axis_coverage, abstraction_match]
   prompt_extras:
     business_feature_card_id: parallel_comprehensive_summary__main_idea
     business_feature_card_label: 并列关系-全面概括

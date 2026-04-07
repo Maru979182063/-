@@ -1,6 +1,7 @@
 from app.core.config import get_config_bundle
 from app.core.enums import ArticleStatus
 from app.domain.services._common import ServiceBase
+from app.domain.services.material_pipeline_v2_service import MaterialPipelineV2Service
 from app.infra.segment.paragraph_splitters.default_splitter import DefaultParagraphSplitter
 from app.infra.segment.sentence_splitters.default_splitter import DefaultSentenceSplitter
 from app.infra.segment.window_generators.paragraph_window_generator import ParagraphWindowGenerator
@@ -52,23 +53,62 @@ class SegmentService(ServiceBase):
                 }
             )
 
-        generators = [ParagraphWindowGenerator(), SentenceWindowGenerator(), StoryFragmentGenerator()]
-        spans: list[dict] = []
-        for generator in generators:
-            spans.extend(generator.generate(enriched_paragraphs, sentences, config))
-        spans = self._throttle_short_article_spans(spans, enriched_paragraphs, sentences, article.clean_text)
-        spans = LogicalSegmentRefiner().refine(spans)
+        v2_result = MaterialPipelineV2Service(self.session).build_formal_material_candidates(article_id)
+        spans: list[dict] = list(v2_result.get("candidate_spans") or [])
+        generation_mode = str(v2_result.get("generation_mode") or "v2_primary")
+        fallback_reason = v2_result.get("fallback_reason")
+        fallback_used = False
+        if not spans:
+            fallback_used = True
+            generation_mode = "v1_fallback"
+            spans = self._build_v1_fallback_spans(
+                config=config,
+                enriched_paragraphs=enriched_paragraphs,
+                sentences=sentences,
+                clean_text=article.clean_text,
+            )
         candidate_records = self.candidate_repo.replace_for_article(article_id, spans)
 
         self.article_repo.update_status(article_id, ArticleStatus.SEGMENTED.value)
-        self.audit_repo.log("article", article_id, "segment", {"candidate_count": len(candidate_records)})
+        self.audit_repo.log(
+            "article",
+            article_id,
+            "segment",
+            {
+                "candidate_count": len(candidate_records),
+                "generation_mode": generation_mode,
+                "fallback_used": fallback_used,
+                "fallback_reason": fallback_reason,
+            },
+        )
         return {
             "article_id": article_id,
             "paragraph_count": len(paragraph_records),
             "sentence_count": len(sentence_records),
             "candidate_span_count": len(candidate_records),
+            "generation_mode": generation_mode,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
             "status": ArticleStatus.SEGMENTED.value,
         }
+
+    def _build_v1_fallback_spans(
+        self,
+        *,
+        config: dict,
+        enriched_paragraphs: list[dict],
+        sentences: list[dict],
+        clean_text: str,
+    ) -> list[dict]:
+        generators = [ParagraphWindowGenerator(), SentenceWindowGenerator(), StoryFragmentGenerator()]
+        spans: list[dict] = []
+        for generator in generators:
+            spans.extend(generator.generate(enriched_paragraphs, sentences, config))
+        spans = self._throttle_short_article_spans(spans, enriched_paragraphs, sentences, clean_text)
+        spans = LogicalSegmentRefiner().refine(spans)
+        for span in spans:
+            span["generated_by"] = f"v1_fallback+{span['generated_by']}"
+        return spans
 
     def _throttle_short_article_spans(
         self,

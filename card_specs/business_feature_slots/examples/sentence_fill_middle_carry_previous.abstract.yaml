@@ -17,6 +17,25 @@ feature_signature:
   business_function: carry_previous
   relation_focus: 中间空句主要承接前文判断或对象
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_fill
+  structure_schema:
+    position: middle
+    function_type: carry_previous
+    reference_anchor: optional
+    bidirectional_check:
+      previous_valid: true
+      next_valid: false
+    semantic_scope: local
+  uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+  legacy_compatibility:
+    pattern_families:
+      - middle_explanation
+    legacy_function_type: middle_explanation
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true
@@ -37,14 +56,17 @@ slot_projection:
   pattern_candidates: [middle_explanation]
   type_slots:
     blank_position: middle
-    function_type: middle_explanation
+    function_type: carry_previous
     logic_relation: explanation
     context_dependency: medium
     bidirectional_validation: low
+    reference_anchor: optional
     reference_dependency: medium
     abstraction_level: low
+    semantic_scope: local
     distractor_modes: [weak_backward_link, function_mismatch, role_mismatch]
     distractor_strength: high
+    uniqueness_source: [function_mismatch, scope_mismatch]
   prompt_extras:
     business_feature_card_id: sentence_fill__middle_carry_previous__abstract
     business_feature_card_label: 语句填空-中间承上

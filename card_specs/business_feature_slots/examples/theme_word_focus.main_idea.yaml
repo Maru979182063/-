@@ -47,6 +47,27 @@ feature_signature:
       - 2
       - 3
 
+schema_alignment:
+  schema_status: weak_legacy
+  canonical_card_type: main_idea
+  applicability_notes:
+    - 主题词只能做粗定位，不能单独解释主旨唯一性
+    - 仅保留为弱适用 legacy 卡，不再推荐作为主卡思路
+  structure_schema:
+    argument_structure:
+      preferred_values:
+        - total_sub
+        - parallel
+    main_axis_source: global_abstraction
+    abstraction_level: medium
+    distractor_types:
+      - subject_shift
+      - scope_too_wide
+      - scope_too_narrow
+  uniqueness_source:
+    - axis_coverage
+    - abstraction_match
+
 retrieval_profile:
   hard_filters:
     logic_relations: []
@@ -87,17 +108,22 @@ slot_projection:
     main_point_source: whole_passage
     abstraction_level: medium
     coverage_requirement: integrated
-    target_form: central_meaning
+    target_form: article_task
     distractor_modes:
       - topic_shift
       - overgeneralization
       - undergeneralization
     distractor_strength: high
-    statement_visibility: medium
+    statement_visibility: low
+    argument_structure: parallel
+    main_axis_source: global_abstraction
+    distractor_types: [subject_shift, scope_too_wide, scope_too_narrow]
+    uniqueness_source: [axis_coverage, abstraction_match]
   prompt_extras:
     business_feature_card_id: theme_word_focus__main_idea
     business_feature_card_label: 主题词-全文围绕同一话题
     retrieval_mode: business_feature_card
+    schema_warning: weak_legacy_not_primary
 
 canonical_projection:
   expected_universal_profile:

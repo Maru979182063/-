@@ -6,6 +6,7 @@ card_meta:
   description: 按首句、尾句、捆绑关系和顺序逻辑来判断句群排序的教材型业务卡。
   mother_family_id: sentence_order
   enabled: true
+  card_role: supporting_card
   source: textbook_business_card
   tags:
     - 语句排序题
@@ -92,9 +93,51 @@ feature_signature:
   extraction_hints:
     require_explicit_marker: false
     require_complete_meaning: true
-    min_sentence_count: 4
+    min_sentence_count: 6
+    max_sentence_count: 6
     preferred_paragraph_window:
       - 1
+
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_order
+  structure_schema:
+    sentence_count:
+      mode: fixed
+      value: 6
+    sentence_roles:
+      preferred:
+        - thesis
+        - definition
+        - explanation
+        - reasoning
+        - conclusion
+        - countermeasure
+    head_constraints:
+      must_not_have:
+        - backward_reference
+        - mid_transition
+      preferred_roles:
+        - thesis
+        - definition
+    tail_constraints:
+      must_have:
+        - closure
+      preferred_roles:
+        - conclusion
+        - countermeasure
+    binding_pairs:
+      - pronoun_reference
+      - turning_connector
+      - parallel_connector
+    ordering_logic:
+      - thesis -> explanation -> reasoning -> conclusion
+      - problem -> analysis -> solution
+  uniqueness_source:
+    - role_order_conflict
+    - reference_dependency
+    - closure_position
+    - binding_violation
 
 retrieval_profile:
   hard_filters:
@@ -143,6 +186,7 @@ slot_projection:
     - viewpoint_reason_action
     - problem_solution_case_blocks
   type_slots:
+    sentence_count: 6
     opening_anchor_type: explicit_topic
     opening_signal_strength: medium
     middle_structure_type: local_binding
@@ -155,6 +199,16 @@ slot_projection:
       - local_binding_break
       - wrong_closing
     distractor_strength: high
+    sentence_roles: [thesis, explanation, reasoning, conclusion]
+    head_constraints:
+      must_not_have: [backward_reference, mid_transition]
+      preferred_roles: [thesis, definition]
+    tail_constraints:
+      must_have: [closure]
+      preferred_roles: [conclusion, countermeasure]
+    binding_pairs: [pronoun_reference, turning_connector]
+    ordering_logic: thesis -> explanation -> reasoning -> conclusion
+    uniqueness_source: [role_order_conflict, reference_dependency, closure_position, binding_violation]
   slot_strategy_map:
     head_tail_lock:
       when:
@@ -296,7 +350,7 @@ slot_projection:
     business_feature_card_label: 语句排序-首尾句与捆绑逻辑
     retrieval_mode: business_feature_card
     business_core_rule: 先定首尾，再定捆绑，再定整体顺序
-    canonical_orderability_card: true
+    supporting_role_chain_card: true
 
 canonical_projection:
   expected_universal_profile:

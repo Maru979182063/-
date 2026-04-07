@@ -23,12 +23,6 @@ class SlotResolverService:
         "object": dict,
     }
 
-    DIFFICULTY_BIAS = {
-        "easy": 0.00,
-        "medium": 0.12,
-        "hard": 0.24,
-    }
-
     ASCENDING_DIFFICULTY_SLOTS = {
         "option_confusion": ["low", "low_medium", "medium", "medium_high", "high"],
         "distractor_strength": ["low", "medium", "high"],
@@ -203,43 +197,7 @@ class SlotResolverService:
         incoming_slots: dict[str, Any],
         difficulty_target: str,
     ) -> dict[str, Any]:
-        if difficulty_target == "medium":
-            target_level = 1
-        elif difficulty_target == "hard":
-            target_level = 2
-        else:
-            target_level = 0
-
-        adjusted = dict(resolved_slots)
-        for slot_name, slot_config in question_type_config.slot_schema.items():
-            if slot_name in incoming_slots:
-                continue
-
-            current_value = adjusted.get(slot_name)
-            ordered_values = self.ASCENDING_DIFFICULTY_SLOTS.get(slot_name)
-            if ordered_values:
-                adjusted_value = self._pick_difficulty_value(
-                    current_value=current_value,
-                    allowed_values=slot_config.allowed or ordered_values,
-                    ordered_values=ordered_values,
-                    target_level=target_level,
-                )
-                if adjusted_value is not None:
-                    adjusted[slot_name] = adjusted_value
-                continue
-
-            reverse_order = self.DESCENDING_DIFFICULTY_SLOTS.get(slot_name)
-            if reverse_order:
-                adjusted_value = self._pick_difficulty_value(
-                    current_value=current_value,
-                    allowed_values=slot_config.allowed or reverse_order,
-                    ordered_values=reverse_order,
-                    target_level=target_level,
-                )
-                if adjusted_value is not None:
-                    adjusted[slot_name] = adjusted_value
-
-        return adjusted
+        return dict(resolved_slots)
 
     def _pick_difficulty_value(
         self,
@@ -305,7 +263,7 @@ class SlotResolverService:
         warnings: list[str],
     ) -> tuple[PatternConfig, PatternSelectionReason]:
         enabled_patterns = [pattern for pattern in question_type_config.patterns if pattern.enabled]
-        default_pattern, default_warning = self._get_default_pattern(question_type_config, enabled_patterns)
+        default_pattern = self._get_default_pattern(question_type_config, enabled_patterns)
 
         if pattern_id:
             for pattern in enabled_patterns:
@@ -368,16 +326,27 @@ class SlotResolverService:
                 f"No clear best pattern inside business_subtype preferred_patterns for '{subtype_config.subtype_id}', "
                 "and global match also had no clear winner."
             )
-        if default_warning:
-            warnings.append(default_warning)
-            fallback_reason = f"{fallback_reason} {default_warning}".strip()
+        if default_pattern is None:
+            raise DomainError(
+                "Pattern resolution is ambiguous without an explicit pattern_id or configured default_pattern_id.",
+                status_code=422,
+                details={
+                    "question_type": question_type_config.type_id,
+                    "business_subtype": subtype_config.subtype_id if subtype_config else None,
+                    "candidate_scores": {
+                        "top_pattern_id": overall_result["pattern"].pattern_id,
+                        "top_score": overall_result["top_score"],
+                        "second_score": overall_result["second_score"],
+                    },
+                },
+            )
         warnings.append(
-            f"Pattern selection fell back to default pattern '{default_pattern.pattern_id}' because no clear winner was found."
+            f"Pattern selection used configured default_pattern_id '{default_pattern.pattern_id}' because match_rules produced no unique winner."
         )
         return default_pattern, PatternSelectionReason(
             requested_pattern_id=None,
             selected_pattern_id=default_pattern.pattern_id,
-            selection_mode="fallback_default",
+            selection_mode="configured_default",
             matched_fields=overall_result["reason"]["matched_fields"],
             score=overall_result["reason"]["score"],
             fallback_used=True,
@@ -465,11 +434,11 @@ class SlotResolverService:
         self,
         question_type_config: QuestionTypeConfig,
         enabled_patterns: list[PatternConfig],
-    ) -> tuple[PatternConfig, str | None]:
+    ) -> PatternConfig | None:
         if question_type_config.default_pattern_id:
             for pattern in enabled_patterns:
                 if pattern.pattern_id == question_type_config.default_pattern_id:
-                    return pattern, None
+                    return pattern
             raise DomainError(
                 "Configured default_pattern_id is invalid or disabled.",
                 status_code=500,
@@ -479,10 +448,7 @@ class SlotResolverService:
                 },
             )
 
-        return enabled_patterns[0], (
-            f"question_type '{question_type_config.type_id}' has no default_pattern_id; "
-            "fell back to the first enabled pattern."
-        )
+        return None
 
     def _project_difficulty(
         self,
@@ -493,7 +459,6 @@ class SlotResolverService:
     ) -> DifficultyProjection:
         text_lookup = self._build_text_lookup(pattern=pattern, resolved_slots=resolved_slots)
         projection: dict[str, float] = {}
-        bias = self.DIFFICULTY_BIAS[difficulty_target]
 
         for metric_name in ("complexity", "ambiguity", "reasoning_depth", "distractor_similarity"):
             metric_rule = getattr(pattern.difficulty_rules, metric_name)
@@ -509,7 +474,7 @@ class SlotResolverService:
                 if text_value is not None and str(text_value) in mapping:
                     score = mapping[str(text_value)]
 
-            projection[metric_name] = self._clamp(score + bias)
+            projection[metric_name] = self._clamp(score)
 
         return DifficultyProjection(**projection)
 

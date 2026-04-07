@@ -51,6 +51,27 @@ class MaterialPipelineV2Service(ServiceBase):
         result["article_ids"] = [article.id for article in articles]
         return result
 
+    def build_formal_material_candidates(
+        self,
+        article_id: str,
+        *,
+        candidate_types: list[str] | set[str] | None = None,
+    ) -> dict:
+        article = self.article_repo.get(article_id)
+        if article is None:
+            return {
+                "article_id": article_id,
+                "generation_mode": "v2_primary",
+                "candidate_spans": [],
+                "fallback_reason": "article_not_found",
+            }
+        result = self.pipeline.build_formal_material_candidates(
+            article=article,
+            candidate_types=candidate_types,
+        )
+        result["article_id"] = article_id
+        return result
+
     def precompute(self, payload: dict) -> dict:
         return MaterialV2IndexService(self.session).precompute(payload)
 

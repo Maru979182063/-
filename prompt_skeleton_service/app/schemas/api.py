@@ -97,7 +97,7 @@ class DifficultyFit(BaseModel):
 class PatternSelectionReason(BaseModel):
     requested_pattern_id: str | None = None
     selected_pattern_id: str
-    selection_mode: Literal["direct", "auto_match", "fallback_default"]
+    selection_mode: Literal["direct", "auto_match", "configured_default"]
     matched_fields: list[str] = Field(default_factory=list)
     score: float
     fallback_used: bool = False

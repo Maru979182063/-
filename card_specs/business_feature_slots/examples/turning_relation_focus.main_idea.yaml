@@ -51,6 +51,24 @@ feature_signature:
       - 1
       - 2
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: main_idea
+  structure_schema:
+    argument_structure:
+      preferred_values:
+        - sub_total
+        - total_sub
+    main_axis_source: transition_after
+    abstraction_level: medium
+    distractor_types:
+      - detail_as_main
+      - scope_too_narrow
+      - focus_shift
+  uniqueness_source:
+    - axis_coverage
+    - abstraction_match
+
 retrieval_profile:
   hard_filters:
     logic_relations:
@@ -94,13 +112,17 @@ slot_projection:
     main_point_source: whole_passage
     abstraction_level: medium
     coverage_requirement: integrated
-    target_form: central_meaning
+    target_form: article_task
     distractor_modes:
       - middle_conclusion
       - scope_shift
       - fabrication
     distractor_strength: high
     statement_visibility: medium
+    argument_structure: sub_total
+    main_axis_source: transition_after
+    distractor_types: [detail_as_main, scope_too_narrow, focus_shift]
+    uniqueness_source: [axis_coverage, abstraction_match]
   prompt_extras:
     business_feature_card_id: turning_relation_focus__main_idea
     business_feature_card_label: 转折关系-转折后是重点

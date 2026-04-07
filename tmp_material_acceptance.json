@@ -1,0 +1,996 @@
+[
+  {
+    "article_id": "article_d0899f5320734f6f89f308abde15e332",
+    "segment": {
+      "article_id": "article_d0899f5320734f6f89f308abde15e332",
+      "paragraph_count": 3,
+      "sentence_count": 9,
+      "candidate_span_count": 3,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 0,
+      "rejected_count": 3
+    },
+    "rejected_admission_counts": {
+      "reject": 2,
+      "gray_hold": 1
+    },
+    "created_material_ids": [],
+    "article": {
+      "id": "article_d0899f5320734f6f89f308abde15e332",
+      "title": "这种行为是否构成欺诈",
+      "domain": "经济评论",
+      "status": "tagged",
+      "clean_len": 470
+    },
+    "candidates": [
+      {
+        "id": "cand_faa7dd1957e341359c474523c422a531",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 0,
+        "end_paragraph": 1,
+        "start_sentence": 0,
+        "end_sentence": 3,
+        "text": "中国政法大学教授冯晓青此前接受媒体采访时称:具有欺骗性的商标主要是指对产品的质量、特点容易产生误认。即便商标注册成功,如果使用方式具有欺骗性,依然涉嫌违反《中华人民共和国广告法》和《中华人民共和国消费者权益保护法》。\n\n另外,根据消费者权益保护法相关规定,经营者应如实、全面提供商品信息,而此类品牌的包装宣传易使消费者对分量产生误判,侵害了消费者的知情权与公平交易权。若企业能及时优化包装,清晰展示产品分量,或可降低法律风险。"
+      },
+      {
+        "id": "cand_be3d3f5ba1e940e6a3d970cdd441fead",
+        "span_type": "whole_passage",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "rejected",
+        "start_paragraph": 0,
+        "end_paragraph": 2,
+        "start_sentence": 0,
+        "end_sentence": 8,
+        "text": "中国政法大学教授冯晓青此前接受媒体采访时称:具有欺骗性的商标主要是指对产品的质量、特点容易产生误认。即便商标注册成功,如果使用方式具有欺骗性,依然涉嫌违反《中华人民共和国广告法》和《中华人民共和国消费者权益保护法》。\n\n另外,根据消费者权益保护法相关规定,经营者应如实、全面提供商品信息,而此类品牌的包装宣传易使消费者对分量产生误判,侵害了消费者的知情权与公平交易权。若企业能及时优化包装,清晰展示产品分量,或可降低法律风险。\n\n北京市康达律师事务所高级合伙人吕银平律师提醒消费者:在线上、线下购买商品时要仔细确认商品信息,购买贵重物品到货时尽量当场拆封或进行视频录像。如果出现问题,应在第一时间保存相关证据,包括但不限于购买的商品实物、与商家的沟通协商记录、交易记录等。消费者权益保护法第五十五条规定,经营者提供商品或者服务有欺诈行为的,应当按照消费者的要求增加赔偿其受到的损失,增加赔偿的金额为消费者购买商品的价款或者接受服务的费用的三倍；增加赔偿的金额不足五百元的,为五百元。消费者可以据此规定主张惩罚性赔偿。　　　　　　记者　孙佳琪"
+      },
+      {
+        "id": "cand_7ea1f5976358462ab3b7993c19c1ad32",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "rejected",
+        "start_paragraph": 1,
+        "end_paragraph": 2,
+        "start_sentence": 2,
+        "end_sentence": 8,
+        "text": "另外,根据消费者权益保护法相关规定,经营者应如实、全面提供商品信息,而此类品牌的包装宣传易使消费者对分量产生误判,侵害了消费者的知情权与公平交易权。若企业能及时优化包装,清晰展示产品分量,或可降低法律风险。\n\n北京市康达律师事务所高级合伙人吕银平律师提醒消费者:在线上、线下购买商品时要仔细确认商品信息,购买贵重物品到货时尽量当场拆封或进行视频录像。如果出现问题,应在第一时间保存相关证据,包括但不限于购买的商品实物、与商家的沟通协商记录、交易记录等。消费者权益保护法第五十五条规定,经营者提供商品或者服务有欺诈行为的,应当按照消费者的要求增加赔偿其受到的损失,增加赔偿的金额为消费者购买商品的价款或者接受服务的费用的三倍；增加赔偿的金额不足五百元的,为五百元。消费者可以据此规定主张惩罚性赔偿。　　　　　　记者　孙佳琪"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_aadf088443284188819607286d76f314",
+        "candidate_span_id": "cand_e2ba64d581b74e6cacc4c75fd371f0f5",
+        "span_type": "single_paragraph",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "标题命名型",
+        "primary_subtype": "平实主旨回收卡",
+        "primary_label": "平实主旨回收卡",
+        "quality_flags": "[\"gray_review\", \"integrity_medium_risk\"]",
+        "text": "北京市康达律师事务所高级合伙人吕银平律师提醒消费者:在线上、线下购买商品时要仔细确认商品信息,购买贵重物品到货时尽量当场拆封或进行视频录像。如果出现问题,应在第一时间保存相关证据,包括但不限于购买的商品实物、与商家的沟通协商记录、交易记录等。消费者权益保护法第五十五条规定,经营者提供商品或者服务有欺诈行为的,应当按照消费者的要求增加赔偿其受到的损失,增加赔偿的金额为消费者购买商品的价款或者接受服务的费用的三倍；增加赔偿的金额不足五百元的,为五百元。消费者可以据此规定主张惩罚性赔偿。　　　　　　记者　孙佳琪\n\n中国政法大学教授冯晓青此前接受媒体采访时称:具有欺骗性的商标主要是指对产品的质量、特点容易产生误认。即便商标注册成功,如果使用方式具有欺骗性,依然涉嫌违反《中华人民共和国广告法》和《中华人民共和国消费者权益保护法》。\n\n另外,根据消费者权益保护法相关规定,经营者应如实、全面提供商品信息,而此类品牌的包装宣传易使消费者对分量产生误判,侵害了消费者的知情权与公平交易权。若企业能及时优化包装,清晰展示产品分量,或可降低法律风险。"
+      }
+    ]
+  },
+  {
+    "article_id": "article_592401a8b5d247b6afa6ef0c7f14f3f8",
+    "segment": {
+      "article_id": "article_592401a8b5d247b6afa6ef0c7f14f3f8",
+      "paragraph_count": 4,
+      "sentence_count": 4,
+      "candidate_span_count": 3,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 1,
+      "rejected_count": 2
+    },
+    "rejected_admission_counts": {
+      "gray_hold": 2
+    },
+    "created_material_ids": [
+      "mat_033491e04ca543e393abd0a08475ed49"
+    ],
+    "article": {
+      "id": "article_592401a8b5d247b6afa6ef0c7f14f3f8",
+      "title": "加强电动自行车锂离子电池回收利用体系建设",
+      "domain": "经济评论",
+      "status": "tagged",
+      "clean_len": 463
+    },
+    "candidates": [
+      {
+        "id": "cand_4137f25be2f4449c8ea7f40b73d6da2b",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 2,
+        "end_paragraph": 3,
+        "start_sentence": 2,
+        "end_sentence": 3,
+        "text": "保障措施方面，通知要求各地工业和信息化主管部门、供销合作社要建立对接机制，加强日常对接与定期沟通，及时会商解决工作过程中的具体问题，健全信息互通共享机制，定期通报锂电池回收利用体系建设进展情况、交流经验做法。\n\n据悉，全国目前已建成电动自行车锂电池暂存点及回收服务网点5000余个，覆盖约60％县级行政区域，基本实现锂电池电动自行车重点销售省份全覆盖。"
+      },
+      {
+        "id": "cand_503f6e3a94874b2b87e8ebbb860a2851",
+        "span_type": "whole_passage",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 0,
+        "end_paragraph": 3,
+        "start_sentence": 0,
+        "end_sentence": 3,
+        "text": "新华社北京电（记者周圆）记者3日获悉，工业和信息化部、供销合作总社日前联合印发《关于进一步加强电动自行车锂离子电池回收利用体系建设的通知》，旨在充分发挥供销合作社及社有企业再生资源回收利用网络作用，进一步延伸基层回收触角，推动锂电池规范回收、科学利用。\n\n通知从发挥现有资源作用、强化龙头引领、支持数字监测等方面作出部署，提出各地要发挥供销合作社企业等各类经营主体参与的以回收点、中转站、分拣中心为支撑的三级回收体系作用；支持中国再生资源集团等龙头企业布局建设分拣中心和综合利用项目；鼓励供销合作社各类回收企业与电动自行车经销售后服务网点对接，开展“换新＋回收”业务等。\n\n保障措施方面，通知要求各地工业和信息化主管部门、供销合作社要建立对接机制，加强日常对接与定期沟通，及时会商解决工作过程中的具体问题，健全信息互通共享机制，定期通报锂电池回收利用体系建设进展情况、交流经验做法。\n\n据悉，全国目前已建成电动自行车锂电池暂存点及回收服务网点5000余个，覆盖约60％县级行政区域，基本实现锂电池电动自行车重点销售省份全覆盖。"
+      },
+      {
+        "id": "cand_982057a40e304507acf064447660fcb6",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 0,
+        "end_paragraph": 1,
+        "start_sentence": 0,
+        "end_sentence": 1,
+        "text": "新华社北京电（记者周圆）记者3日获悉，工业和信息化部、供销合作总社日前联合印发《关于进一步加强电动自行车锂离子电池回收利用体系建设的通知》，旨在充分发挥供销合作社及社有企业再生资源回收利用网络作用，进一步延伸基层回收触角，推动锂电池规范回收、科学利用。\n\n通知从发挥现有资源作用、强化龙头引领、支持数字监测等方面作出部署，提出各地要发挥供销合作社企业等各类经营主体参与的以回收点、中转站、分拣中心为支撑的三级回收体系作用；支持中国再生资源集团等龙头企业布局建设分拣中心和综合利用项目；鼓励供销合作社各类回收企业与电动自行车经销售后服务网点对接，开展“换新＋回收”业务等。"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_033491e04ca543e393abd0a08475ed49",
+        "candidate_span_id": "cand_503f6e3a94874b2b87e8ebbb860a2851",
+        "span_type": "whole_passage",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "标题命名型",
+        "primary_subtype": null,
+        "primary_label": "标题命名型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "新华社北京电（记者周圆）记者3日获悉，工业和信息化部、供销合作总社日前联合印发《关于进一步加强电动自行车锂离子电池回收利用体系建设的通知》，旨在充分发挥供销合作社及社有企业再生资源回收利用网络作用，进一步延伸基层回收触角，推动锂电池规范回收、科学利用。\n\n通知从发挥现有资源作用、强化龙头引领、支持数字监测等方面作出部署，提出各地要发挥供销合作社企业等各类经营主体参与的以回收点、中转站、分拣中心为支撑的三级回收体系作用；支持中国再生资源集团等龙头企业布局建设分拣中心和综合利用项目；鼓励供销合作社各类回收企业与电动自行车经销售后服务网点对接，开展“换新＋回收”业务等。\n\n保障措施方面，通知要求各地工业和信息化主管部门、供销合作社要建立对接机制，加强日常对接与定期沟通，及时会商解决工作过程中的具体问题，健全信息互通共享机制，定期通报锂电池回收利用体系建设进展情况、交流经验做法。\n\n据悉，全国目前已建成电动自行车锂电池暂存点及回收服务网点5000余个，覆盖约60％县级行政区域，基本实现锂电池电动自行车重点销售省份全覆盖。"
+      },
+      {
+        "id": "mat_3706bedb920a41439959e5b6a53e71d6",
+        "candidate_span_id": "cand_ec6d8031cc4140e38a73b1d7e2e8b4af",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "标题命名型",
+        "primary_subtype": null,
+        "primary_label": "标题命名型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "据悉，全国目前已建成电动自行车锂电池暂存点及回收服务网点5000余个，覆盖约60％县级行政区域，基本实现锂电池电动自行车重点销售省份全覆盖。\n\n新华社北京电（记者周圆）记者3日获悉，工业和信息化部、供销合作总社日前联合印发《关于进一步加强电动自行车锂离子电池回收利用体系建设的通知》，旨在充分发挥供销合作社及社有企业再生资源回收利用网络作用，进一步延伸基层回收触角，推动锂电池规范回收、科学利用。\n\n通知从发挥现有资源作用、强化龙头引领、支持数字监测等方面作出部署，提出各地要发挥供销合作社企业等各类经营主体参与的以回收点、中转站、分拣中心为支撑的三级回收体系作用；支持中国再生资源集团等龙头企业布局建设分拣中心和综合利用项目；鼓励供销合作社各类回收企业与电动自行车经销售后服务网点对接，开展“换新＋回收”业务等。"
+      }
+    ]
+  },
+  {
+    "article_id": "article_4c5e7fd0959a4940845928b1e3685bf6",
+    "segment": {
+      "article_id": "article_4c5e7fd0959a4940845928b1e3685bf6",
+      "paragraph_count": 10,
+      "sentence_count": 15,
+      "candidate_span_count": 2,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 0,
+      "rejected_count": 2
+    },
+    "rejected_admission_counts": {
+      "reject": 1,
+      "gray_hold": 1
+    },
+    "created_material_ids": [],
+    "article": {
+      "id": "article_4c5e7fd0959a4940845928b1e3685bf6",
+      "title": "快递小哥成了社区管家",
+      "domain": "经济评论",
+      "status": "tagged",
+      "clean_len": 989
+    },
+    "candidates": [
+      {
+        "id": "cand_07fd1d0cb46a47c3ab41fab3a4e2ce19",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 0,
+        "end_paragraph": 1,
+        "start_sentence": 0,
+        "end_sentence": 2,
+        "text": "“作为快递小哥，以前就是埋头赶路，现在看到小区隐患随手拍、遇到难题随手帮，没想到自己成了社区管家。”浙江省宁波顺丰速运有限公司丰华科技营业店收派员王俊的一番话，道出了宁波市新就业群体的身份之变。\n\n7500余名新就业群体化身兼职网格员，全年累计上报各类基层治理事件2万余件，办结率100%……在宁波各地街巷里，越来越多新就业群体主动接过基层治理的接力棒，从外卖骑手、快递小哥到网约车司机，这群城市的“奔跑者”转型为基层治理“守护者”。"
+      },
+      {
+        "id": "cand_8d36ea8351f84d3db1ffe291086f7a70",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "rejected",
+        "start_paragraph": 7,
+        "end_paragraph": 9,
+        "start_sentence": 9,
+        "end_sentence": 14,
+        "text": "寒冬时节，“小哥食堂”的10元套餐热气腾腾；炎炎夏日，“清凉驿站”以空调、冷饮、绿豆汤送来丝丝凉意。宁波市各地加强对新就业群体关心关爱，定制礼遇清单集结爱心商户提供多元福利，还有全域覆盖的“甬爱E家”驿站、免费休憩补给、“小候鸟”托管等暖心服务，让新就业群体切实感受到城市温度。\n\n此外，宁波市在浙江省率先开通新就业群体专属服务热线，鼓励新就业群体参与行业政策修订、标准制定及执行监督等。\n\n“新就业群体每天穿梭于大街小巷、深入社区楼宇，具有覆盖范围广、信息感知快、接触场景多的独特优势，通过各种形式发动他们深度融入基层治理，弥补治理盲区，构建了‘服务换信任、信任换参与’的良性闭环，广大新就业群体成为了城市主人翁。”宁波市江北区委社会工作部副部长、两新工委副书记张金丹说。（经济日报记者 郭存举）"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_53bce5030c954894af4909640373aa33",
+        "candidate_span_id": "cand_f45b0b9d81d646d4b7c118a80cf32b51",
+        "span_type": "story_fragment",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "标题命名型",
+        "primary_subtype": null,
+        "primary_label": "标题命名型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "“作为快递小哥，以前就是埋头赶路，现在看到小区隐患随手拍、遇到难题随手帮，没想到自己成了社区管家。”浙江省宁波顺丰速运有限公司丰华科技营业店收派员王俊的一番话，道出了宁波市新就业群体的身份之变。\n\n7500余名新就业群体化身兼职网格员，全年累计上报各类基层治理事件2万余件，办结率100%……在宁波各地街巷里，越来越多新就业群体主动接过基层治理的接力棒，从外卖骑手、快递小哥到网约车司机，这群城市的“奔跑者”转型为基层治理“守护者”。\n\n2025年，宁波市委社会工作部牵头建立新就业群体参与基层治理的工作机制和激励机制，让新就业群体价值从单一的职业服务向多元的共建共享全面延伸。"
+      }
+    ]
+  },
+  {
+    "article_id": "article_758f4dbdbd0742d193f05a8f98b6a3ba",
+    "segment": {
+      "article_id": "article_758f4dbdbd0742d193f05a8f98b6a3ba",
+      "paragraph_count": 8,
+      "sentence_count": 27,
+      "candidate_span_count": 3,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 1,
+      "rejected_count": 2
+    },
+    "rejected_admission_counts": {
+      "gray_hold": 1,
+      "post_gate_reject": 1
+    },
+    "created_material_ids": [
+      "mat_56497d6a09aa4c47b056f6dd58c8dda4"
+    ],
+    "article": {
+      "id": "article_758f4dbdbd0742d193f05a8f98b6a3ba",
+      "title": "新科技让城市提“智”升级",
+      "domain": "理论评论",
+      "status": "tagged",
+      "clean_len": 1321
+    },
+    "candidates": [
+      {
+        "id": "cand_f17b04c5b46d4dc5a8c758646b964291",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 5,
+        "end_paragraph": 5,
+        "start_sentence": 14,
+        "end_sentence": 17,
+        "text": "以高质量城市更新为契机，持续推动智慧城市建设。智慧城市作为一个覆盖全域、全要素、全过程的城市数字化智能运行体系，前提是做到智能感知设备的全域布局、数字化应用场景的全行业渗透、数据算力算法的全面统筹共享等。要一体推进城市更新与全域数字化转型，为城市安装智能感知的“神经末梢”，像智能消防栓、智能井盖等，实现物理空间的数字化、解决数据采集问题。加快城市公共基础设施数字化、网络化、智能化有序更新与改造，打造集约统一、数据融合、高效协同的城市数字底座，完善城市信息模型（CIM）平台。"
+      },
+      {
+        "id": "cand_64cdcd1b32d14c6c86d85b3ed9718f2c",
+        "span_type": "whole_passage",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "rejected",
+        "start_paragraph": 0,
+        "end_paragraph": 7,
+        "start_sentence": 0,
+        "end_sentence": 26,
+        "text": "2025年末，我国常住人口城镇化率为67.89%，城镇常住人口95380万人。中央城市工作会议指出，转变城市工作重心，更加注重治理投入；打破“重建设、轻治理”的传统思维和习惯做法，推动城市高质量更新、高水平运营、高效能治理。从总体上看，治理在城市工作中的分量越来越重。\n\n随着人口和产业不断向城市空间集聚，城市的经济社会场景变得日趋复杂，治理面临的情况日益多样化、动态化、复杂化。进一步提高认识、明确方向，优化思路与路径，实现城市高效能治理，让城市更智慧一些，是当下推进国家治理体系和治理能力现代化的题中应有之义。\n\n目前，不少国家和地区的城市使用人工智能技术赋能现代化城市治理，突破了传统治理的时空与人力局限，实现了城市治理向实时响应、全域协同、前瞻决策转型。例如，法国智慧城市战略与国家级人工智能战略紧密相连，旨在将人工智能技术广泛应用于交通、安防、环境、公共服务等城市管理各方面。又如，荷兰阿姆斯特丹设立“阿姆斯特丹智慧城市”公私合作平台，汇集市政府、企业、研究机构和市民等多方力量，共同发起和管理各类创新项目。\n\n目前，我国不少地方不断加快AI技术应用于城市各类场景，助力城市治理提“智”升级"
+      },
+      {
+        "id": "cand_e66779c5553c402a85a16a517ba2963d",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 3,
+        "end_paragraph": 4,
+        "start_sentence": 8,
+        "end_sentence": 13,
+        "text": "目前，我国不少地方不断加快AI技术应用于城市各类场景，助力城市治理提“智”升级，取得一些显著成果。比如，交通领域的AI实时调节交通信号灯，有效解决了固定配时、被动疏导的痛点。上海市使用“交通治堵大模型”，通过海量数据训练与多轮学习，能自动分析交通状况并生成最优治理方案。安徽省合肥市依托清华大学合肥公共安全研究院，启动城市生命线安全工程建设，综合运用物联网、云计算、人工智能等技术手段，搭建起城市生命线安全屏障。\n\n不过，在这一过程中，仍面临着数据壁垒、数字鸿沟、安全隐私等问题。下一步，应充分利用人工智能技术，持续赋能城市治理。"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_56497d6a09aa4c47b056f6dd58c8dda4",
+        "candidate_span_id": "cand_e66779c5553c402a85a16a517ba2963d",
+        "span_type": "multi_paragraph_unit",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": "全文整合单中心卡",
+        "primary_label": "全文整合单中心卡",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "目前，我国不少地方不断加快AI技术应用于城市各类场景，助力城市治理提“智”升级，取得一些显著成果。比如，交通领域的AI实时调节交通信号灯，有效解决了固定配时、被动疏导的痛点。上海市使用“交通治堵大模型”，通过海量数据训练与多轮学习，能自动分析交通状况并生成最优治理方案。安徽省合肥市依托清华大学合肥公共安全研究院，启动城市生命线安全工程建设，综合运用物联网、云计算、人工智能等技术手段，搭建起城市生命线安全屏障。\n\n不过，在这一过程中，仍面临着数据壁垒、数字鸿沟、安全隐私等问题。下一步，应充分利用人工智能技术，持续赋能城市治理。"
+      },
+      {
+        "id": "mat_e965c5834e0f47de902eb80a30b76de0",
+        "candidate_span_id": "cand_54d6621f1c52427e8c519344db687763",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "坚持以人为本、推动科技向善。城市建设主要指向物，城市治理主要指向人。考虑不同群体在城市治理中的多样化、差异化需求，既要关注原住民也要考虑新市民，既要关注老年人也要重视新青年等。将市民关心的就医、出行、养老、托育等高频事项作为人工智能应用于城市治理的重点场景。针对老年群体、残疾群体，积极开发适老化、无障碍的公共服务智能应用界面，支持方言识别、大字模式等功能，弥合数字鸿沟，彰显人文关怀。\n\n避免重建设、轻运营，强化数据安全与隐私保护的防线。随着智慧城市建设深入推进，发展重心逐渐从前期搭建转向长效运营与可持续增长。关键要推动有效市场与有为政府更加紧密结合，积极引导并培育智慧城市运营商，构建完善的智慧城市运营服务生态体系。城市全域数字化转型要将数据要素深度融入城市规划、建设、管理、服务、运行全生命周期。"
+      }
+    ]
+  },
+  {
+    "article_id": "article_1ade56688aa74443be8696a0102decf7",
+    "segment": {
+      "article_id": "article_1ade56688aa74443be8696a0102decf7",
+      "paragraph_count": 17,
+      "sentence_count": 33,
+      "candidate_span_count": 3,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 3,
+      "rejected_count": 0
+    },
+    "rejected_admission_counts": {},
+    "created_material_ids": [
+      "mat_0f25e8583e0743a8a2e0beb7779640a9",
+      "mat_60f2caf5b76d4758843f2427d47aafb4",
+      "mat_e1b51b4ca2484a598fd0ebc004c93522"
+    ],
+    "article": {
+      "id": "article_1ade56688aa74443be8696a0102decf7",
+      "title": "“词元”这么火，该注意点啥？",
+      "domain": "经济评论",
+      "status": "tagged",
+      "clean_len": 1547
+    },
+    "candidates": [
+      {
+        "id": "cand_e56d6e4096fb446a9cccc4e4fd78aa77",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 12,
+        "end_paragraph": 15,
+        "start_sentence": 25,
+        "end_sentence": 31,
+        "text": "面对词元热潮，我们既要理性看待其价值，又要注意信息安全、隐私安全，提高安全防范意识，做到了解词元、善用词元。\n\n——认清词元属性。词元可作为数字身份凭证，并非投资品，防范以“词元投资”“高收益回报”“词元理财”“词元挖矿”等为噱头的各类骗局，切勿盲目购买未经官方认证的小众、虚拟词元，不随意注册来路不明的词元服务，从源头上避免因贪利、跟风导致的个人隐私信息泄露和财产损失。\n\n——强化使用规范。使用词元相关服务时，优先选择正规平台与加密传输通道，不在公共网络、不安全环境下进行登录、转账、填写隐私信息等敏感操作；不点击陌生链接，不下载非官方APP，不扫描可疑二维码，及时更新设备系统与安全软件；严格保管词元口令、授权码及绑定的手机号、身份证号等信息，开启双因素认证，不共用账号，不设置通用密码，发现账号异常立即采取改密、解绑、报备等止损措施。\n\n——遵守法律法规。面对词元等AI领域的新兴应用与概念，应保持理性认知，既不盲目追捧，也不跟风炒作，自觉遵守法律法规与监管要求，主动学习官方发布的词元安全知识与风险提示，提高辨别能力；科学区分身份凭证类、AI场景词元与区块链通证、加密货币，不参与非法加密货"
+      },
+      {
+        "id": "cand_4c27fdcbb8cb4ed98c6eb8d03f965703",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 0,
+        "end_paragraph": 2,
+        "start_sentence": 0,
+        "end_sentence": 7,
+        "text": "近期，国家数据局正式定名的AI领域核心术语——词元(Token)成为网络热词。据统计，截至今年3月，我国日均词元调用量已超过140万亿，较2024年初增长1000多倍。“词元”这个新词实际上早已融入我们生活的方方面面。面对新技术新应用，我们既要主动拥抱、善加运用，又要防范风险、确保安全。\n\n什么是词元(Token)？\n\n简单来说，词元是AI大模型处理信息的最小单元，兼具可计量、可定价、可交易三大特征。它不仅是智能时代的价值锚点，更是连接技术供给与商业需求的“结算单位”。词元应用场景远超AI领域，与日常生活紧密相关。"
+      },
+      {
+        "id": "cand_eb40edf839d0403c9596c3adfe18ecf5",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 7,
+        "end_paragraph": 9,
+        "start_sentence": 12,
+        "end_sentence": 20,
+        "text": "随着词元的爆火，一些不法分子开始打起了词元的主意，伺机布设各种陷阱。同时，词元本身在使用过程中也存在一定的安全风险，需要我们加以防范。\n\n——泄露劫持风险。不法分子可通过跨站脚本攻击(XSS)、公共Wi-Fi嗅探等方式，窃取、截获未加密的词元。一旦词元泄露，攻击者可直接盗用用户身份，获取隐私信息、登录账号、篡改数据，甚至实施诈骗、转账等操作，直接威胁个人财产安全。如果海量词元被汇总分析，则可能引发系统性风险，危害数据安全与国家安全。\n\n——伪造篡改风险。若词元缺乏加密或签名防护，不法分子可直接修改词元的权限字段，伪造管理员身份绕过系统验证，非法获取用户敏感隐私数据、实施越权操作。同时，不法分子还有可能制造“虚假词元”，诱导用户泄露身份证号、手机号等隐私信息。"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_e1b51b4ca2484a598fd0ebc004c93522",
+        "candidate_span_id": "cand_e56d6e4096fb446a9cccc4e4fd78aa77",
+        "span_type": "multi_paragraph_unit",
+        "status": "promoted",
+        "release_channel": "stable",
+        "primary_family": "概括归纳型",
+        "primary_subtype": "全文整合单中心卡",
+        "primary_label": "全文整合单中心卡",
+        "quality_flags": "[\"integrity_medium_risk\"]",
+        "text": "面对词元热潮，我们既要理性看待其价值，又要注意信息安全、隐私安全，提高安全防范意识，做到了解词元、善用词元。\n\n——认清词元属性。词元可作为数字身份凭证，并非投资品，防范以“词元投资”“高收益回报”“词元理财”“词元挖矿”等为噱头的各类骗局，切勿盲目购买未经官方认证的小众、虚拟词元，不随意注册来路不明的词元服务，从源头上避免因贪利、跟风导致的个人隐私信息泄露和财产损失。\n\n——强化使用规范。使用词元相关服务时，优先选择正规平台与加密传输通道，不在公共网络、不安全环境下进行登录、转账、填写隐私信息等敏感操作；不点击陌生链接，不下载非官方APP，不扫描可疑二维码，及时更新设备系统与安全软件；严格保管词元口令、授权码及绑定的手机号、身份证号等信息，开启双因素认证，不共用账号，不设置通用密码，发现账号异常立即采取改密、解绑、报备等止损措施。\n\n——遵守法律法规。面对词元等AI领域的新兴应用与概念，应保持理性认知，既不盲目追捧，也不跟风炒作，自觉遵守法律法规与监管要求，主动学习官方发布的词元安全知识与风险提示，提高辨别能力；科学区分身份凭证类、AI场景词元与区块链通证、加密货币，不参与非法加密货币交易，如遭遇诈骗、信息泄露或发现非法活动，应及时向有关部门反映。"
+      },
+      {
+        "id": "mat_60f2caf5b76d4758843f2427d47aafb4",
+        "candidate_span_id": "cand_4c27fdcbb8cb4ed98c6eb8d03f965703",
+        "span_type": "multi_paragraph_unit",
+        "status": "promoted",
+        "release_channel": "stable",
+        "primary_family": "概括归纳型",
+        "primary_subtype": "全文整合单中心卡",
+        "primary_label": "全文整合单中心卡",
+        "quality_flags": "[]",
+        "text": "近期，国家数据局正式定名的AI领域核心术语——词元(Token)成为网络热词。据统计，截至今年3月，我国日均词元调用量已超过140万亿，较2024年初增长1000多倍。“词元”这个新词实际上早已融入我们生活的方方面面。面对新技术新应用，我们既要主动拥抱、善加运用，又要防范风险、确保安全。\n\n什么是词元(Token)？\n\n简单来说，词元是AI大模型处理信息的最小单元，兼具可计量、可定价、可交易三大特征。它不仅是智能时代的价值锚点，更是连接技术供给与商业需求的“结算单位”。词元应用场景远超AI领域，与日常生活紧密相关。"
+      },
+      {
+        "id": "mat_0f25e8583e0743a8a2e0beb7779640a9",
+        "candidate_span_id": "cand_eb40edf839d0403c9596c3adfe18ecf5",
+        "span_type": "multi_paragraph_unit",
+        "status": "promoted",
+        "release_channel": "stable",
+        "primary_family": "概括归纳型",
+        "primary_subtype": "全文整合单中心卡",
+        "primary_label": "全文整合单中心卡",
+        "quality_flags": "[]",
+        "text": "随着词元的爆火，一些不法分子开始打起了词元的主意，伺机布设各种陷阱。同时，词元本身在使用过程中也存在一定的安全风险，需要我们加以防范。\n\n——泄露劫持风险。不法分子可通过跨站脚本攻击(XSS)、公共Wi-Fi嗅探等方式，窃取、截获未加密的词元。一旦词元泄露，攻击者可直接盗用用户身份，获取隐私信息、登录账号、篡改数据，甚至实施诈骗、转账等操作，直接威胁个人财产安全。如果海量词元被汇总分析，则可能引发系统性风险，危害数据安全与国家安全。\n\n——伪造篡改风险。若词元缺乏加密或签名防护，不法分子可直接修改词元的权限字段，伪造管理员身份绕过系统验证，非法获取用户敏感隐私数据、实施越权操作。同时，不法分子还有可能制造“虚假词元”，诱导用户泄露身份证号、手机号等隐私信息。"
+      },
+      {
+        "id": "mat_4ce504f9586d41389b5fc5846b3a1787",
+        "candidate_span_id": "cand_b76ca11c58da443db1c68f51b67189d4",
+        "span_type": "sentence_group",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": "开头总领卡",
+        "primary_label": "开头总领卡",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "当前，各类“词元骗局”层出不穷：用低价AI词元套餐、词元投资等噱头，诱骗用户资金；冒充官方平台，以官方升级、验证为由，骗取个人隐私信息。尤其是宣称“囤词元能暴富”“场外交易赚差价”等行为，不仅涉嫌非法金融活动，还可能被境外间谍情报机关用以开展数据窃取、资金渗透，危害国家经济安全与数据安全。词元(Token)这么火，应该注意点啥？面对词元热潮，我们既要理性看待其价值，又要注意信息安全、隐私安全，提高安全防范意识，做到了解词元、善用词元。——认清词元属性。词元可作为数字身份凭证，并非投资品，防范以“词元投资”“高收益回报”“词元理财”“词元挖矿”等为噱头的各类骗局，切勿盲目购买未经官方认证的小众、虚拟词元，不随意注册来路不明的词元服务，从源头上避免因贪利、跟风导致的个人隐私信息泄露和财产损失。"
+      },
+      {
+        "id": "mat_ba4def7fc25e4f369844b27df1aafa8a",
+        "candidate_span_id": "cand_a53a14328b8242b986f2cca3668e2ded",
+        "span_type": "sentence_group",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "标题命名型",
+        "primary_subtype": null,
+        "primary_label": "标题命名型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "——AI场景类，即官方定名的“词元”核心应用，是使用如AI写作、修图、剪辑等AI服务的消耗性资源。——权益凭证类，可以理解成区块链场景下的“通证”，相当于数字化权益证明，如电子票、游戏皮肤、会员积分等，具有不易伪造、便于流转的特点。词元(Token)热潮下的信息安全隐患随着词元的爆火，一些不法分子开始打起了词元的主意，伺机布设各种陷阱。同时，词元本身在使用过程中也存在一定的安全风险，需要我们加以防范。——泄露劫持风险。"
+      },
+      {
+        "id": "mat_4eb658e112db456486221776b92f5fab",
+        "candidate_span_id": "cand_a097be30f9934e9192af2b0d578eeb8d",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "如果海量词元被汇总分析，则可能引发系统性风险，危害数据安全与国家安全。——伪造篡改风险。若词元缺乏加密或签名防护，不法分子可直接修改词元的权限字段，伪造管理员身份绕过系统验证，非法获取用户敏感隐私数据、实施越权操作。同时，不法分子还有可能制造“虚假词元”，诱导用户泄露身份证号、手机号等隐私信息。\n\n——伪造篡改风险。若词元缺乏加密或签名防护，不法分子可直接修改词元的权限字段，伪造管理员身份绕过系统验证，非法获取用户敏感隐私数据、实施越权操作。同时，不法分子还有可能制造“虚假词元”，诱导用户泄露身份证号、手机号等隐私信息。——诈骗陷阱风险。\n\n若词元缺乏加密或签名防护，不法分子可直接修改词元的权限字段，伪造管理员身份绕过系统验证，非法获取用户敏感隐私数据、实施越权操作。同时，不法分子还有可能制造“虚假词元”，诱导用户泄露身份证号、手机号等隐私信息。——诈骗陷阱风险。当前，各类“词元骗局”层出不穷：用低价AI词元套餐、词元投资等噱头，诱骗用户资金；冒充官方平台，以官方升级、验证为由，骗取个人隐私信息。"
+      }
+    ]
+  },
+  {
+    "article_id": "article_c4680066f2604f439af6a41c8bd12426",
+    "segment": {
+      "article_id": "article_c4680066f2604f439af6a41c8bd12426",
+      "paragraph_count": 26,
+      "sentence_count": 48,
+      "candidate_span_count": 131,
+      "generation_mode": "v1_fallback",
+      "fallback_used": true,
+      "fallback_reason": "llm_candidate_builder_unavailable_or_empty",
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 7,
+      "rejected_count": 103
+    },
+    "rejected_admission_counts": {
+      "gray_hold": 52,
+      "reject": 46,
+      "post_gate_reject": 5
+    },
+    "created_material_ids": [
+      "mat_a179a54e4a004d12b96d1de03793b06d",
+      "mat_1795ade052af48009b964d945b967b07",
+      "mat_23ca08524e95434182ac4ba52a91f078",
+      "mat_4d8bc9b16f1b471ab06f39519326de1e",
+      "mat_73449354a4fb45fb9b6467e750d8f337",
+      "mat_1e8442ce83864d3fbc39d15b93611b87",
+      "mat_dc0112549d8b4efb8212d1dccf2d473a"
+    ],
+    "article": {
+      "id": "article_c4680066f2604f439af6a41c8bd12426",
+      "title": "从“管理”到“服务”——曹杨新村街道探索党建引领物业治理新路径",
+      "domain": "时评政论",
+      "status": "tagged",
+      "clean_len": 1682
+    },
+    "candidates": [
+      {
+        "id": "cand_4f09b1822211443c8721171d271c5e93",
+        "span_type": "story_fragment",
+        "generated_by": "v1_fallback+story_fragment_generator+logical_refiner",
+        "status": "promoted",
+        "start_paragraph": 0,
+        "end_paragraph": 2,
+        "start_sentence": 0,
+        "end_sentence": 5,
+        "text": "新华网上海4月2日电（许超）今年全国两会期间，有人大代表提出了将“物业管理”更名为“物业服务”的建议，已被住建部采纳，折射出基层治理理念的深刻转变。在上海市普陀区曹杨新村街道，这一转变早已悄然落地——不是停在名称上，而是沉到了每一个小区的日常里。\n\n名称之变，理念之变\n\n“管理”强调秩序与约束，“服务”指向需求与回应。这背后，是对物业与居民关系的重新定位。曹杨新村街道近两年持续推动辖区物业公司转变服务理念，以党建引领“双业红”机制为抓手，构建起“红色物业”与“红色业委会”协同运转的治理体系，推动物业从“被动应付”走向“主动作为”。"
+      },
+      {
+        "id": "cand_f49816ede91143618aafa5b2180dd1db",
+        "span_type": "paragraph_window",
+        "generated_by": "v1_fallback+sentence_window_generator+logical_refiner",
+        "status": "rejected",
+        "start_paragraph": 19,
+        "end_paragraph": 25,
+        "start_sentence": 41,
+        "end_sentence": 47,
+        "text": "2026年《半月谈》2026年《半月谈内部版》2026年《时事资料手册》2026年《品读》中国互联网禁毒公约半月谈教育App\n\n2026年《半月谈内部版》2026年《时事资料手册》2026年《品读》中国互联网禁毒公约半月谈教育App官方微信"
+      },
+      {
+        "id": "cand_cad6a15bb4c643cd9b8af1ba3d201a00",
+        "span_type": "paragraph_window",
+        "generated_by": "v1_fallback+sentence_window_generator+logical_refiner",
+        "status": "rejected",
+        "start_paragraph": 17,
+        "end_paragraph": 23,
+        "start_sentence": 39,
+        "end_sentence": 45,
+        "text": "当服务成为物业存在的根本逻辑，居民与物业之间那道长久的隔阂，正在一点一点消融。理论达人 | 国家安全就是你的安全（微视频）2026年《半月谈》2026年《半月谈内部版》2026年《时事资料手册》2026年《品读》\n\n理论达人 | 国家安全就是你的安全（微视频）2026年《半月谈》2026年《半月谈内部版》2026年《时事资料手册》2026年《品读》中国互联网禁毒公约"
+      },
+      {
+        "id": "cand_bae296e17d484099bafaded60904685d",
+        "span_type": "paragraph_window",
+        "generated_by": "v1_fallback+sentence_window_generator+logical_refiner",
+        "status": "rejected",
+        "start_paragraph": 17,
+        "end_paragraph": 21,
+        "start_sentence": 37,
+        "end_sentence": 43,
+        "text": "从“物业管理”到“物业服务”，两字之变，是理念的归位，也是治理的升级。在曹杨新村，这场变革没有停留在文件里——它写在粉刷一新的门洞墙上，嵌在手机里可以实时查询的停车数据里，藏在台风过后一个多小时清完的35个积水门洞里。当服务成为物业存在的根本逻辑，居民与物业之间那道长久的隔阂，正在一点一点消融。理论达人 | 国家安全就是你的安全（微视频）2026年《半月谈》2026年《半月谈内部版》\n\n在曹杨新村，这场变革没有停留在文件里——它写在粉刷一新的门洞墙上，嵌在手机里可以实时查询的停车数据里，藏在台风过后一个多小时清完的35个积水门洞里。当服务成为物业存在的根本逻辑，居民与物业之间那道长久的隔阂，正在一点一点消融。理论达人 | 国家安全就是你的安全（微视频）2026年《半月谈》2026年《半月谈内部版》2026年《时事资料手册》"
+      },
+      {
+        "id": "cand_630eaf9577af457da6ca53e74cb3ccac",
+        "span_type": "sentence_group",
+        "generated_by": "v1_fallback+sentence_window_generator+logical_refiner",
+        "status": "promoted",
+        "start_paragraph": 15,
+        "end_paragraph": 17,
+        "start_sentence": 34,
+        "end_sentence": 39,
+        "text": "”居民王阿姨的感叹，是对物业服务质量提升最朴素的评价。据悉，今年街道范围内预计有十余个小区启动物业费提价工作，同步提升服务质量。这背后，是街道长期以来通过“优质物业服务企业资源库”、每月物业服务“晴雨榜”、定期评选“最美物业人”等机制，持续激励物业主动作为、争先比优的制度积淀。从“物业管理”到“物业服务”，两字之变，是理念的归位，也是治理的升级。在曹杨新村，这场变革没有停留在文件里——它写在粉刷一新的门洞墙上，嵌在手机里可以实时查询的停车数据里，藏在台风过后一个多小时清完的35个积水门洞里。当服务成为物业存在的根本逻辑，居民与物业之间那道长久的隔阂，正在一点一点消融。"
+      },
+      {
+        "id": "cand_2f6d1d7947b447748c3890f0c16bc314",
+        "span_type": "sentence_group",
+        "generated_by": "v1_fallback+sentence_window_generator+logical_refiner",
+        "status": "promoted",
+        "start_paragraph": 15,
+        "end_paragraph": 17,
+        "start_sentence": 33,
+        "end_sentence": 38,
+        "text": "“以前动不动就‘罢工’，现在又稳又快，真是解决了心头大事。”居民王阿姨的感叹，是对物业服务质量提升最朴素的评价。据悉，今年街道范围内预计有十余个小区启动物业费提价工作，同步提升服务质量。这背后，是街道长期以来通过“优质物业服务企业资源库”、每月物业服务“晴雨榜”、定期评选“最美物业人”等机制，持续激励物业主动作为、争先比优的制度积淀。从“物业管理”到“物业服务”，两字之变，是理念的归位，也是治理的升级。在曹杨新村，这场变革没有停留在文件里——它写在粉刷一新的门洞墙上，嵌在手机里可以实时查询的停车数据里，藏在台风过后一个多小时清完的35个积水门洞里。"
+      },
+      {
+        "id": "cand_47fb172984ae47b3a3eeaddf21b0c396",
+        "span_type": "sentence_group",
+        "generated_by": "v1_fallback+sentence_window_generator+logical_refiner",
+        "status": "gray_hold",
+        "start_paragraph": 15,
+        "end_paragraph": 17,
+        "start_sentence": 32,
+        "end_sentence": 37,
+        "text": "君悦苑3号楼3部老旧电梯全部更换完毕，成功申领补贴资金。“以前动不动就‘罢工’，现在又稳又快，真是解决了心头大事。”居民王阿姨的感叹，是对物业服务质量提升最朴素的评价。据悉，今年街道范围内预计有十余个小区启动物业费提价工作，同步提升服务质量。这背后，是街道长期以来通过“优质物业服务企业资源库”、每月物业服务“晴雨榜”、定期评选“最美物业人”等机制，持续激励物业主动作为、争先比优的制度积淀。从“物业管理”到“物业服务”，两字之变，是理念的归位，也是治理的升级。"
+      },
+      {
+        "id": "cand_61be64072c284a0a866ed7839a648598",
+        "span_type": "sentence_group",
+        "generated_by": "v1_fallback+sentence_window_generator+logical_refiner",
+        "status": "gray_hold",
+        "start_paragraph": 15,
+        "end_paragraph": 16,
+        "start_sentence": 31,
+        "end_sentence": 36,
+        "text": "近两年，曹杨新村街道还推动辖区多个小区完成加梯换梯工程。君悦苑3号楼3部老旧电梯全部更换完毕，成功申领补贴资金。“以前动不动就‘罢工’，现在又稳又快，真是解决了心头大事。”居民王阿姨的感叹，是对物业服务质量提升最朴素的评价。据悉，今年街道范围内预计有十余个小区启动物业费提价工作，同步提升服务质量。这背后，是街道长期以来通过“优质物业服务企业资源库”、每月物业服务“晴雨榜”、定期评选“最美物业人”等机制，持续激励物业主动作为、争先比优的制度积淀。"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_dc0112549d8b4efb8212d1dccf2d473a",
+        "candidate_span_id": "cand_21ec00f21f96492e9e935c7417e88f4a",
+        "span_type": "paragraph_window",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "联盟破壁，服务提能\n\n一个物业公司的力量是有限的，尤其面对突发应急任务。曹杨新村街道南梅园社区给出了一个创新解法——“南梅·物业联盟”。\n\n南梅园物业联盟\n\n一个物业公司的力量是有限的，尤其面对突发应急任务。曹杨新村街道南梅园社区给出了一个创新解法——“南梅·物业联盟”。\n\n南梅园物业联盟\n\n南梅园辖梅岭园、梅花园、常高公寓三个小区，此前三家物业公司各管一摊，服务标准不统一，技术资源不互通，遇到急难任务往往捉襟见肘。居民区党总支书记杨磊清楚地记得，去年冬天常高公寓一处雨水井外溢导致路面结冰，仅仅因为应急物资要从总公司调配，处置效率大打折扣。"
+      },
+      {
+        "id": "mat_1e8442ce83864d3fbc39d15b93611b87",
+        "candidate_span_id": "cand_630eaf9577af457da6ca53e74cb3ccac",
+        "span_type": "sentence_group",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "”居民王阿姨的感叹，是对物业服务质量提升最朴素的评价。据悉，今年街道范围内预计有十余个小区启动物业费提价工作，同步提升服务质量。这背后，是街道长期以来通过“优质物业服务企业资源库”、每月物业服务“晴雨榜”、定期评选“最美物业人”等机制，持续激励物业主动作为、争先比优的制度积淀。从“物业管理”到“物业服务”，两字之变，是理念的归位，也是治理的升级。在曹杨新村，这场变革没有停留在文件里——它写在粉刷一新的门洞墙上，嵌在手机里可以实时查询的停车数据里，藏在台风过后一个多小时清完的35个积水门洞里。当服务成为物业存在的根本逻辑，居民与物业之间那道长久的隔阂，正在一点一点消融。"
+      },
+      {
+        "id": "mat_73449354a4fb45fb9b6467e750d8f337",
+        "candidate_span_id": "cand_7744b1590c284ace8a11b9cd45fd52fe",
+        "span_type": "paragraph_window",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "停车难，是老旧小区居民长期以来的“心头事”。车位分配乱、管理责任不清、收费不透明——三大顽疾困扰居民多年。\n\n《普陀区住宅小区停车治理软法指引》手册\n\n《普陀区住宅小区停车治理软法指引》手册\n\n在曹杨新村街道牵头下，《普陀区住宅小区停车治理软法指引》顺利落地。这部“软法”虽无强制约束力，却像一本操作手册，为化解停车矛盾提供了清晰路径：成立停车治理工作小组、建立动态车辆数据库、明确各方权责边界、要求停车收益每季度公示……此外，指引鼓励引入智能停车系统、车牌识别和车位传感器，居民通过手机小程序查空位、预约停车，甚至实现车位错时共享，上班族白天将车位共享给周边商户，晚上收回自用。技术不再是城市中心小区的专利，正走进曹杨的老旧弄堂。"
+      },
+      {
+        "id": "mat_4d8bc9b16f1b471ab06f39519326de1e",
+        "candidate_span_id": "cand_8b7125ee3b1f4ca899e28fbdb6d3e1a2",
+        "span_type": "paragraph_window",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "南梅园物业联盟\n\n南梅园辖梅岭园、梅花园、常高公寓三个小区，此前三家物业公司各管一摊，服务标准不统一，技术资源不互通，遇到急难任务往往捉襟见肘。居民区党总支书记杨磊清楚地记得，去年冬天常高公寓一处雨水井外溢导致路面结冰，仅仅因为应急物资要从总公司调配，处置效率大打折扣。\n\n去年五月，在居民区党组织牵头下，三家物业公司正式组建联盟，建立“五共享”机制——机制共享、信息共享、服务共享、技术共享、经验共享。去年夏季台风过后，梅岭园35个门栋平台积水需紧急清理，联盟机制随即启动，三家物业协同作战，原本需要一整天的工作，一个多小时便全部完成。“单个物业靠两个工人，要一整天；联盟合力，一个多小时搞定。”杨磊说，提效率不是靠加人，而是靠整合。"
+      },
+      {
+        "id": "mat_23ca08524e95434182ac4ba52a91f078",
+        "candidate_span_id": "cand_dc20023d1014436698f28e944a932d3e",
+        "span_type": "paragraph_window",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "香山苑小区原物业因物业费13年未涨、收缴率低而陷入恶性循环，最终退场。新物业进驻后，没有急着谈合同、定价格，而是主动提出“先给小区清清门面”——将16个门洞全部粉刷，费用由物业自行承担。干干净净的楼道，换来了居民实实在在的信任。随后根据房型不同，多层和高层的物业费分别上涨了22%和16%，八成居民举手支持。“适当涨价没有问题，但是物业的管理要同步跟上。”居民蔡丽影的话，道出了“质价相符”的民心逻辑。\n\n联盟破壁，服务提能\n\n联盟破壁，服务提能\n\n一个物业公司的力量是有限的，尤其面对突发应急任务。曹杨新村街道南梅园社区给出了一个创新解法——“南梅·物业联盟”。"
+      },
+      {
+        "id": "mat_1795ade052af48009b964d945b967b07",
+        "candidate_span_id": "cand_45309b8c3ac8497cbdbd4ecc9668d93e",
+        "span_type": "paragraph_window",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "“管理”强调秩序与约束，“服务”指向需求与回应。这背后，是对物业与居民关系的重新定位。曹杨新村街道近两年持续推动辖区物业公司转变服务理念，以党建引领“双业红”机制为抓手，构建起“红色物业”与“红色业委会”协同运转的治理体系，推动物业从“被动应付”走向“主动作为”。\n\n曹杨新村街道香山苑\n\n曹杨新村街道香山苑\n\n香山苑小区原物业因物业费13年未涨、收缴率低而陷入恶性循环，最终退场。新物业进驻后，没有急着谈合同、定价格，而是主动提出“先给小区清清门面”——将16个门洞全部粉刷，费用由物业自行承担。干干净净的楼道，换来了居民实实在在的信任。随后根据房型不同，多层和高层的物业费分别上涨了22%和16%，八成居民举手支持。“适当涨价没有问题，但是物业的管理要同步跟上。”居民蔡丽影的话，道出了“质价相符”的民心逻辑。"
+      }
+    ]
+  },
+  {
+    "article_id": "article_a23f648352dd4661ae40339c14092ca2",
+    "segment": {
+      "article_id": "article_a23f648352dd4661ae40339c14092ca2",
+      "paragraph_count": 21,
+      "sentence_count": 30,
+      "candidate_span_count": 3,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 1,
+      "rejected_count": 1
+    },
+    "rejected_admission_counts": {
+      "gray_hold": 1
+    },
+    "created_material_ids": [
+      "mat_f14da6fdf0974957909e9c312af2afe7"
+    ],
+    "article": {
+      "id": "article_a23f648352dd4661ae40339c14092ca2",
+      "title": "深化改革取得新成果",
+      "domain": "理论评论",
+      "status": "tagged",
+      "clean_len": 1910
+    },
+    "candidates": [
+      {
+        "id": "cand_6f225ac05d724379a1d630f73a2040c3",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 19,
+        "end_paragraph": 20,
+        "start_sentence": 28,
+        "end_sentence": 29,
+        "text": "从建立以创新能力、质量、实效、贡献为导向的人才评价体系，到“揭榜挂帅”“赛马制”支持科学家大胆探索；从三轮减负行动为科研人员松绑减负，到学风作风建设持续优化科研生态……近年来，破立并举的全方位改革举措，推动适应新质生产力发展的高水平复合型劳动者队伍不断壮大，我国已拥有全球规模最大的研发人员队伍。\n\n站在“十五五”新起点上，以改革之力健全因地制宜发展新质生产力体制机制，推动劳动者、劳动资料、劳动对象及其优化组合不断跃升，将充分激发新质生产力澎湃动能，推动中国式现代化建设稳健向前。"
+      },
+      {
+        "id": "cand_12ecdf1da2c64b82ad4c7c8f9786bd39",
+        "span_type": "whole_passage",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 0,
+        "end_paragraph": 20,
+        "start_sentence": 0,
+        "end_sentence": 29,
+        "text": "新华社北京4月3日电 题：深化改革取得新成果——学习贯彻习近平总书记全国两会期间关于发展新质生产力重要论述系列述评之四\n\n新华社记者申铖\n\n发展新质生产力，既是发展命题，也是改革命题。今年全国两会期间，习近平总书记在参加江苏代表团审议时强调，在进一步深化改革、破除制约新质生产力发展的体制机制障碍上取得新成果。\n\n习近平总书记的重要论述，深刻揭示了深化改革对于发展新质生产力的重大意义和实践要求，为打通束缚新质生产力发展的堵点卡点、更好激发创新创造活力提供了根本遵循和科学指引。\n\n新质生产力的形成与发展，离不开对现有生产关系的适应性调整。如果体制机制欠佳，就容易在创新、发展、应用等各环节形成堵点卡点，就无法形成与新质生产力相匹配的生产关系。\n\n“改革是解放和发展社会生产力的关键，是推动国家发展的根本动力”“发展新质生产力，必须进一步全面深化改革，形成与之相适应的新型生产关系”，习近平总书记精辟阐明改革与发展的辩证关系。\n\n党的十八大以来，阻碍新质生产力发展的体制机制障碍在全面深化改革中被不断破除，新动能积厚成势，新优势不断塑造。然而，在各地实践中，科技创新、要素流动、市场准入等领域仍存在堵"
+      },
+      {
+        "id": "cand_9e0441dfa1e84442a9a1b31611fb42a4",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 8,
+        "end_paragraph": 12,
+        "start_sentence": 11,
+        "end_sentence": 18,
+        "text": "在党的二十届三中全会部署的300多项改革举措中，多项重要部署聚焦深化经济体制、科技体制等领域改革，为健全因地制宜发展新质生产力体制机制，加快塑造发展新动能、新优势指明方向。\n\n发展新质生产力，有赖于各类生产要素的高效集聚与优化配置。要聚焦生产要素创新性配置，不断深化经济体制改革。\n\n今年1月，广州城市可信数据空间面向社会全面开通互联网访问，以打破技术壁垒，降低数据接入门槛，让各类主体平等共享数据要素发展红利。2025年9月起，我国部署在10个地区开展要素市场化配置综合改革试点，着力破除阻碍要素自由流动和高效配置的体制机制障碍。\n\n深化要素市场化改革，畅通要素有序流动渠道，统筹增量优化和存量盘活，促进各类要素资源高效配置；坚决破除阻碍全国统一大市场建设卡点堵点，破除地方保护和市场分割，促进商品要素资源在更大范围内顺畅流动……按照“十五五”规划纲要部署，多项改革将加快推进，推动生产要素更加先进、更加充足，为推动新质生产力加快发展提供支撑。\n\n发展新质生产力，科技创新是核心要素。要聚焦推动高水平科技自立自强，不断深化科技体制改革。"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_f14da6fdf0974957909e9c312af2afe7",
+        "candidate_span_id": "cand_12ecdf1da2c64b82ad4c7c8f9786bd39",
+        "span_type": "whole_passage",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": "全文整合单中心卡",
+        "primary_label": "全文整合单中心卡",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "新华社北京4月3日电 题：深化改革取得新成果——学习贯彻习近平总书记全国两会期间关于发展新质生产力重要论述系列述评之四\n\n新华社记者申铖\n\n发展新质生产力，既是发展命题，也是改革命题。今年全国两会期间，习近平总书记在参加江苏代表团审议时强调，在进一步深化改革、破除制约新质生产力发展的体制机制障碍上取得新成果。\n\n习近平总书记的重要论述，深刻揭示了深化改革对于发展新质生产力的重大意义和实践要求，为打通束缚新质生产力发展的堵点卡点、更好激发创新创造活力提供了根本遵循和科学指引。\n\n新质生产力的形成与发展，离不开对现有生产关系的适应性调整。如果体制机制欠佳，就容易在创新、发展、应用等各环节形成堵点卡点，就无法形成与新质生产力相匹配的生产关系。\n\n“改革是解放和发展社会生产力的关键，是推动国家发展的根本动力”“发展新质生产力，必须进一步全面深化改革，形成与之相适应的新型生产关系”，习近平总书记精辟阐明改革与发展的辩证关系。\n\n党的十八大以来，阻碍新质生产力发展的体制机制障碍在全面深化改革中被不断破除，新动能积厚成势，新优势不断塑造。然而，在各地实践中，科技创新、要素流动、市场准入等领域仍存在堵点卡点，部分传统体制机制与创新驱动发展不相适应，成为束缚生产力跃升的“无形枷锁”，必须通过进一步深化改革清障除弊、开路架桥。\n\n“要深化经济体制、科技体制等改革，着力打通束缚新质生产力发展的堵点卡点”“建立高标准市场体系，创新生产要素配置方式，让各类先进优质生产要素向发展新质生产力顺畅流动”……围绕以改革推动发展新质生产力，习近平总书记作出重要论述。\n\n在党的二十届三中全会部署的300多项改革举措"
+      }
+    ]
+  },
+  {
+    "article_id": "article_6208ad5c1da849939d5b215e8135fec7",
+    "segment": {
+      "article_id": "article_6208ad5c1da849939d5b215e8135fec7",
+      "paragraph_count": 31,
+      "sentence_count": 70,
+      "candidate_span_count": 3,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 1,
+      "rejected_count": 2
+    },
+    "rejected_admission_counts": {
+      "gray_hold": 1,
+      "post_gate_reject": 1
+    },
+    "created_material_ids": [
+      "mat_d8204821a9ba4f559d26c73377e0b35b"
+    ],
+    "article": {
+      "id": "article_6208ad5c1da849939d5b215e8135fec7",
+      "title": "跟着沉浸式演艺，流连楚辞唐诗里",
+      "domain": "经济评论",
+      "status": "tagged",
+      "clean_len": 2140
+    },
+    "candidates": [
+      {
+        "id": "cand_ecedf09aabc241f2b978edfffdee2365",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 21,
+        "end_paragraph": 24,
+        "start_sentence": 47,
+        "end_sentence": 54,
+        "text": "脚下，是蜿蜒的水滨步道，头顶，是摇曳的幽幽翠竹。提着竹制灯笼，徜徉在水雾中，恍惚间，游客穿越至屈原笔下的瑰丽世界……\n\n清明假期，位于湖南省益阳市桃江县的桃花江竹海景区内，沉浸式演艺项目《桃花江竹海幻境》上演。一场融合了楚辞文化、竹乡特色与数字科技的文旅新体验，引得不少游客跨城而来。\n\n一场演出，何以形成“磁吸力”？多感官交融的文旅体验尤为关键。\n\n与传统剧场不同，《桃花江竹海幻境》采用了“行进式与坐定式相结合”的观演模式。观众成为剧情的参与者，在不同场景中移动，与演员互动，品尝香草宴。"
+      },
+      {
+        "id": "cand_f554c5c7e2344e04ba0b123ea8d0d6ca",
+        "span_type": "whole_passage",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "rejected",
+        "start_paragraph": 0,
+        "end_paragraph": 30,
+        "start_sentence": 0,
+        "end_sentence": 69,
+        "text": "梨花风起，春和景明。眼下，看一场国风沉浸式演艺节目成为不少人春游的新选择：唐诗里的唯美意境，化为可感可知的沉浸式实景；楚辞中的瑰丽世界，成为多感官交融的文旅体验。随着大数据、虚拟现实等新技术在文旅领域加速应用，虚实结合的国风沉浸式演艺日渐成熟。可互动、可共创的深度体验，让游客触摸古韵国风，感受传统美学与当代生活交融。\n\n——编 者\n\n陕西西安长安十二时辰主题街区焕新展陈\n\n春色如许，唐风市井竞芳菲\n\n记者 高炳\n\n“古韵国风里，藏着满园春色！”\n\n清明假期，走进位于陕西西安曲江新区的长安十二时辰主题街区，千年唐韵与春日雅趣相互交融，引得游客赞叹不已。\n\n抬头望去，朱楼碧瓦、雕梁画栋映入眼帘。枝头绽放的“杏花”与“杜鹃”，掩映其间。不少游客身着襦裙、单手执扇，从花丛中走过。清明假期3天，街区日均接待游客量近8000人次。\n\n街区里，何以春色如许？经过14天全面提升改造，长安十二时辰主题街区近期击鼓开市。在场景升级方面，此次推出春季主题展陈“杏染春芳·望长安”，以杏花布景，让春色沁入唐风市井。\n\n“通过氛围营造，我们努力将唐诗的唯美意境，化为可感可知的沉浸式实景。”街区文化大使李媛媛介绍，"
+      },
+      {
+        "id": "cand_847d190424384fe381de52e262bb83b9",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 26,
+        "end_paragraph": 28,
+        "start_sentence": 57,
+        "end_sentence": 62,
+        "text": "在导演李彦看来，《桃花江竹海幻境》的出圈，在于楚辞文化与湖湘地域特色的深度融合，“我们以《楚辞》为主线，打造出独属桃江的风雅美学。”\n\n团队以屈原在桃江的生活经历为蓝本，展现一个鲜活的屈原形象。同时，该演出挖掘湖湘文化中“香草美人”意象，从《离骚》走出的桃江“女媭”成为关键线索，与屈原并肩求索。\n\n科技与文化碰撞，将沉浸感拉满。李彦介绍，剧场以“新文旅+新科技+新消费”为内核，打造“宴+演+剧”的“幻境”，全剧场布设182台投影机，结合水月数控装置、裸眼全息影像技术、潜藏式水景舞台矩阵等技术，复刻曲水流觞、屈子天问等场景。"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_d8204821a9ba4f559d26c73377e0b35b",
+        "candidate_span_id": "cand_847d190424384fe381de52e262bb83b9",
+        "span_type": "multi_paragraph_unit",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": "全文整合单中心卡",
+        "primary_label": "全文整合单中心卡",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "在导演李彦看来，《桃花江竹海幻境》的出圈，在于楚辞文化与湖湘地域特色的深度融合，“我们以《楚辞》为主线，打造出独属桃江的风雅美学。”\n\n团队以屈原在桃江的生活经历为蓝本，展现一个鲜活的屈原形象。同时，该演出挖掘湖湘文化中“香草美人”意象，从《离骚》走出的桃江“女媭”成为关键线索，与屈原并肩求索。\n\n科技与文化碰撞，将沉浸感拉满。李彦介绍，剧场以“新文旅+新科技+新消费”为内核，打造“宴+演+剧”的“幻境”，全剧场布设182台投影机，结合水月数控装置、裸眼全息影像技术、潜藏式水景舞台矩阵等技术，复刻曲水流觞、屈子天问等场景。"
+      },
+      {
+        "id": "mat_25eea073c84a4473a83da7d2e4118ddf",
+        "candidate_span_id": "cand_53d2ae2781384832b2d1f649bc86b964",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "一旁的酒肆里，酒壶、蒲团、桌椅等，也都复刻了古代实物。“漫步街区，历史成为一种‘可触摸’的当下。”李欣萌说。“我们想让游客在可知、可感、可触摸的沉浸式体验中，激发植根于心的文化自豪感。”街区负责人邹林丰说，每天上演的近百场节目，都在挖掘文化内涵、创新现代表达，进一步强化沉浸氛围与文化感染力，“通过传统美学的当代再现，吸引更多人。”\n\n“漫步街区，历史成为一种‘可触摸’的当下。”李欣萌说。“我们想让游客在可知、可感、可触摸的沉浸式体验中，激发植根于心的文化自豪感。”街区负责人邹林丰说，每天上演的近百场节目，都在挖掘文化内涵、创新现代表达，进一步强化沉浸氛围与文化感染力，“通过传统美学的当代再现，吸引更多人。”一步一景中，也不乏数字科技的身影。"
+      },
+      {
+        "id": "mat_94408f9be9e2425b9026a2d4ebf644c8",
+        "candidate_span_id": "cand_dcb6b008c17d4fb7b0d41a51bee899c9",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "走进现场，沧浪之水剧场、曲水流觞剧场、竹宴大剧场各具风致，更有“香草堂”“擂茶铺”等场景点缀其间，移步换景，妙趣横生。曲水流觞剧场内，茂林修竹，清流激湍，观众可效仿古人，临水而坐，诗酒唱酬；竹宴大剧场将用餐与观演结合，头顶的天空、眼前的桌面、身边的竹海融为一体，通过数字技术打造出沉浸式场域。在导演李彦看来，《桃花江竹海幻境》的出圈，在于楚辞文化与湖湘地域特色的深度融合，“我们以《楚辞》为主线，打造出独属桃江的风雅美学。”\n\n曲水流觞剧场内，茂林修竹，清流激湍，观众可效仿古人，临水而坐，诗酒唱酬；竹宴大剧场将用餐与观演结合，头顶的天空、眼前的桌面、身边的竹海融为一体，通过数字技术打造出沉浸式场域。在导演李彦看来，《桃花江竹海幻境》的出圈，在于楚辞文化与湖湘地域特色的深度融合，“我们以《楚辞》为主线，打造出独属桃江的风雅美学。”团队以屈原在桃江的生活经历为蓝本，展现一个鲜活的屈原形象。"
+      },
+      {
+        "id": "mat_9c537863b4ec4a09b50bd8f2bdd51ff2",
+        "candidate_span_id": "cand_634cbfe73a12496681eab4f395035d30",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "科技与文化碰撞，将沉浸感拉满。李彦介绍，剧场以“新文旅+新科技+新消费”为内核，打造“宴+演+剧”的“幻境”，全剧场布设182台投影机，结合水月数控装置、裸眼全息影像技术、潜藏式水景舞台矩阵等技术，复刻曲水流觞、屈子天问等场景。\n\n“以前看的演出大多是镜框式舞台，在这里，360度都是表演。我看到了屈原的生活，感受到了一种心灵的触动，让我在快节奏的生活中，找到了一份宁静和诗意。”观众黄晓雅说。《桃花江竹海幻境》已演出超400场，接待观众8万余人次，相关视频社交媒体播放量超1.3亿次，受到年轻人青睐。\n\n竹影摇曳处，楚辞入梦来。《桃花江竹海幻境》还在持续更新，从“单一舞台”迈向“全域文旅”，从线下体验转为线上线下联动。创作团队表示，将持续挖掘《楚辞》中丰富的文化意象，创新当代表达，让观众“每次观演皆有新体验”。\n\n梨花风起，春和景明。眼下，看一场国风沉浸式演艺节目成为不少人春游的新选择：唐诗里的唯美意境，化为可感可知的沉浸式实景；楚辞中的瑰丽世界，成为多感官交融的文旅体验。随着大数据、虚拟现实等新技术在文旅领域加速应用，虚实结合的国风沉浸式演艺日渐成熟。\n\n眼下，看一场国风沉浸式演艺节目成为不少人春游的新选择：唐诗里的唯美意境，化为可感可知的沉浸式实景；楚辞中的瑰丽世界，成为多感官交融的文旅体验。随着大数据、虚拟现实等新技术在文旅领域加速应用，虚实结合的国风沉浸式演艺日渐成熟。可互动、可共创的深度体验，让游客触摸古韵国风，感受传统美学与当代生活交融。"
+      },
+      {
+        "id": "mat_e786f454498d486fb039485577f29fa2",
+        "candidate_span_id": "cand_be270d686e154cb2aa285513386f9021",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "标题命名型",
+        "primary_subtype": null,
+        "primary_label": "标题命名型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "清明假期，位于湖南省益阳市桃江县的桃花江竹海景区内，沉浸式演艺项目《桃花江竹海幻境》上演。一场融合了楚辞文化、竹乡特色与数字科技的文旅新体验，引得不少游客跨城而来。\n\n一场演出，何以形成“磁吸力”？多感官交融的文旅体验尤为关键。\n\n与传统剧场不同，《桃花江竹海幻境》采用了“行进式与坐定式相结合”的观演模式。观众成为剧情的参与者，在不同场景中移动，与演员互动，品尝香草宴。"
+      },
+      {
+        "id": "mat_5e07f5912b074922b386f218f45ca448",
+        "candidate_span_id": "cand_53a77f17910845c88435865b57a962c1",
+        "span_type": "paragraph_window",
+        "status": "deprecated",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "一步一景中，也不乏数字科技的身影。在街区的九州图志XR（扩展现实）体验空间，通过高精度3D建模与动态交互，游客可以“穿越”到盛唐，亲历影视剧里长安地下城的“奇幻之旅”。\n\n“不用做妆造、换汉服，也能一键‘梦回盛唐’！”移步向前，几名游客正在体验“智影相机”。上传自拍片，选定模板，背景自动切换至盛唐宫阙。仅需几秒钟，一张张古风写真便同步到手机上。\n\n数字人化身智慧员工，机器人身着唐装展示茶艺……街区引入全息投影、AR（增强现实）互动、沉浸式声场等技术，让科技与传统碰出火花，也与文化深度融合。“越是呈现古韵国风，越要探索新场景、新演艺、新玩法。”邹林丰说。"
+      }
+    ]
+  },
+  {
+    "article_id": "article_45dd355276a4412e94b27cdee0d6a557",
+    "segment": {
+      "article_id": "article_45dd355276a4412e94b27cdee0d6a557",
+      "paragraph_count": 19,
+      "sentence_count": 38,
+      "candidate_span_count": 5,
+      "generation_mode": "v2_primary",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "status": "segmented"
+    },
+    "tag_summary": {
+      "created_count": 1,
+      "rejected_count": 2
+    },
+    "rejected_admission_counts": {
+      "gray_hold": 1,
+      "post_gate_reject": 1
+    },
+    "created_material_ids": [
+      "mat_ad5ff1b6b8ef4598b8262a9515878d93"
+    ],
+    "article": {
+      "id": "article_45dd355276a4412e94b27cdee0d6a557",
+      "title": "学习教育与中心工作两手抓两促进",
+      "domain": "理论评论",
+      "status": "tagged",
+      "clean_len": 2456
+    },
+    "candidates": [
+      {
+        "id": "cand_73e4c2f50c654d699bd25f06b58df7b0",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "gray_hold",
+        "start_paragraph": 0,
+        "end_paragraph": 1,
+        "start_sentence": 0,
+        "end_sentence": 2,
+        "text": "开展树立和践行正确政绩观学习教育，是今年党的建设的重要任务。习近平总书记强调，要树立和践行正确政绩观，坚持从实际出发、按规律办事，自觉为人民出政绩、以实干出政绩。\n\n围绕“立党为公、为民造福、科学决策、真抓实干”的总要求，各级纪检监察机关重结合、求实绩，坚持把学习教育与推动中心工作结合起来，同开展“纪检监察工作规范化法治化正规化建设年”行动统筹起来，以正确政绩观提升监督执纪执法质效，以正风肃纪反腐成果检验学习教育成效，纵深推进新征程纪检监察工作高质量发展。"
+      },
+      {
+        "id": "cand_9e024fffbf454b3986a122eb08234e44",
+        "span_type": "whole_passage",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 0,
+        "end_paragraph": 18,
+        "start_sentence": 0,
+        "end_sentence": 37,
+        "text": "开展树立和践行正确政绩观学习教育，是今年党的建设的重要任务。习近平总书记强调，要树立和践行正确政绩观，坚持从实际出发、按规律办事，自觉为人民出政绩、以实干出政绩。\n\n围绕“立党为公、为民造福、科学决策、真抓实干”的总要求，各级纪检监察机关重结合、求实绩，坚持把学习教育与推动中心工作结合起来，同开展“纪检监察工作规范化法治化正规化建设年”行动统筹起来，以正确政绩观提升监督执纪执法质效，以正风肃纪反腐成果检验学习教育成效，纵深推进新征程纪检监察工作高质量发展。\n\n突出党性教育，推动党员干部坚定理想信念\n\n树立和践行正确政绩观，起决定性作用的是党性。只有党性坚强、摒弃私心杂念，才能保证政绩观不出偏差。纪检监察机关坚持分层分类、精准施教，以勤廉典型的先进事迹强化示范引领，用身边违纪违法案例强化警示震慑，引导党员干部校准价值取向，以坚强党性站稳人民立场。\n\n3月30日上午，上海市闵行区委党校某教室里，区纪委常委、监委委员沈国政在为2026年全区第一期处级干部进修班的全体学员讲授警示教育课。\n\n自树立和践行正确政绩观学习教育开展以来，闵行区纪委监委联合区委组织部、区委党校推出了党性教育与警示教育融"
+      },
+      {
+        "id": "cand_a398cf1b818c4b39b8613f3a3ad0af32",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 15,
+        "end_paragraph": 17,
+        "start_sentence": 27,
+        "end_sentence": 33,
+        "text": "在本次学习教育中，纪检监察机关既是组织参与者，又是受教育者，既要担好“分内之责”，服务保障好全党学习教育，又要走好“第一方阵”，抓好自身学习教育。纪检监察机关将学习教育同开展“三化”建设年行动统筹起来，强化实战练兵、以干带训，以正确政绩观提升监督执纪执法质效。\n\n“这是问题清单和补证清单，请尽快修改完善相关材料，进一步提升案件质量。”前不久，安徽省宁国市纪委监委案件审理室向某镇纪委反馈了某村干部违纪案案件质量评查结果。\n\n案件质量是纪检监察工作的生命线，体现着纪检监察工作规范化法治化正规化水平。宁国市纪委监委以案件质量评查为抓手，坚持“一案一评查、一案一反馈、一案一整改”，围绕事实证据、定性处理、文书制作、程序手续等方面，逐案梳理问题、列出清单，对共性问题集中通报、统一解答，个性问题点对点指导、限期整改，同步开展整改“回头看”，防止问题反弹回潮。针对少数基层纪检监察干部证据意识不够强、程序规范不够熟悉等问题，将学习教育与业务培训深度融合，开展案件质量专题培训，让实事求是、依规依纪依法成为全体纪检监察干部的思想自觉和行动自觉。"
+      },
+      {
+        "id": "cand_bc833d2836204baa8d7dce6b28082f81",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "promoted",
+        "start_paragraph": 9,
+        "end_paragraph": 11,
+        "start_sentence": 14,
+        "end_sentence": 21,
+        "text": "民生无小事，枝叶总关情。哪里有人民需要，哪里就能做出好事实事，哪里就能创造业绩。纪检监察机关坚持民生为大，把开展树立和践行正确政绩观学习教育与群众身边不正之风和腐败问题集中整治结合起来，严肃查处损害群众切身利益的人和事，让群众可感可及。\n\n围绕持续深化养老服务全国性整治项目，海南省琼海市纪委监委联合民政、公安、人社等部门，每月召开调度会，深入全市11家养老服务机构现场办公，推动市民政局牵头明确任务，相关职能部门协同作战。同时，将养老资金管理发放作为监督重点，督促成员单位开展自查自纠，推动民政、公安等部门建立跨部门数据比对和信息共享机制。针对发现的骗取套取财政补贴、资金监管缺位等问题，严查背后责任、作风和腐败问题。\n\n“通过深入群众，我更加体会到，正确的政绩观不是看台账多厚、材料多美，而是看老百姓脸上的笑容真不真。”3月17日，河南省台前县纪委监委干部孟凡敬和同事们走进城关镇高庙西村的田间地头，实地了解农资供应和涉农补助发放情况。"
+      },
+      {
+        "id": "cand_6748e61ff78a4504884f2c52b00cfebd",
+        "span_type": "multi_paragraph_unit",
+        "generated_by": "v2_primary_candidate_builder+llm_candidate_planner",
+        "status": "rejected",
+        "start_paragraph": 3,
+        "end_paragraph": 5,
+        "start_sentence": 4,
+        "end_sentence": 8,
+        "text": "树立和践行正确政绩观，起决定性作用的是党性。只有党性坚强、摒弃私心杂念，才能保证政绩观不出偏差。纪检监察机关坚持分层分类、精准施教，以勤廉典型的先进事迹强化示范引领，用身边违纪违法案例强化警示震慑，引导党员干部校准价值取向，以坚强党性站稳人民立场。\n\n3月30日上午，上海市闵行区委党校某教室里，区纪委常委、监委委员沈国政在为2026年全区第一期处级干部进修班的全体学员讲授警示教育课。\n\n自树立和践行正确政绩观学习教育开展以来，闵行区纪委监委联合区委组织部、区委党校推出了党性教育与警示教育融合方案，包括理论学习、实地参观区警示教育基地、观看警示教育片、学员谈体会等内容，覆盖全区所有党校主体班次，引导党员干部深入查找政绩观方面存在的问题，不断强化党性锤炼、固本培元。"
+      }
+    ],
+    "materials": [
+      {
+        "id": "mat_ad5ff1b6b8ef4598b8262a9515878d93",
+        "candidate_span_id": "cand_9e024fffbf454b3986a122eb08234e44",
+        "span_type": "whole_passage",
+        "status": "gray",
+        "release_channel": "gray",
+        "primary_family": "概括归纳型",
+        "primary_subtype": null,
+        "primary_label": "概括归纳型",
+        "quality_flags": "[\"gray_review\"]",
+        "text": "开展树立和践行正确政绩观学习教育，是今年党的建设的重要任务。习近平总书记强调，要树立和践行正确政绩观，坚持从实际出发、按规律办事，自觉为人民出政绩、以实干出政绩。\n\n围绕“立党为公、为民造福、科学决策、真抓实干”的总要求，各级纪检监察机关重结合、求实绩，坚持把学习教育与推动中心工作结合起来，同开展“纪检监察工作规范化法治化正规化建设年”行动统筹起来，以正确政绩观提升监督执纪执法质效，以正风肃纪反腐成果检验学习教育成效，纵深推进新征程纪检监察工作高质量发展。\n\n突出党性教育，推动党员干部坚定理想信念\n\n树立和践行正确政绩观，起决定性作用的是党性。只有党性坚强、摒弃私心杂念，才能保证政绩观不出偏差。纪检监察机关坚持分层分类、精准施教，以勤廉典型的先进事迹强化示范引领，用身边违纪违法案例强化警示震慑，引导党员干部校准价值取向，以坚强党性站稳人民立场。\n\n3月30日上午，上海市闵行区委党校某教室里，区纪委常委、监委委员沈国政在为2026年全区第一期处级干部进修班的全体学员讲授警示教育课。\n\n自树立和践行正确政绩观学习教育开展以来，闵行区纪委监委联合区委组织部、区委党校推出了党性教育与警示教育融合方案，包括理论学习、实地参观区警示教育基地、观看警示教育片、学员谈体会等内容，覆盖全区所有党校主体班次，引导党员干部深入查找政绩观方面存在的问题，不断强化党性锤炼、固本培元。\n\n北京市西城区纪委监委根据树立和践行正确政绩观学习教育各项要求，结合落实新时代廉洁文化建设三年行动计划，以廉洁文化凝聚共识。利用李大钊故居等市级廉政教育基地开展沉浸式教育，引导干部对照学习先辈先烈的政绩观。联合区委组织部、"
+      }
+    ]
+  },
+  {
+    "article_id": "article_8a255ed10bd84ed4ae169d77ee7c58fd",
+    "error": "ConnectError('[WinError 10054] 远程主机强迫关闭了一个现有的连接。')"
+  }
+]

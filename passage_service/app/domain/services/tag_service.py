@@ -92,12 +92,23 @@ class TagService(ServiceBase):
                 paragraph_count=span.paragraph_count,
                 sentence_count=span.sentence_count,
             )
-            if not integrity["is_complete"] or integrity["is_truncated"] or integrity["is_context_dependent"]:
-                reject_reason = f"integrity_gate:{integrity['reason']}"
-                self._reject_candidate(candidate.id, {}, reject_reason, integrity=integrity)
+            admission_status = integrity.get("admission_status", "reject")
+            if admission_status != "allow":
+                reject_reason = f"integrity_gate:{admission_status}:{integrity.get('admission_reason') or integrity.get('reason', 'unknown')}"
+                if admission_status == "gray_hold":
+                    self._hold_candidate(candidate.id, reject_reason, integrity=integrity)
+                else:
+                    self._reject_candidate(
+                        candidate.id,
+                        {},
+                        reject_reason,
+                        integrity=integrity,
+                        stage="material_integrity_gate",
+                    )
                 rejected_candidates.append(
                     {
                         "candidate_span_id": candidate.id,
+                        "admission_status": admission_status,
                         "reject_reason": reject_reason,
                         "integrity": integrity,
                     }
@@ -354,6 +365,7 @@ class TagService(ServiceBase):
         reject_reason: str,
         *,
         integrity: dict | None = None,
+        stage: str = "material_governance",
     ) -> None:
         self.candidate_repo.mark_status(candidate_span_id, CandidateSpanStatus.REJECTED.value)
         self.audit_repo.log(
@@ -362,9 +374,29 @@ class TagService(ServiceBase):
             "tag",
             {
                 "result": "rejected",
-                "stage": "material_governance",
+                "stage": stage,
                 "reject_reason": reject_reason,
                 "family_scores": family_scores,
+                "integrity": integrity or {},
+            },
+        )
+
+    def _hold_candidate(
+        self,
+        candidate_span_id: str,
+        hold_reason: str,
+        *,
+        integrity: dict | None = None,
+    ) -> None:
+        self.candidate_repo.mark_status(candidate_span_id, CandidateSpanStatus.GRAY_HOLD.value)
+        self.audit_repo.log(
+            "candidate_span",
+            candidate_span_id,
+            "tag",
+            {
+                "result": "gray_hold",
+                "stage": "material_integrity_gate",
+                "hold_reason": hold_reason,
                 "integrity": integrity or {},
             },
         )

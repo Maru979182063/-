@@ -11,6 +11,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.core.dependencies import get_question_repository
+from app.core.exceptions import DomainError
 from app.core.settings import get_settings
 from app.main import app
 from app.schemas.question import QuestionReviewActionRequest
@@ -75,7 +76,7 @@ class ReviewWorkbenchSmokeTest(TestCase):
 
         self.assertEqual(edit.status_code, 422)
 
-    def test_minor_edit_result_truth_change_is_upgraded_by_result_audit(self) -> None:
+    def _legacy_minor_edit_result_truth_change_is_upgraded_by_result_audit(self) -> None:
         with self._patched_runtime():
             item_id = self._generate_one().json()["items"][0]["item_id"]
 
@@ -114,7 +115,7 @@ class ReviewWorkbenchSmokeTest(TestCase):
         self.assertEqual(latest_action["payload"]["audit_reason"], "minor_edit_result_touched_truth_like_fields")
         self.assertIn("answer", latest_action["payload"]["changed_fields"])
 
-    def test_minor_edit_result_material_change_is_upgraded_by_result_audit(self) -> None:
+    def _legacy_minor_edit_result_material_change_is_upgraded_by_result_audit(self) -> None:
         with self._patched_runtime():
             item_id = self._generate_one().json()["items"][0]["item_id"]
 
@@ -153,6 +154,75 @@ class ReviewWorkbenchSmokeTest(TestCase):
         self.assertTrue(latest_action["payload"]["material_boundary_crossed"])
         self.assertEqual(latest_action["payload"]["audit_reason"], "minor_edit_result_crossed_material_boundary")
         self.assertIn("material_id", latest_action["payload"]["changed_fields"])
+
+    def test_minor_edit_result_truth_change_is_rejected(self) -> None:
+        with self._patched_runtime():
+            item_id = self._generate_one().json()["items"][0]["item_id"]
+
+        class StubGenerationService:
+            def __init__(self, repository):
+                self.repository = repository
+
+            def revise_minor_edit(self, current_item, instruction):
+                revised = deepcopy(current_item)
+                revised["generated_question"] = {
+                    **(current_item.get("generated_question") or {}),
+                    "options": {"A": "新A", "B": "新B", "C": "新C", "D": "新D"},
+                    "answer": "B",
+                    "analysis": "新的解析",
+                }
+                revised["current_version_no"] = int(current_item.get("current_version_no", 1)) + 1
+                revised["current_status"] = "pending_review"
+                revised["revision_count"] = int(current_item.get("revision_count", 0)) + 1
+                revised["statuses"]["review_status"] = "waiting_review"
+                revised["statuses"]["generation_status"] = "success"
+                revised["statuses"]["validation_status"] = "passed"
+                return revised
+
+        service = QuestionReviewService(self.repository, StubGenerationService(self.repository))
+        with self.assertRaises(DomainError):
+            service.apply_action(
+                item_id,
+                QuestionReviewActionRequest(action="minor_edit", instruction="reject truth drift"),
+            )
+
+        self.assertEqual(self.repository.list_review_actions(item_id=item_id, limit=1), [])
+
+    def test_minor_edit_result_material_change_is_rejected(self) -> None:
+        with self._patched_runtime():
+            item_id = self._generate_one().json()["items"][0]["item_id"]
+
+        class StubGenerationService:
+            def __init__(self, repository):
+                self.repository = repository
+
+            def revise_minor_edit(self, current_item, instruction):
+                revised = deepcopy(current_item)
+                revised["material_text"] = "新的材料文本"
+                revised["material_source"] = {"site": "override"}
+                revised["material_selection"] = {
+                    **(current_item.get("material_selection") or {}),
+                    "material_id": "mat-override",
+                    "source_tail": "override tail",
+                    "text": "新的材料文本",
+                    "source": {"site": "override"},
+                }
+                revised["current_version_no"] = int(current_item.get("current_version_no", 1)) + 1
+                revised["current_status"] = "pending_review"
+                revised["revision_count"] = int(current_item.get("revision_count", 0)) + 1
+                revised["statuses"]["review_status"] = "waiting_review"
+                revised["statuses"]["generation_status"] = "success"
+                revised["statuses"]["validation_status"] = "passed"
+                return revised
+
+        service = QuestionReviewService(self.repository, StubGenerationService(self.repository))
+        with self.assertRaises(DomainError):
+            service.apply_action(
+                item_id,
+                QuestionReviewActionRequest(action="minor_edit", instruction="reject material drift"),
+            )
+
+        self.assertEqual(self.repository.list_review_actions(item_id=item_id, limit=1), [])
 
     def test_approve_updates_current_status(self) -> None:
         with self._patched_runtime():
@@ -348,6 +418,71 @@ class ReviewWorkbenchSmokeTest(TestCase):
         latest_action = self.client.get(f"/api/v1/questions/{item_id}/review-actions").json()[0]
         self.assertEqual(latest_action["payload"]["requested_action"], "question_modify")
         self.assertEqual(latest_action["payload"]["patch"]["control_overrides"], {"difficulty_target": "hard"})
+
+    def test_review_action_rejects_unknown_top_level_field(self) -> None:
+        with self._patched_runtime():
+            item_id = self._generate_one().json()["items"][0]["item_id"]
+            response = self.client.post(
+                f"/api/v1/questions/{item_id}/review-actions",
+                json={
+                    "action": "question_modify",
+                    "control_overrides": {"difficulty_target": "hard"},
+                    "unexpected_field": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+
+    def test_question_modify_rejects_unknown_nested_extra_constraints(self) -> None:
+        with self._patched_runtime():
+            item_id = self._generate_one().json()["items"][0]["item_id"]
+            response = self.client.post(
+                f"/api/v1/questions/{item_id}/review-actions",
+                json={
+                    "action": "question_modify",
+                    "control_overrides": {"extra_constraints": {"new_semantic_switch": True}},
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        payload = response.json()
+        self.assertIn("extra_constraints.new_semantic_switch", payload["error"]["details"]["disallowed_input_fields"])
+
+    def test_question_modify_rejects_unknown_nested_type_slots(self) -> None:
+        with self._patched_runtime():
+            item_id = self._generate_one().json()["items"][0]["item_id"]
+            response = self.client.post(
+                f"/api/v1/questions/{item_id}/review-actions",
+                json={
+                    "action": "question_modify",
+                    "control_overrides": {"type_slots": {"new_slot": "value"}},
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        payload = response.json()
+        self.assertIn("type_slots.new_slot", payload["error"]["details"]["disallowed_input_fields"])
+
+    def test_manual_edit_rejects_unknown_option_patch_key(self) -> None:
+        with self._patched_runtime():
+            item_id = self._generate_one().json()["items"][0]["item_id"]
+            response = self.client.post(
+                f"/api/v1/questions/{item_id}/review-actions",
+                json={
+                    "action": "manual_edit",
+                    "instruction": "manual patch",
+                    "control_overrides": {
+                        "manual_patch": {
+                            "options": {"A": "甲", "B": "乙", "E": "越界"},
+                            "answer": "A",
+                        }
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        payload = response.json()
+        self.assertIn("manual_patch.options.E", payload["error"]["details"]["disallowed_input_fields"])
 
     def test_approve_records_material_regenerate_approval_basis(self) -> None:
         with self._patched_runtime():

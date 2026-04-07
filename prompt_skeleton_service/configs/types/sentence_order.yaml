@@ -17,6 +17,14 @@ task_definition: >
 
 default_pattern_id: dual_anchor_lock
 
+formal_runtime_spec:
+  primary_business_card_id: sentence_order__six_sentence_role_chain__abstract
+  sentence_count:
+    mode: fixed
+    value: 6
+  reject_non_six_sentence_sequences: true
+  uniqueness_model: role_chain_only
+
 difficulty_target_profiles:
   easy:
     complexity: { min: 0.20, max: 0.42 }
@@ -39,7 +47,66 @@ skeleton:
   operation_type: reorder
   target_type: coherent_sequence
 
+structure_schema:
+  sentence_count:
+    mode: fixed
+    value: 6
+  sentence_roles:
+    type: enum_list
+    values:
+      - thesis
+      - definition
+      - explanation
+      - reasoning
+      - transition
+      - example
+      - conclusion
+      - countermeasure
+  head_constraints:
+    must_not_have:
+      - backward_reference
+      - mid_transition
+    preferred_roles:
+      - thesis
+      - definition
+  tail_constraints:
+    must_have:
+      - closure
+    preferred_roles:
+      - conclusion
+      - countermeasure
+  binding_pairs:
+    type: list
+  ordering_logic:
+    type: pattern
+    examples:
+      - thesis -> explanation -> reasoning -> conclusion
+      - problem -> analysis -> solution
+      - definition -> explanation -> example -> conclusion
+  uniqueness_source:
+    type: enum_list
+    values:
+      - role_order_conflict
+      - reference_dependency
+      - closure_position
+      - binding_violation
+
+legacy_slot_mapping:
+  opening_anchor_type: head_constraints.preferred_roles
+  closing_anchor_type: tail_constraints.preferred_roles
+  local_binding_strength: binding_pairs
+  middle_structure_type: ordering_logic
+  block_order_complexity: ordering_logic
+
 slot_schema:
+  sentence_count:
+    type: integer
+    required: false
+    default: 6
+    allowed:
+      - 6
+    description: 排序题正式运行口径固定为6句
+
   opening_anchor_type:
     type: string
     required: false
@@ -148,7 +215,48 @@ slot_schema:
       - high
     description: 错误项迷惑强度
 
+  sentence_roles:
+    type: array
+    required: false
+    default:
+      - thesis
+      - explanation
+      - conclusion
+    description: 句群中的核心角色链
+
+  head_constraints:
+    type: object
+    required: false
+    description: 首句必须满足的角色和禁忌约束
+
+  tail_constraints:
+    type: object
+    required: false
+    description: 尾句必须满足的收束约束
+
+  binding_pairs:
+    type: array
+    required: false
+    default: []
+    description: 句子之间不可交换的紧绑定对
+
+  ordering_logic:
+    type: string
+    required: false
+    default: thesis -> explanation -> conclusion
+    description: 本题的结构推进链条
+
+  uniqueness_source:
+    type: array
+    required: false
+    default:
+      - role_order_conflict
+      - closure_position
+      - binding_violation
+    description: 正确顺序唯一性的结构来源
+
 default_slots:
+  sentence_count: 6
   opening_anchor_type: explicit_topic
   opening_signal_strength: medium
   middle_structure_type: local_binding
@@ -161,6 +269,45 @@ default_slots:
     - local_binding_break
     - wrong_closing
   distractor_strength: high
+  sentence_roles:
+    - thesis
+    - explanation
+    - conclusion
+  head_constraints:
+    must_not_have:
+      - backward_reference
+      - mid_transition
+    preferred_roles:
+      - thesis
+      - definition
+  tail_constraints:
+    must_have:
+      - closure
+    preferred_roles:
+      - conclusion
+      - countermeasure
+  binding_pairs: []
+  ordering_logic: thesis -> explanation -> reasoning -> conclusion
+  uniqueness_source:
+    - role_order_conflict
+    - closure_position
+    - binding_violation
+
+validator_contract:
+  sentence_order:
+    sentence_count:
+      mode: fixed
+      value: 6
+    require_legal_head: true
+    require_legal_tail: true
+    require_binding_pairs_intact: true
+    require_complete_ordering_chain: true
+    fail_when:
+      - sentence_count_mismatch
+      - illegal_head
+      - illegal_tail
+      - binding_pairs_broken
+      - ordering_chain_incomplete
 
 fewshot_policy:
   enabled: true
@@ -171,7 +318,7 @@ fewshot_policy:
 default_fewshot:
   title: 语句排序题结构示例
   content: >
-    示例只用于提示“排序题要同时满足首句合法、中段可接、尾句可收”，
+    示例只用于提示“正式排序题固定为6句，且要同时满足首句合法、中段可接、尾句可收”，
     不用于绑定具体难度。
 
 patterns:

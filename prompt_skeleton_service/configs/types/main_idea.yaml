@@ -38,6 +38,50 @@ skeleton:
   operation_type: integrate
   target_type: core_meaning
 
+structure_schema:
+  argument_structure:
+    type: enum
+    values:
+      - total_sub
+      - sub_total
+      - parallel
+      - problem_solution
+      - phenomenon_analysis
+      - example_conclusion
+  main_axis_source:
+    type: enum
+    values:
+      - transition_after
+      - final_summary
+      - global_abstraction
+      - solution_conclusion
+      - example_elevation
+  abstraction_level:
+    type: enum
+    values:
+      - low
+      - medium
+      - high
+  distractor_types:
+    type: list
+    values:
+      - detail_as_main
+      - example_as_conclusion
+      - scope_too_wide
+      - scope_too_narrow
+      - subject_shift
+      - focus_shift
+  uniqueness_source:
+    type: enum_list
+    values:
+      - axis_coverage
+      - abstraction_match
+
+legacy_slot_mapping:
+  structure_type: argument_structure
+  main_point_source: main_axis_source
+  distractor_modes: distractor_types
+
 slot_schema:
   structure_type:
     type: string
@@ -148,6 +192,58 @@ slot_schema:
       - low
     description: 中心是否显性
 
+  argument_structure:
+    type: string
+    required: false
+    default: phenomenon_analysis
+    allowed:
+      - total_sub
+      - sub_total
+      - parallel
+      - problem_solution
+      - phenomenon_analysis
+      - example_conclusion
+    description: 文章的论证结构主型
+
+  main_axis_source:
+    type: string
+    required: false
+    default: global_abstraction
+    allowed:
+      - transition_after
+      - final_summary
+      - global_abstraction
+      - solution_conclusion
+      - example_elevation
+    description: 主旨来自哪一个结构落点
+
+  distractor_types:
+    type: array
+    required: false
+    default:
+      - detail_as_main
+      - scope_too_narrow
+      - focus_shift
+    allowed:
+      - detail_as_main
+      - example_as_conclusion
+      - scope_too_wide
+      - scope_too_narrow
+      - subject_shift
+      - focus_shift
+    description: 主旨题错误选项的高频错因类型
+
+  uniqueness_source:
+    type: array
+    required: false
+    default:
+      - axis_coverage
+      - abstraction_match
+    allowed:
+      - axis_coverage
+      - abstraction_match
+    description: 正确答案唯一性的主轴来源
+
 default_slots:
   structure_type: turning
   main_point_source: whole_passage
@@ -161,6 +257,15 @@ default_slots:
     - scope_shift
   distractor_strength: high
   statement_visibility: medium
+  argument_structure: phenomenon_analysis
+  main_axis_source: global_abstraction
+  distractor_types:
+    - detail_as_main
+    - scope_too_narrow
+    - focus_shift
+  uniqueness_source:
+    - axis_coverage
+    - abstraction_match
 
 fewshot_policy:
   enabled: true

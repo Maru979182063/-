@@ -17,6 +17,25 @@ feature_signature:
   business_function: bridge_both_sides
   relation_focus: 中间空句必须同时承前启后
 
+schema_alignment:
+  schema_status: aligned_v2
+  canonical_card_type: sentence_fill
+  structure_schema:
+    position: middle
+    function_type: bridge
+    reference_anchor: optional
+    bidirectional_check:
+      previous_valid: true
+      next_valid: true
+    semantic_scope: sentence_level
+  uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+  legacy_compatibility:
+    pattern_families:
+      - bridge_transition
+    legacy_function_type: bridge
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true
@@ -41,10 +60,13 @@ slot_projection:
     logic_relation: continuation
     context_dependency: high
     bidirectional_validation: high
+    reference_anchor: optional
     reference_dependency: medium
     abstraction_level: medium
+    semantic_scope: sentence_level
     distractor_modes: [function_mismatch, weak_backward_link, weak_forward_link]
     distractor_strength: high
+    uniqueness_source: [function_mismatch, scope_mismatch]
   prompt_extras:
     business_feature_card_id: sentence_fill__middle_bridge_both_sides__abstract
     business_feature_card_label: 语句填空-中间承上启下

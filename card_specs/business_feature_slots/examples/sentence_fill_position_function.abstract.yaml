@@ -7,6 +7,7 @@ card_meta:
   mother_family_id: sentence_fill
   enabled: false
   runtime_eligible: false
+  card_role: abstract_parent
   source: textbook_business_card
   tags:
     - 语句填空题
@@ -24,24 +25,28 @@ feature_signature:
     - blank_position
     - blank_unit_type
     - function_type
+    - reference_anchor
+    - bidirectional_check
     - logic_relation
+    - semantic_scope
     - topic_consistency
   solving_focus:
     clause_level: 横线为分句时，优先判断句内衔接是否自然
     sentence_level: 横线为完整句时，优先判断句子之间的关系与话题一致性
   position_function_map:
     opening:
-      - summarize_following_text
-      - topic_introduction
+      - summary
+      - topic_intro
     middle:
       - carry_previous
       - lead_next
-      - bridge_both_sides
+      - bridge
+      - reference_summary
     ending:
-      - summarize_previous_text
-      - propose_countermeasure
+      - conclusion
+      - countermeasure
   structural_features:
-    best_middle_case: bridge_both_sides
+    best_middle_case: bridge
     opening_prefers_topic_set_up: true
     ending_prefers_closure_or_action: true
   distractor_features:
@@ -61,6 +66,33 @@ feature_signature:
     preferred_paragraph_window:
       - 1
       - 2
+
+schema_alignment:
+  schema_status: abstract_parent
+  canonical_card_type: sentence_fill
+  structure_schema:
+    position:
+      type: enum
+      values: [opening, middle, ending]
+    function_type:
+      type: enum
+      values: [summary, topic_intro, carry_previous, lead_next, bridge, reference_summary, countermeasure, conclusion]
+    reference_anchor:
+      type: optional
+    bidirectional_check:
+      previous_valid: bool
+      next_valid: bool
+    semantic_scope:
+      type: enum
+      values: [local, sentence_level, paragraph_level]
+  uniqueness_source:
+    - function_mismatch
+    - reference_failure
+    - scope_mismatch
+  legacy_compatibility:
+    runtime_card: false
+    notes:
+      - 保留为母卡/抽象卡，不再作为运行卡直接绑定
 
 retrieval_profile:
   hard_filters:
@@ -110,13 +142,18 @@ slot_projection:
     logic_relation: continuation
     context_dependency: medium
     bidirectional_validation: medium
+    reference_anchor: optional
     reference_dependency: low
     abstraction_level: medium
+    semantic_scope: sentence_level
     distractor_modes:
       - function_mismatch
       - weak_forward_link
       - topic_shift
     distractor_strength: high
+    uniqueness_source:
+      - function_mismatch
+      - scope_mismatch
   slot_strategy_map:
     opening_summary:
       when:
@@ -126,37 +163,46 @@ slot_projection:
         - opening_summary
       type_slots:
         blank_position: opening
-        function_type: opening_summary
+        function_type: summary
         logic_relation: summary
         context_dependency: medium
         bidirectional_validation: low
+        reference_anchor: none
         reference_dependency: low
         abstraction_level: medium
+        semantic_scope: paragraph_level
         distractor_modes:
           - function_mismatch
           - overgeneralization
           - undergeneralization
         distractor_strength: medium
+        uniqueness_source:
+          - function_mismatch
+          - scope_mismatch
     opening_topic_intro:
       when:
         blank_position: opening
         business_function: topic_introduction
       pattern_candidates:
         - opening_summary
-        - bridge_transition
       type_slots:
         blank_position: opening
-        function_type: opening_summary
+        function_type: topic_intro
         logic_relation: transition
         context_dependency: medium
         bidirectional_validation: low
+        reference_anchor: none
         reference_dependency: low
         abstraction_level: medium
+        semantic_scope: paragraph_level
         distractor_modes:
           - function_mismatch
           - topic_shift
           - wrong_direction
         distractor_strength: medium
+        uniqueness_source:
+          - function_mismatch
+          - scope_mismatch
     middle_carry_previous:
       when:
         blank_position: middle
@@ -165,37 +211,47 @@ slot_projection:
         - middle_explanation
       type_slots:
         blank_position: middle
-        function_type: middle_explanation
+        function_type: carry_previous
         logic_relation: explanation
         context_dependency: medium
         bidirectional_validation: low
+        reference_anchor: optional
         reference_dependency: medium
         abstraction_level: low
+        semantic_scope: local
         distractor_modes:
           - weak_backward_link
           - function_mismatch
           - role_mismatch
         distractor_strength: high
+        uniqueness_source:
+          - function_mismatch
+          - scope_mismatch
     middle_lead_next:
       when:
         blank_position: middle
         business_function: lead_next
       pattern_candidates:
-        - bridge_transition
         - middle_focus_shift
+        - bridge_transition
       type_slots:
         blank_position: middle
-        function_type: bridge
-        logic_relation: transition
+        function_type: lead_next
+        logic_relation: focus_shift
         context_dependency: medium
         bidirectional_validation: low
+        reference_anchor: none
         reference_dependency: low
         abstraction_level: medium
+        semantic_scope: sentence_level
         distractor_modes:
           - weak_forward_link
           - wrong_direction
           - topic_shift
         distractor_strength: high
+        uniqueness_source:
+          - function_mismatch
+          - scope_mismatch
     middle_bridge_both_sides:
       when:
         blank_position: middle
@@ -208,13 +264,18 @@ slot_projection:
         logic_relation: continuation
         context_dependency: high
         bidirectional_validation: high
+        reference_anchor: optional
         reference_dependency: medium
         abstraction_level: medium
+        semantic_scope: sentence_level
         distractor_modes:
           - function_mismatch
           - weak_backward_link
           - weak_forward_link
         distractor_strength: high
+        uniqueness_source:
+          - function_mismatch
+          - scope_mismatch
     ending_summary:
       when:
         blank_position: ending
@@ -223,17 +284,22 @@ slot_projection:
         - ending_summary
       type_slots:
         blank_position: ending
-        function_type: ending_summary
+        function_type: conclusion
         logic_relation: summary
         context_dependency: low
         bidirectional_validation: low
+        reference_anchor: none
         reference_dependency: low
         abstraction_level: medium
+        semantic_scope: paragraph_level
         distractor_modes:
           - function_mismatch
           - overgeneralization
           - topic_shift
         distractor_strength: medium
+        uniqueness_source:
+          - function_mismatch
+          - scope_mismatch
     ending_countermeasure:
       when:
         blank_position: ending
@@ -242,17 +308,22 @@ slot_projection:
         - ending_summary
       type_slots:
         blank_position: ending
-        function_type: ending_summary
-        logic_relation: summary
+        function_type: countermeasure
+        logic_relation: action
         context_dependency: low
         bidirectional_validation: low
+        reference_anchor: none
         reference_dependency: low
         abstraction_level: medium
+        semantic_scope: paragraph_level
         distractor_modes:
           - function_mismatch
           - wrong_direction
           - topic_shift
         distractor_strength: high
+        uniqueness_source:
+          - function_mismatch
+          - scope_mismatch
       prompt_extras:
         ending_business_action: countermeasure
   prompt_extras:
