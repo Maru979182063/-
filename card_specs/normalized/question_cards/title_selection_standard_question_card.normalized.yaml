@@ -173,12 +173,36 @@ generation_archetypes:
     - 强化表达
     - 排除弱选项
 validator_contract:
+  title_selection:
+    enforce_title_like: true
+    enforce_material_fit: true
+    enforce_option_diversity: true
   extension_rules:
   - 正确标题必须包含核心对象或其稳定上位替代表达
   - 正确标题不得只是过程链复述；优先命名式/判断式标题
   - 至少1个错误项与正确项共享对象域，但层级/范围/重心有误
   - 网页残留、版次信息、分享文案不得进入标题题材料
   - 解析必须显式指出“对象”“主旨判断”“错项错因”三层
+answer_grounding:
+  require_material_traceability: true
+  disallow_unsupported_extensions: true
+  unsupported_extension_types:
+  - stance
+  - causal_chain
+  - countermeasure
+  - conclusion
+  - evaluative_claim
+  require_correct_option_material_defensibility: true
+  distractor_sources:
+  - non_key_detail
+  - scope_shift
+  - partial_reading
+  - unsupported_extension
+  require_analysis_material_evidence: true
+  align_with_reference_elimination_style: true
+  require_central_meaning_alignment: true
+  disallow_detail_as_correct_answer: true
+  disallow_stronger_conclusion: true
 normalized_from: title_selection_standard_question_card.yaml
 normalization_notes:
 - business_family_id normalized from legacy family_id=main_idea to title_selection

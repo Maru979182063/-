@@ -14,6 +14,7 @@ card_meta:
 
 feature_signature:
   relation_type: 并列关系
+  relation_family: 并列
   relation_focus: 全面概括
   typical_formats:
     - 一方面……另一方面……

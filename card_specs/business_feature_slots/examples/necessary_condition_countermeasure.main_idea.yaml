@@ -14,6 +14,7 @@ card_meta:
 
 feature_signature:
   relation_type: 必要条件关系
+  relation_family: 必要条件
   relation_focus: 只有……才中间是重点
   typical_formats:
     - 只有……才……

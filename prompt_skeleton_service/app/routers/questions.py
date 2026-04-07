@@ -253,6 +253,7 @@ def fine_tune_question_item(
     service = QuestionReviewService(repository, generation_service)
     action_request = QuestionReviewActionRequest(
         action="minor_edit",
+        requested_action="fine_tune",
         instruction=request.instruction,
         operator=request.operator,
     )

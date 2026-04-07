@@ -12,6 +12,11 @@ card_meta:
     - 开头
     - 话题引入
 
+feature_signature:
+  relation_type: 位置功能匹配
+  business_function: topic_introduction
+  relation_focus: 开头空句负责引出后文要展开的话题或对象
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true

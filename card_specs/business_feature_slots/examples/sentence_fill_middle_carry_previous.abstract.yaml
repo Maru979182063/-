@@ -12,6 +12,11 @@ card_meta:
     - 中间
     - 承上
 
+feature_signature:
+  relation_type: 位置功能匹配
+  business_function: carry_previous
+  relation_focus: 中间空句主要承接前文判断或对象
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true

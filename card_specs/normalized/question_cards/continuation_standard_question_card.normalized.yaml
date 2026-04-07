@@ -216,6 +216,23 @@ validator_contract:
   - 材料尾句必须完整，且应有真实的 extension signal；不得用半截转折或网页残留材料出题。
   - 解析必须显式指出“尾句落点”“最自然推进方向”“错项错因”三层。
   - 若尾句已转入方法/对策/新支点，下文不得继续做空泛总结或价值口号。
+answer_grounding:
+  require_material_traceability: true
+  disallow_unsupported_extensions: true
+  unsupported_extension_types:
+  - stance
+  - causal_chain
+  - countermeasure
+  - conclusion
+  - evaluative_claim
+  require_correct_option_material_defensibility: true
+  distractor_sources:
+  - non_key_detail
+  - scope_shift
+  - partial_reading
+  - unsupported_extension
+  require_analysis_material_evidence: true
+  align_with_reference_elimination_style: true
 normalized_from: continuation_standard_question_card.yaml
 normalization_notes:
 - required_candidate_types expanded to cover all preferred material cards

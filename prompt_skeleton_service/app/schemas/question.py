@@ -49,6 +49,7 @@ class SourceQuestionParseResponse(BaseModel):
 class QuestionGenerateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
+    question_card_id: str | None = None
     question_focus: str = Field(validation_alias=AliasChoices("question_focus", "\u95ee\u9898\u8003\u70b9"))
     difficulty_level: str = Field(validation_alias=AliasChoices("difficulty_level", "\u96be\u5ea6\u7ea7\u522b"))
     text_direction: str | None = Field(
@@ -106,6 +107,10 @@ class QuestionGenerateRequest(BaseModel):
 class MaterialSelectionResult(BaseModel):
     material_id: str
     article_id: str
+    question_card_id: str | None = None
+    runtime_binding: dict[str, Any] | None = None
+    resolved_slots: dict[str, Any] | None = None
+    validator_contract: dict[str, Any] | None = None
     text: str
     original_text: str | None = None
     source: dict[str, Any] = Field(default_factory=dict)
@@ -155,6 +160,7 @@ class QuestionGenerationBatchResponse(BaseModel):
 
 class QuestionReviewActionRequest(BaseModel):
     action: Literal["minor_edit", "question_modify", "text_modify", "manual_edit", "approve", "confirm", "discard"]
+    requested_action: str | None = None
     instruction: str | None = None
     control_overrides: dict[str, Any] = Field(default_factory=dict)
     operator: str | None = None

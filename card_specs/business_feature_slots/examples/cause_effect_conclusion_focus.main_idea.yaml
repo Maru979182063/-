@@ -16,6 +16,7 @@ card_meta:
 
 feature_signature:
   relation_type: 因果关系
+  relation_family: 因果
   relation_focus: 结论是重点
   typical_formats:
     - 因为……所以……

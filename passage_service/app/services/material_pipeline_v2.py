@@ -68,6 +68,7 @@ class MaterialPipelineV2:
         business_family_id: str,
         question_card_id: str | None = None,
         business_card_ids: list[str] | None = None,
+        preferred_business_card_ids: list[str] | None = None,
         query_terms: list[str] | None = None,
         candidate_limit: int = 20,
         min_card_score: float = 0.55,
@@ -87,6 +88,7 @@ class MaterialPipelineV2:
             runtime_business_subtype=runtime_binding.get("business_subtype"),
         )
         requested_business_card_ids = set(business_card_ids or [])
+        preferred_business_card_set = set(preferred_business_card_ids or [])
         normalized_query_terms = [term.strip() for term in (query_terms or []) if str(term).strip()]
         required_candidate_types = set(question_card.get("upstream_contract", {}).get("required_candidate_types", []))
         items: list[dict[str, Any]] = []
@@ -129,6 +131,7 @@ class MaterialPipelineV2:
                     business_feature_profile=business_feature_profile,
                     neutral_signal_profile=neutral_signal_profile,
                     requested_business_card_ids=requested_business_card_ids,
+                    preferred_business_card_ids=preferred_business_card_set,
                     min_business_card_score=min_business_card_score,
                 )
                 if requested_business_card_ids and not business_card_hits:
@@ -191,6 +194,7 @@ class MaterialPipelineV2:
                             "selected_business_card": top_business_hit["business_card_id"] if top_business_hit else None,
                             "generation_archetype": top_hit["generation_archetype"],
                             "resolved_slots": self._resolve_slots(question_card, top_hit["card_id"], top_business_hit),
+                            "pattern_candidates": list((top_business_hit or {}).get("pattern_candidates") or []),
                             "prompt_extras": self._build_prompt_extras(top_business_hit),
                             "validator_contract": question_card.get("validator_contract", {}),
                         },
@@ -305,6 +309,7 @@ class MaterialPipelineV2:
             business_feature_profile=business_feature_profile,
             neutral_signal_profile=neutral_signal_profile,
             requested_business_card_ids=set(),
+            preferred_business_card_ids=set(),
             min_business_card_score=0.25,
         )
         top_hit = card_hits[0]
@@ -364,6 +369,7 @@ class MaterialPipelineV2:
                 "selected_business_card": top_business_hit["business_card_id"] if top_business_hit else None,
                 "generation_archetype": top_hit["generation_archetype"],
                 "resolved_slots": self._resolve_slots(question_card, top_hit["card_id"], top_business_hit),
+                "pattern_candidates": list((top_business_hit or {}).get("pattern_candidates") or []),
                 "prompt_extras": self._build_prompt_extras(top_business_hit),
                 "validator_contract": question_card.get("validator_contract", {}),
             },
@@ -1209,6 +1215,7 @@ class MaterialPipelineV2:
         business_feature_profile: dict[str, Any],
         neutral_signal_profile: dict[str, Any],
         requested_business_card_ids: set[str],
+        preferred_business_card_ids: set[str],
         min_business_card_score: float,
         ) -> list[dict[str, Any]]:
         hits: list[dict[str, Any]] = []
@@ -1220,9 +1227,13 @@ class MaterialPipelineV2:
             feature_name = str(meta.get("display_name") or business_card_id or "")
             if requested_business_card_ids and business_card_id not in requested_business_card_ids:
                 continue
+            effective_slot_projection = self._resolve_business_slot_projection(card, business_feature_profile)
             mother_family_id = str(meta.get("mother_family_id") or "")
             if mother_family_id == "sentence_order":
                 value = self._score_sentence_order_business_card(card, business_feature_profile)
+                if business_card_id in preferred_business_card_ids:
+                    value += 0.05
+                value = round(min(1.0, max(0.0, value)), 4)
                 if value < min_business_card_score:
                     continue
                 hits.append(
@@ -1231,13 +1242,17 @@ class MaterialPipelineV2:
                         "display_name": meta.get("display_name"),
                         "score": value,
                         "reason": f"sentence_order_profile={business_feature_profile.get('sentence_order_profile')}",
-                        "slot_projection": card.get("slot_projection") or {},
+                        "slot_projection": effective_slot_projection,
+                        "pattern_candidates": list(effective_slot_projection.get("pattern_candidates") or []),
                         "feature_signature": card.get("feature_signature") or {},
                     }
                 )
                 continue
             if mother_family_id == "sentence_fill":
                 value = self._score_sentence_fill_business_card(card, business_feature_profile)
+                if business_card_id in preferred_business_card_ids:
+                    value += 0.05
+                value = round(min(1.0, max(0.0, value)), 4)
                 if value < min_business_card_score:
                     continue
                 hits.append(
@@ -1246,7 +1261,8 @@ class MaterialPipelineV2:
                         "display_name": meta.get("display_name"),
                         "score": value,
                         "reason": f"sentence_fill_profile={business_feature_profile.get('sentence_fill_profile')}",
-                        "slot_projection": card.get("slot_projection") or {},
+                        "slot_projection": effective_slot_projection,
+                        "pattern_candidates": list(effective_slot_projection.get("pattern_candidates") or []),
                         "feature_signature": card.get("feature_signature") or {},
                     }
                 )
@@ -1258,7 +1274,7 @@ class MaterialPipelineV2:
                 1.0
                 if required_relations.intersection(logic_relations)
                 else self._soft_relation_match(
-                    meta,
+                    card,
                     logic_relations,
                     neutral_signal_profile,
                     business_feature_profile,
@@ -1292,11 +1308,11 @@ class MaterialPipelineV2:
             marker_hits = business_feature_profile.get("explicit_marker_hits") or {}
             cause_markers = marker_hits.get("cause_markers") or []
             conclusion_markers = marker_hits.get("conclusion_markers") or []
-            if "因果" in feature_name and conclusion_markers:
+            if self._business_card_matches_relation_family(card, "因果") and conclusion_markers:
                 value += 0.10
                 if cause_markers:
                     value += 0.08
-            if "主题词" in feature_name:
+            if self._business_card_matches_relation_family(card, "主题词"):
                 strongest_relation = max(
                     float(neutral_signal_profile.get("turning_focus_strength") or 0.0),
                     float(neutral_signal_profile.get("cause_effect_strength") or 0.0),
@@ -1308,6 +1324,8 @@ class MaterialPipelineV2:
             runtime_match = card.get("_runtime_match") or {}
             if runtime_match.get("subtype_exact_match"):
                 value += 0.05
+            if business_card_id in preferred_business_card_ids:
+                value += 0.05
             value = round(max(0.0, min(1.0, value)), 4)
             if value < min_business_card_score:
                 continue
@@ -1317,7 +1335,8 @@ class MaterialPipelineV2:
                     "display_name": meta.get("display_name"),
                     "score": value,
                     "reason": f"relation={round(relation_match, 4)}; marker={round(marker_match, 4)}; structure={round(structural_match, 4)}",
-                    "slot_projection": card.get("slot_projection") or {},
+                    "slot_projection": effective_slot_projection,
+                    "pattern_candidates": list(effective_slot_projection.get("pattern_candidates") or []),
                     "feature_signature": card.get("feature_signature") or {},
                 }
             )
@@ -1325,7 +1344,6 @@ class MaterialPipelineV2:
 
     def _score_sentence_order_business_card(self, card: dict[str, Any], business_feature_profile: dict[str, Any]) -> float:
         profile = business_feature_profile.get("sentence_order_profile") or {}
-        card_id = str((card.get("card_meta") or {}).get("business_card_id") or "")
         unit_count = int(profile.get("unit_count") or 0)
         opening_rule = str(profile.get("opening_rule") or "")
         closing_rule = str(profile.get("closing_rule") or "")
@@ -1344,8 +1362,9 @@ class MaterialPipelineV2:
         context_closure_score = float(profile.get("context_closure_score") or 0.0)
         temporal_order_strength = float(profile.get("temporal_order_strength") or 0.0)
         action_sequence_irreversibility = float(profile.get("action_sequence_irreversibility") or 0.0)
+        scoring_mode = self._sentence_order_scoring_mode(card)
 
-        if card_id == "sentence_order__head_tail_logic__abstract":
+        if scoring_mode == "head_tail_logic":
             score = (
                 0.18
                 + 0.10 * (1.0 if unit_count == self.SENTENCE_ORDER_FIXED_UNIT_COUNT else 0.0)
@@ -1371,7 +1390,7 @@ class MaterialPipelineV2:
             score -= 0.08 * function_overlap_score
             score -= 0.07 * multi_path_risk
             return round(min(1.0, max(0.0, score)), 4)
-        if card_id == "sentence_order__head_tail_lock__abstract":
+        if scoring_mode == "head_tail_lock":
             score = 0.28 + 0.18 * (1.0 if unit_count == self.SENTENCE_ORDER_FIXED_UNIT_COUNT else 0.0)
             if opening_rule in {"definition_opening", "explicit_opening"}:
                 score += 0.22
@@ -1381,14 +1400,14 @@ class MaterialPipelineV2:
             score += 0.08 * unique_opener_score + 0.06 * context_closure_score
             score -= 0.08 * exchange_risk
             return round(min(1.0, score), 4)
-        if card_id == "sentence_order__deterministic_binding__abstract":
+        if scoring_mode == "deterministic_binding":
             score = 0.22 + 0.20 * len(binding_rules) + 0.22 * local_binding_strength
             if "deterministic_binding" in logic_modes:
                 score += 0.20
             score += 0.10 * min(1.0, binding_pair_count / 3)
             score -= 0.10 * exchange_risk
             return round(min(1.0, score), 4)
-        if card_id == "sentence_order__discourse_logic__abstract":
+        if scoring_mode == "discourse_logic":
             score = 0.20 + 0.22 * sequence_integrity
             if "discourse_logic" in logic_modes:
                 score += 0.34
@@ -1398,7 +1417,7 @@ class MaterialPipelineV2:
             score -= 0.08 * function_overlap_score
             score -= 0.08 * multi_path_risk
             return round(min(1.0, score), 4)
-        if card_id == "sentence_order__timeline_action_sequence__abstract":
+        if scoring_mode == "timeline_action_sequence":
             score = 0.18 + 0.20 * sequence_integrity
             if "timeline_sequence" in logic_modes:
                 score += 0.34
@@ -1411,7 +1430,6 @@ class MaterialPipelineV2:
 
     def _score_sentence_fill_business_card(self, card: dict[str, Any], business_feature_profile: dict[str, Any]) -> float:
         profile = business_feature_profile.get("sentence_fill_profile") or {}
-        card_id = str((card.get("card_meta") or {}).get("business_card_id") or "")
         blank_position = str(profile.get("blank_position") or "")
         function_type = str(profile.get("function_type") or "")
         backward = float(profile.get("backward_link_strength") or 0.0)
@@ -1419,37 +1437,25 @@ class MaterialPipelineV2:
         bidirectional = float(profile.get("bidirectional_validation") or 0.0)
         countermeasure = float(profile.get("countermeasure_signal_strength") or 0.0)
         reference_dependency = float(profile.get("reference_dependency") or 0.0)
-
-        if card_id == "sentence_fill__position_function__abstract":
+        expected_profile = self._sentence_fill_expected_profile(card)
+        if not expected_profile:
             return 0.0
 
-        mapping = {
-            "sentence_fill__opening_summary__abstract": ("opening", "summarize_following_text"),
-            "sentence_fill__opening_topic_intro__abstract": ("opening", "topic_introduction"),
-            "sentence_fill__middle_carry_previous__abstract": ("middle", "carry_previous"),
-            "sentence_fill__middle_lead_next__abstract": ("middle", "lead_next"),
-            "sentence_fill__middle_bridge_both_sides__abstract": ("middle", "bridge_both_sides"),
-            "sentence_fill__ending_summary__abstract": ("ending", "summarize_previous_text"),
-            "sentence_fill__ending_countermeasure__abstract": ("ending", "propose_countermeasure"),
-        }
-        expected = mapping.get(card_id)
-        if not expected:
-            return 0.0
-
-        expected_position, expected_function = expected
+        expected_position = str(expected_profile.get("blank_position") or "")
+        expected_function = str(expected_profile.get("business_function") or "")
         score = 0.18
         if blank_position == expected_position:
             score += 0.36
         if function_type == expected_function:
             score += 0.36
-        if card_id == "sentence_fill__middle_carry_previous__abstract":
+        if expected_function == "carry_previous":
             score += 0.12 * backward
-        elif card_id == "sentence_fill__middle_lead_next__abstract":
+        elif expected_function == "lead_next":
             score += 0.12 * forward
-        elif card_id == "sentence_fill__middle_bridge_both_sides__abstract":
+        elif expected_function == "bridge_both_sides":
             score += 0.16 * bidirectional
             score += 0.08 * min(backward, forward)
-        elif card_id == "sentence_fill__ending_countermeasure__abstract":
+        elif expected_function == "propose_countermeasure":
             score += 0.16 * countermeasure
         else:
             score += 0.08 * reference_dependency
@@ -1462,41 +1468,90 @@ class MaterialPipelineV2:
     ) -> dict[str, Any] | None:
         if not business_card_hits:
             return None
-        top_hit = business_card_hits[0]
-        top_id = str(top_hit.get("business_card_id") or "")
-        if top_id != "theme_word_focus__main_idea":
-            return top_hit
+        return business_card_hits[0]
 
-        strongest_relation = max(
-            float(neutral_signal_profile.get("turning_focus_strength") or 0.0),
-            float(neutral_signal_profile.get("cause_effect_strength") or 0.0),
-            float(neutral_signal_profile.get("necessary_condition_strength") or 0.0),
-            float(neutral_signal_profile.get("parallel_enumeration_strength") or 0.0),
-        )
-        relation_candidates = [
-            hit
-            for hit in business_card_hits
-            if str(hit.get("business_card_id") or "") != "theme_word_focus__main_idea"
-        ]
-        if not relation_candidates:
-            return top_hit
+    def _resolve_business_slot_projection(
+        self,
+        card: dict[str, Any],
+        business_feature_profile: dict[str, Any],
+    ) -> dict[str, Any]:
+        slot_projection = deepcopy(card.get("slot_projection") or {})
+        effective = {
+            "question_type": slot_projection.get("question_type"),
+            "business_subtype": slot_projection.get("business_subtype"),
+            "pattern_candidates": list(slot_projection.get("pattern_candidates") or []),
+            "type_slots": deepcopy(slot_projection.get("type_slots") or {}),
+            "prompt_extras": deepcopy(slot_projection.get("prompt_extras") or {}),
+        }
+        matched_strategy_ids: list[str] = []
+        for strategy_id, strategy in (slot_projection.get("slot_strategy_map") or {}).items():
+            if not self._business_slot_strategy_matches(strategy.get("when") or {}, business_feature_profile):
+                continue
+            matched_strategy_ids.append(strategy_id)
+            strategy_patterns = list(strategy.get("pattern_candidates") or [])
+            if strategy_patterns:
+                effective["pattern_candidates"] = strategy_patterns
+            effective["type_slots"].update(deepcopy(strategy.get("type_slots") or {}))
+            effective["prompt_extras"].update(deepcopy(strategy.get("prompt_extras") or {}))
+        if matched_strategy_ids:
+            effective["prompt_extras"].setdefault("business_feature_strategy_ids", matched_strategy_ids)
+        effective["matched_strategy_ids"] = matched_strategy_ids
+        return effective
 
-        best_relation = relation_candidates[0]
-        score_gap = float(top_hit.get("score") or 0.0) - float(best_relation.get("score") or 0.0)
-        if strongest_relation >= 0.62 and score_gap <= 0.14:
-            return best_relation
-        if strongest_relation >= 0.72 and score_gap <= 0.22:
-            return best_relation
-        return top_hit
+    def _business_slot_strategy_matches(
+        self,
+        expected_conditions: dict[str, Any],
+        business_feature_profile: dict[str, Any],
+    ) -> bool:
+        if not expected_conditions:
+            return False
+        routing_context = self._build_business_feature_routing_context(business_feature_profile)
+        for field, expected in expected_conditions.items():
+            actual = routing_context.get(field)
+            if isinstance(actual, set):
+                if expected not in actual:
+                    return False
+                continue
+            if actual != expected:
+                return False
+        return True
+
+    def _build_business_feature_routing_context(self, business_feature_profile: dict[str, Any]) -> dict[str, Any]:
+        sentence_order_profile = business_feature_profile.get("sentence_order_profile") or {}
+        sentence_fill_profile = business_feature_profile.get("sentence_fill_profile") or {}
+        logic_modes = set(sentence_order_profile.get("logic_modes") or [])
+        order_rules: set[str] = set()
+        if "viewpoint_explanation" in logic_modes:
+            order_rules.add("viewpoint_plus_explanation")
+        if "problem_solution" in logic_modes:
+            order_rules.add("problem_plus_solution")
+        if "question_answer" in logic_modes:
+            order_rules.add("question_plus_answer")
+        if "timeline_sequence" in logic_modes:
+            order_rules.add("timeline_sequence")
+        if "action_sequence" in logic_modes:
+            order_rules.add("action_sequence")
+        opening_positive_cues: set[str] = set()
+        if sentence_order_profile.get("opening_rule") == "definition_opening":
+            opening_positive_cues.add("definition_sentence")
+        return {
+            "opening_rule": sentence_order_profile.get("opening_rule"),
+            "closing_rule": sentence_order_profile.get("closing_rule"),
+            "binding_rule": set(sentence_order_profile.get("binding_rules") or []),
+            "order_rule": order_rules,
+            "opening_positive_cue": opening_positive_cues,
+            "blank_position": sentence_fill_profile.get("blank_position"),
+            "business_function": sentence_fill_profile.get("function_type"),
+        }
 
     def _soft_relation_match(
         self,
-        meta: dict[str, Any],
+        card: dict[str, Any],
         logic_relations: set[str],
         neutral_signal_profile: dict[str, Any],
         business_feature_profile: dict[str, Any],
     ) -> float:
-        feature_name = str(meta.get("display_name") or "")
+        relation_families = self._business_card_relation_families(card)
         marker_hits = business_feature_profile.get("explicit_marker_hits") or {}
         turning_markers = marker_hits.get("turning_markers") or []
         cause_markers = marker_hits.get("cause_markers") or []
@@ -1505,37 +1560,152 @@ class MaterialPipelineV2:
         countermeasure_markers = marker_hits.get("countermeasure_markers") or []
         parallel_markers = marker_hits.get("parallel_markers") or []
         conclusion_position = business_feature_profile.get("conclusion_position")
-        if "转折" in feature_name and "转折" in logic_relations:
+        if "转折" in relation_families and "转折" in logic_relations:
             return 0.92
-        if "转折" in feature_name:
+        if "转折" in relation_families:
             return max(
                 float(neutral_signal_profile.get("turning_focus_strength") or 0.0),
                 0.82 if turning_markers else 0.0,
             )
-        if "因果" in feature_name and "因果" in logic_relations:
+        if "因果" in relation_families and "因果" in logic_relations:
             return 0.92
-        if "因果" in feature_name:
+        if "因果" in relation_families:
             explicit_cause = 0.0
             if cause_markers and conclusion_markers:
                 explicit_cause = 0.88
             elif conclusion_markers and conclusion_position in {"tail_or_late", "middle", "opening"}:
                 explicit_cause = 0.74
             return max(float(neutral_signal_profile.get("cause_effect_strength") or 0.0), explicit_cause)
-        if "必要条件" in feature_name and "必要条件" in logic_relations:
+        if "必要条件" in relation_families and "必要条件" in logic_relations:
             return 0.92
-        if "必要条件" in feature_name:
+        if "必要条件" in relation_families:
             explicit_necessary = 0.82 if necessary_markers else 0.0
             if countermeasure_markers and conclusion_position in {"tail_or_late", "middle", "opening"}:
                 explicit_necessary = max(explicit_necessary, 0.72)
             return max(float(neutral_signal_profile.get("necessary_condition_strength") or 0.0), explicit_necessary)
-        if "并列" in feature_name and "并列" in logic_relations:
+        if "并列" in relation_families and "并列" in logic_relations:
             return 0.92
-        if "并列" in feature_name:
+        if "并列" in relation_families:
             explicit_parallel = 0.80 if len(parallel_markers) >= 2 else (0.68 if parallel_markers else 0.0)
             return max(float(neutral_signal_profile.get("parallel_enumeration_strength") or 0.0), explicit_parallel)
-        if "主题词" in feature_name:
+        if "主题词" in relation_families:
             return float(neutral_signal_profile.get("topic_consistency_strength") or 0.0)
         return 0.0
+
+    def _sentence_order_scoring_mode(self, card: dict[str, Any]) -> str | None:
+        feature_signature = card.get("feature_signature") or {}
+        explicit_mode = str(feature_signature.get("sentence_order_scoring_mode") or "").strip()
+        if explicit_mode:
+            return explicit_mode
+        slot_projection = card.get("slot_projection") or {}
+        type_slots = slot_projection.get("type_slots") or {}
+        pattern_candidates = set(slot_projection.get("pattern_candidates") or [])
+        relation_text = self._card_text_blob(
+            feature_signature.get("relation_type"),
+            feature_signature.get("relation_focus"),
+            (slot_projection.get("prompt_extras") or {}).get("business_core_rule"),
+        )
+        if slot_projection.get("slot_strategy_map"):
+            return "head_tail_logic"
+        if "时间" in relation_text or "行动" in relation_text:
+            return "timeline_action_sequence"
+        if "行文逻辑" in relation_text or pattern_candidates.intersection({"viewpoint_reason_action", "problem_solution_case_blocks"}):
+            return "discourse_logic"
+        if "确定性" in relation_text or (
+            type_slots.get("middle_structure_type") == "local_binding"
+            and type_slots.get("local_binding_strength") == "high"
+        ):
+            return "deterministic_binding"
+        if (
+            "首尾锁定" in relation_text
+            or (
+                pattern_candidates == {"dual_anchor_lock"}
+                and type_slots.get("opening_signal_strength") == "high"
+                and type_slots.get("closing_signal_strength") == "high"
+            )
+        ):
+            return "head_tail_lock"
+        # Controlled compatibility fallback until every sentence_order card exposes
+        # a dedicated scoring mode field in business_feature_slots.
+        card_id = str((card.get("card_meta") or {}).get("business_card_id") or "")
+        if card_id == "sentence_order__head_tail_logic__abstract":
+            return "head_tail_logic"
+        if card_id == "sentence_order__head_tail_lock__abstract":
+            return "head_tail_lock"
+        if card_id == "sentence_order__deterministic_binding__abstract":
+            return "deterministic_binding"
+        if card_id == "sentence_order__discourse_logic__abstract":
+            return "discourse_logic"
+        if card_id == "sentence_order__timeline_action_sequence__abstract":
+            return "timeline_action_sequence"
+        return None
+
+    def _sentence_fill_expected_profile(self, card: dict[str, Any]) -> dict[str, str] | None:
+        feature_signature = card.get("feature_signature") or {}
+        slot_projection = card.get("slot_projection") or {}
+        type_slots = slot_projection.get("type_slots") or {}
+        prompt_extras = slot_projection.get("prompt_extras") or {}
+        pattern_candidates = set(slot_projection.get("pattern_candidates") or [])
+        business_rule = self._card_text_blob(prompt_extras.get("business_core_rule"))
+        blank_position = str(type_slots.get("blank_position") or "")
+        if not blank_position:
+            return None
+        explicit_business_function = str(feature_signature.get("business_function") or "").strip()
+        if explicit_business_function:
+            return {"blank_position": blank_position, "business_function": explicit_business_function}
+        if blank_position == "opening":
+            business_function = "topic_introduction" if type_slots.get("logic_relation") == "transition" else "summarize_following_text"
+            return {"blank_position": blank_position, "business_function": business_function}
+        if blank_position == "ending":
+            business_function = "propose_countermeasure" if "对策" in business_rule or "行动" in business_rule else "summarize_previous_text"
+            return {"blank_position": blank_position, "business_function": business_function}
+        if blank_position == "middle":
+            if type_slots.get("bidirectional_validation") == "high":
+                business_function = "bridge_both_sides"
+            elif type_slots.get("logic_relation") == "explanation":
+                business_function = "carry_previous"
+            elif "middle_focus_shift" in pattern_candidates or type_slots.get("logic_relation") == "transition":
+                business_function = "lead_next"
+            else:
+                # Controlled compatibility fallback until every sentence_fill card
+                # carries an explicit canonical business_function field.
+                business_function = "bridge_both_sides"
+            return {"blank_position": blank_position, "business_function": business_function}
+        return None
+
+    def _business_card_relation_families(self, card: dict[str, Any]) -> set[str]:
+        feature_signature = card.get("feature_signature") or {}
+        explicit_relation_family = feature_signature.get("relation_family")
+        if explicit_relation_family:
+            if isinstance(explicit_relation_family, (list, tuple, set)):
+                return {str(item).strip() for item in explicit_relation_family if str(item).strip()}
+            return {str(explicit_relation_family).strip()}
+        canonical_projection = card.get("canonical_projection") or {}
+        expected_universal = canonical_projection.get("expected_universal_profile") or {}
+        expected_business = canonical_projection.get("expected_business_fields") or {}
+        relation_text = self._card_text_blob(
+            feature_signature.get("relation_type"),
+            expected_business.get("feature_type"),
+        )
+        logic_relations = {str(item) for item in (expected_universal.get("logic_relations") or []) if str(item).strip()}
+        families: set[str] = set()
+        if any("转折" in item for item in logic_relations) or "转折" in relation_text:
+            families.add("转折")
+        if any("因果" in item for item in logic_relations) or "因果" in relation_text:
+            families.add("因果")
+        if any("必要条件" in item for item in logic_relations) or "必要条件" in relation_text:
+            families.add("必要条件")
+        if any("并列" in item for item in logic_relations) or "并列" in relation_text:
+            families.add("并列")
+        if "主题词" in relation_text or "主题" in relation_text:
+            families.add("主题词")
+        return families
+
+    def _business_card_matches_relation_family(self, card: dict[str, Any], family: str) -> bool:
+        return family in self._business_card_relation_families(card)
+
+    def _card_text_blob(self, *values: Any) -> str:
+        return " ".join(str(value).strip() for value in values if str(value).strip())
 
     def _business_structural_match(
         self,

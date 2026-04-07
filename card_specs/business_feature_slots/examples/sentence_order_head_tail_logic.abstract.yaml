@@ -16,6 +16,7 @@ card_meta:
 
 feature_signature:
   relation_type: 首尾锁定与句群重排
+  sentence_order_scoring_mode: head_tail_logic
   relation_focus: 先定首尾，再定捆绑，再定整体顺序
   typical_formats:
     - 将以上几个句子重新排列，语序正确的是……

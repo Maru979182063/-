@@ -15,6 +15,7 @@ card_meta:
 
 feature_signature:
   relation_type: 确定性捆绑
+  sentence_order_scoring_mode: deterministic_binding
   relation_focus: 识别局部句间强关联
   typical_formats:
     - 将以上几个句子重新排列，语序正确的是……

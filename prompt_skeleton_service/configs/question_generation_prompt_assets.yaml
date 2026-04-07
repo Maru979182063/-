@@ -1,0 +1,81 @@
+question_generation:
+  section_labels:
+    selected_material: "[Selected Material]"
+    original_material_evidence: "[Original Material Evidence]"
+    material_meta: "[Material Meta]"
+    material_readability_contract: "[Material Readability Contract]"
+    material_prompt_extras: "[Material Prompt Extras]"
+    reference_question_template: "[Reference Question Template]"
+    reference_question_analysis: "[Reference Question Analysis]"
+    hard_constraints: "[Hard Constraints]"
+    answer_grounding_contract: "[Answer Grounding Contract]"
+    material_answer_anchor: "[Material Answer Anchor]"
+    repair_requirements: "[Repair Requirements]"
+
+  material_readability_contract:
+    - "The final displayed material must read like a natural, formal Chinese passage excerpt that a human can read directly."
+    - "Do not output bizarre symbols, duplicated fragments, machine-stitched paragraphs, broken quotations, or half-finished enumerations."
+    - "Prefer preserving the original sentence order and wording. Only make the smallest necessary repairs for readability and coherence."
+    - "If the selected material cannot be safely polished without changing its evidence basis, keep the material conservative rather than aggressively rewriting it."
+
+  reference_guidance:
+    - "Treat the reference question as a structure-only few-shot template. Align with its stem style, option granularity, reasoning path, and written tone, but do not copy wording."
+    - "Do not copy or paraphrase the reference question's topical content, examples, terminology, or explanation text into the new analysis."
+    - "If the reference question contains an explanation, reuse only its explanation structure and elimination order, not its content wording or topic-specific claims."
+    - "Prioritize discourse structure and reasoning shape over topical overlap. Topic may change, but the question-making logic should stay parallel."
+
+  material_answer_anchor:
+    explanation: "For this item, the correct answer must stay semantically equivalent to the removed source span above. Do not invent a new answer basis."
+
+  final_generation_instruction: "Use the provided material as the source passage and generate exactly one question."
+
+  answer_grounding:
+    base:
+      require_material_traceability_template: "Answer basis must be traceable to the original material evidence."
+      disallow_unsupported_extensions_template: "Unsupported extensions are not allowed: {extension_types}."
+      require_correct_option_material_defensibility_template: "Correct option must be defensible from the original material alone."
+      distractor_sources_template: "Distractors may come only from: {distractor_sources}."
+      require_analysis_material_evidence_template: "Analysis must rely on evidence from the original material."
+      align_with_reference_elimination_style_template: "Analysis should stay aligned with the reference question's elimination style when possible."
+    sentence_order:
+      preserve_sortable_units_template: "Sortable units must remain the original material units."
+      preserve_sentence_level_units_template: "Ordering must remain at sentence-unit level."
+      allow_minimal_local_cue_repair_template: "Minimal local cue repair is allowed within existing units."
+      cue_repair_requires_latent_clues_template: "Cue repair may strengthen only clues already latent in the original material."
+    sentence_fill:
+      require_blank_support_from_original_context_template: "Blank content must be supported by the original context."
+      blank_replacement_scope_template: "Blank replacement scope must remain {blank_replacement_scope}."
+    title_selection:
+      require_central_meaning_alignment_template: "Correct option must remain within the passage's central meaning."
+      disallow_detail_as_correct_answer_template: "A detail must not become the correct answer."
+      disallow_stronger_conclusion_template: "Do not create a stronger conclusion than the passage supports."
+    residual:
+      central_meaning_alignment_template: "Correct option must remain within the central meaning already present in the original material."
+      disallow_detail_or_stronger_conclusion_template: "Do not turn a detail into the correct answer, and do not create a stronger conclusion than the passage supports."
+
+  reference_hard_constraints:
+    sentence_order:
+      preserve_question_type_template: "Question type must remain sentence-order."
+      preserve_unit_count_template: "Sortable unit count must remain {unit_count}."
+      preserve_logic_modes_template: "Reference ordering logic: {logic_modes}."
+      preserve_binding_types_template: "Reference binding clues: {binding_types}."
+      allow_minimal_cue_sharpening_template: "Minimal cue sharpening is allowed within existing units."
+      avoid_trivial_correct_order_template: "Avoid the trivial correct order 1-2-3-4-5-6."
+      require_unique_defensible_order_template: "Correct order must remain non-trivial and uniquely defensible."
+    sentence_fill:
+      preserve_question_type_template: "Question type must remain sentence-fill."
+      blank_position_template: "Blank position must remain {blank_position}."
+      function_type_template: "Blank function must remain {function_type}."
+      unit_type_template: "Blank unit granularity should remain {unit_type}."
+
+  repair_feedback:
+    alignment_intro:
+      - "Regenerate the question and strictly fix the alignment issues below."
+      - "Do not change the question family. Keep the discourse logic parallel to the reference question."
+    quality_intro:
+      - "The previous attempt was rejected. Regenerate once and repair the exact issues below."
+      - "Do not improvise a new discourse shape. Stay close to the reference question's unit count, logic skeleton, and elimination style."
+    sentence_order_quality_extra:
+      - "For sentence-order repair only: if needed, minimally strengthen anchor words, opener cues, tail cues, or binding cues inside the existing sortable units."
+      - "Do not add or remove units. Do not reorder the source units. Do not invent new facts or a new discourse path. Only make the uniqueness clues easier to read."
+    reviewer_feedback_template: "Reviewer feedback: {judge_reason}"

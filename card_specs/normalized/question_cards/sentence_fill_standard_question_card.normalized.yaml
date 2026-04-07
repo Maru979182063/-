@@ -183,6 +183,25 @@ validator_contract:
   - 若空位位于段中，解析必须显式做前后双向验证；若为空位插入型，必须显式说明指代对象。
   - 材料不得含网页残留、半截枚举或强上下文依赖句；尾句类材料不得用未收束的半截句出题。
   - 解析必须指出空位位置功能、前后逻辑关系、错项错因三层。
+answer_grounding:
+  require_material_traceability: true
+  disallow_unsupported_extensions: true
+  unsupported_extension_types:
+  - stance
+  - causal_chain
+  - countermeasure
+  - conclusion
+  - evaluative_claim
+  require_correct_option_material_defensibility: true
+  distractor_sources:
+  - non_key_detail
+  - scope_shift
+  - partial_reading
+  - unsupported_extension
+  require_analysis_material_evidence: true
+  align_with_reference_elimination_style: true
+  require_blank_support_from_original_context: true
+  blank_replacement_scope: target_sentence_or_clause
 normalized_from: sentence_fill_standard_question_card.yaml
 normalization_notes:
 - required_candidate_types expanded to cover all preferred material cards

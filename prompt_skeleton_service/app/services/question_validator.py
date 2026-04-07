@@ -37,6 +37,7 @@ class QuestionValidatorService:
         material_text: str | None,
         original_material_text: str | None = None,
         material_source: dict[str, Any] | None = None,
+        validator_contract: dict[str, Any] | None = None,
         difficulty_fit: dict[str, Any] | Any | None = None,
         source_question: dict[str, Any] | None = None,
         source_question_analysis: dict[str, Any] | None = None,
@@ -60,6 +61,7 @@ class QuestionValidatorService:
             "material_text": material_text or "",
             "original_material_text": original_material_text or "",
             "material_source": material_source or {},
+            "validator_contract": validator_contract or {},
             "business_subtype": business_subtype,
             "source_question": source_question or {},
             "source_question_analysis": source_question_analysis or {},
@@ -296,6 +298,9 @@ class QuestionValidatorService:
         is_title_selection = business_subtype == "title_selection" or "标题" in stem
         if is_title_selection:
             options = generated_question.options or {}
+            validator_contract = context.get("validator_contract") or {}
+            title_selection_contract = validator_contract.get("title_selection") if isinstance(validator_contract, dict) else None
+            material_constraints_contract = validator_contract.get("material_constraints") if isinstance(validator_contract, dict) else None
             correct_text = (options.get(generated_question.answer or "", "") or "").strip()
             avg_len = round(sum(len((value or "").strip()) for value in options.values()) / max(len(options), 1), 2) if options else 0
             long_sentence_like = bool(correct_text and (len(correct_text) >= 24 or "，" in correct_text or correct_text.count("的") >= 3))
@@ -315,24 +320,96 @@ class QuestionValidatorService:
                     for value in options.values()
                 )
             )
+            contract_enforce_material_fit = None
+            contract_enforce_title_like = None
+            contract_enforce_option_diversity = None
+            if isinstance(validator_contract, dict):
+                raw_enforce_material_fit = (
+                    validator_contract.get("enforce_material_fit")
+                    or (title_selection_contract.get("enforce_material_fit") if isinstance(title_selection_contract, dict) else None)
+                    or (material_constraints_contract.get("enforce_material_fit") if isinstance(material_constraints_contract, dict) else None)
+                )
+                if raw_enforce_material_fit is not None:
+                    if isinstance(raw_enforce_material_fit, bool):
+                        contract_enforce_material_fit = raw_enforce_material_fit
+                    elif isinstance(raw_enforce_material_fit, str):
+                        normalized_flag = raw_enforce_material_fit.strip().lower()
+                        if normalized_flag in {"true", "1", "yes", "on"}:
+                            contract_enforce_material_fit = True
+                        elif normalized_flag in {"false", "0", "no", "off"}:
+                            contract_enforce_material_fit = False
+                raw_enforce_title_like = (
+                    validator_contract.get("enforce_title_like")
+                    or (title_selection_contract.get("enforce_title_like") if isinstance(title_selection_contract, dict) else None)
+                    or (
+                        validator_contract.get("title_constraints", {}).get("enforce_title_like")
+                        if isinstance(validator_contract.get("title_constraints"), dict)
+                        else None
+                    )
+                )
+                if raw_enforce_title_like is not None:
+                    if isinstance(raw_enforce_title_like, bool):
+                        contract_enforce_title_like = raw_enforce_title_like
+                    elif isinstance(raw_enforce_title_like, str):
+                        normalized_flag = raw_enforce_title_like.strip().lower()
+                        if normalized_flag in {"true", "1", "yes", "on"}:
+                            contract_enforce_title_like = True
+                        elif normalized_flag in {"false", "0", "no", "off"}:
+                            contract_enforce_title_like = False
+                raw_enforce_option_diversity = (
+                    validator_contract.get("enforce_option_diversity")
+                    or (title_selection_contract.get("enforce_option_diversity") if isinstance(title_selection_contract, dict) else None)
+                    or (
+                        validator_contract.get("option_constraints", {}).get("enforce_option_diversity")
+                        if isinstance(validator_contract.get("option_constraints"), dict)
+                        else None
+                    )
+                )
+                if raw_enforce_option_diversity is not None:
+                    if isinstance(raw_enforce_option_diversity, bool):
+                        contract_enforce_option_diversity = raw_enforce_option_diversity
+                    elif isinstance(raw_enforce_option_diversity, str):
+                        normalized_flag = raw_enforce_option_diversity.strip().lower()
+                        if normalized_flag in {"true", "1", "yes", "on"}:
+                            contract_enforce_option_diversity = True
+                        elif normalized_flag in {"false", "0", "no", "off"}:
+                            contract_enforce_option_diversity = False
+            enforce_material_fit = bool(contract_enforce_material_fit is True)
+            material_fit_requirement_source = (
+                "validator_contract" if contract_enforce_material_fit is not None else "compatibility_disabled"
+            )
+            enforce_title_like = bool(contract_enforce_title_like is True)
+            title_like_requirement_source = (
+                "validator_contract" if contract_enforce_title_like is not None else "compatibility_disabled"
+            )
+            enforce_option_diversity = bool(contract_enforce_option_diversity is True)
+            option_diversity_requirement_source = (
+                "validator_contract" if contract_enforce_option_diversity is not None else "compatibility_disabled"
+            )
             checks["title_selection_title_like"] = {
-                "passed": not long_sentence_like,
+                "passed": True if not enforce_title_like else not long_sentence_like,
                 "correct_option_length": len(correct_text),
                 "correct_option_text": correct_text,
+                "required": enforce_title_like,
+                "source": title_like_requirement_source,
             }
             checks["title_selection_material_fit"] = {
-                "passed": len(marker_hits) < 2,
+                "passed": True if not enforce_material_fit else len(marker_hits) < 2,
                 "marker_hits": marker_hits,
+                "required": enforce_material_fit,
+                "source": material_fit_requirement_source,
             }
             checks["title_selection_option_diversity"] = {
-                "passed": not fragment_heavy,
+                "passed": True if not enforce_option_diversity else not fragment_heavy,
                 "avg_option_length": avg_len,
+                "required": enforce_option_diversity,
+                "source": option_diversity_requirement_source,
             }
-            if long_sentence_like:
+            if enforce_title_like and long_sentence_like:
                 errors.append("title_selection correct option reads like a long summary sentence rather than a title.")
-            if len(marker_hits) >= 2:
+            if enforce_material_fit and len(marker_hits) >= 2:
                 errors.append("title_selection material is too close to a meeting-summary or report-style passage and should not be used directly.")
-            if fragment_heavy:
+            if enforce_option_diversity and fragment_heavy:
                 warnings.append("title_selection options are overly uniform and mostly look like fragment extraction rather than layered title design.")
 
         return errors, warnings, checks
@@ -363,6 +440,7 @@ class QuestionValidatorService:
     ) -> tuple[list[str], list[str], dict[str, Any]]:
         stem = generated_question.stem.strip()
         material_text = str(context.get("material_text") or "")
+        validator_contract = context.get("validator_contract") or {}
         source_analysis = context.get("source_question_analysis") or {}
         structure_constraints = source_analysis.get("structure_constraints") or {}
 
@@ -373,33 +451,218 @@ class QuestionValidatorService:
         stem_exam_style = any(token in stem for token in ("排序", "语句", "排列", "顺序"))
         material_unit_count = self._count_sortable_units_from_material(material_text)
         option_unit_counts = sorted(self._extract_order_option_unit_counts(generated_question.options))
-        reference_unit_count = int(structure_constraints.get("sortable_unit_count") or 0)
         option_unit_count = option_unit_counts[-1] if option_unit_counts else 0
         orderability = self._build_sentence_order_uniqueness_profile(material_text)
-        expected_binding_pair_count = int(structure_constraints.get("expected_binding_pair_count") or 2)
-        expected_unique_answer_strength = float(structure_constraints.get("expected_unique_answer_strength") or 0.0)
+        sentence_order_contract = validator_contract.get("sentence_order") if isinstance(validator_contract, dict) else None
+        structure_contract = validator_contract.get("structure_constraints") if isinstance(validator_contract, dict) else None
+        thresholds_contract = validator_contract.get("thresholds") if isinstance(validator_contract, dict) else None
+        reasoning_contract = validator_contract.get("reasoning") if isinstance(validator_contract, dict) else None
+        contract_sortable_unit_count = None
+        contract_unique_opener_min_score = None
+        contract_closure_min_score = None
+        contract_exchange_risk_max = None
+        contract_multi_path_risk_max = None
+        contract_function_overlap_max = None
+        contract_expected_binding_pair_count = None
+        contract_expected_unique_answer_strength = None
+        contract_required_reasoning_modes: set[str] = set()
+        if isinstance(validator_contract, dict):
+            raw_sortable_unit_count = (
+                validator_contract.get("sortable_unit_count")
+                or (sentence_order_contract.get("sortable_unit_count") if isinstance(sentence_order_contract, dict) else None)
+                or (structure_contract.get("sortable_unit_count") if isinstance(structure_contract, dict) else None)
+            )
+            if raw_sortable_unit_count not in (None, ""):
+                contract_sortable_unit_count = int(raw_sortable_unit_count)
+            raw_unique_opener_min_score = (
+                validator_contract.get("unique_opener_min_score")
+                or (sentence_order_contract.get("unique_opener_min_score") if isinstance(sentence_order_contract, dict) else None)
+                or (thresholds_contract.get("unique_opener_min_score") if isinstance(thresholds_contract, dict) else None)
+            )
+            if raw_unique_opener_min_score not in (None, ""):
+                contract_unique_opener_min_score = float(raw_unique_opener_min_score)
+            raw_closure_min_score = (
+                validator_contract.get("closure_min_score")
+                or (sentence_order_contract.get("closure_min_score") if isinstance(sentence_order_contract, dict) else None)
+                or (thresholds_contract.get("closure_min_score") if isinstance(thresholds_contract, dict) else None)
+            )
+            if raw_closure_min_score not in (None, ""):
+                contract_closure_min_score = float(raw_closure_min_score)
+            raw_exchange_risk_max = (
+                validator_contract.get("exchange_risk_max")
+                or (sentence_order_contract.get("exchange_risk_max") if isinstance(sentence_order_contract, dict) else None)
+                or (thresholds_contract.get("exchange_risk_max") if isinstance(thresholds_contract, dict) else None)
+            )
+            if raw_exchange_risk_max not in (None, ""):
+                contract_exchange_risk_max = float(raw_exchange_risk_max)
+            raw_multi_path_risk_max = (
+                validator_contract.get("multi_path_risk_max")
+                or (sentence_order_contract.get("multi_path_risk_max") if isinstance(sentence_order_contract, dict) else None)
+                or (thresholds_contract.get("multi_path_risk_max") if isinstance(thresholds_contract, dict) else None)
+            )
+            if raw_multi_path_risk_max not in (None, ""):
+                contract_multi_path_risk_max = float(raw_multi_path_risk_max)
+            raw_function_overlap_max = (
+                validator_contract.get("function_overlap_max")
+                or (sentence_order_contract.get("function_overlap_max") if isinstance(sentence_order_contract, dict) else None)
+                or (thresholds_contract.get("function_overlap_max") if isinstance(thresholds_contract, dict) else None)
+            )
+            if raw_function_overlap_max not in (None, ""):
+                contract_function_overlap_max = float(raw_function_overlap_max)
+            raw_expected_binding_pair_count = (
+                validator_contract.get("expected_binding_pair_count")
+                or (sentence_order_contract.get("expected_binding_pair_count") if isinstance(sentence_order_contract, dict) else None)
+                or (structure_contract.get("expected_binding_pair_count") if isinstance(structure_contract, dict) else None)
+            )
+            if raw_expected_binding_pair_count not in (None, ""):
+                contract_expected_binding_pair_count = int(raw_expected_binding_pair_count)
+            raw_expected_unique_answer_strength = (
+                validator_contract.get("expected_unique_answer_strength")
+                or (sentence_order_contract.get("expected_unique_answer_strength") if isinstance(sentence_order_contract, dict) else None)
+                or (structure_contract.get("expected_unique_answer_strength") if isinstance(structure_contract, dict) else None)
+            )
+            if raw_expected_unique_answer_strength not in (None, ""):
+                contract_expected_unique_answer_strength = float(raw_expected_unique_answer_strength)
+            raw_required_reasoning_modes = (
+                validator_contract.get("required_reasoning_modes")
+                or (sentence_order_contract.get("required_reasoning_modes") if isinstance(sentence_order_contract, dict) else None)
+                or (reasoning_contract.get("required_modes") if isinstance(reasoning_contract, dict) else None)
+            )
+            if isinstance(raw_required_reasoning_modes, str):
+                contract_required_reasoning_modes = {raw_required_reasoning_modes}
+            elif isinstance(raw_required_reasoning_modes, (list, tuple, set)):
+                contract_required_reasoning_modes = {
+                    str(mode).strip()
+                    for mode in raw_required_reasoning_modes
+                    if str(mode).strip()
+                }
+        expected_sortable_unit_count = contract_sortable_unit_count or int(structure_constraints.get("sortable_unit_count") or 0)
+        expected_sortable_unit_count_source = (
+            "validator_contract"
+            if contract_sortable_unit_count is not None
+            else ("compatibility_source_question_analysis" if expected_sortable_unit_count else "compatibility_disabled")
+        )
+        unique_opener_min_score = contract_unique_opener_min_score
+        unique_opener_min_score_source = (
+            "validator_contract" if contract_unique_opener_min_score is not None else "compatibility_disabled"
+        )
+        closure_min_score = contract_closure_min_score
+        closure_min_score_source = (
+            "validator_contract" if contract_closure_min_score is not None else "compatibility_disabled"
+        )
+        exchange_risk_max = contract_exchange_risk_max
+        exchange_risk_max_source = (
+            "validator_contract" if contract_exchange_risk_max is not None else "compatibility_disabled"
+        )
+        multi_path_risk_max = contract_multi_path_risk_max
+        multi_path_risk_max_source = (
+            "validator_contract" if contract_multi_path_risk_max is not None else "compatibility_disabled"
+        )
+        function_overlap_max = contract_function_overlap_max
+        function_overlap_max_source = (
+            "validator_contract" if contract_function_overlap_max is not None else "compatibility_disabled"
+        )
+        expected_binding_pair_count = (
+            contract_expected_binding_pair_count
+            if contract_expected_binding_pair_count is not None
+            else (
+                int(structure_constraints.get("expected_binding_pair_count") or 0)
+                if structure_constraints.get("expected_binding_pair_count") not in (None, "")
+                else None
+            )
+        )
+        expected_binding_pair_count_source = (
+            "validator_contract"
+            if contract_expected_binding_pair_count is not None
+            else ("compatibility_source_question_analysis" if expected_binding_pair_count is not None else "compatibility_disabled")
+        )
+        expected_unique_answer_strength = (
+            contract_expected_unique_answer_strength
+            if contract_expected_unique_answer_strength is not None
+            else (
+                float(structure_constraints.get("expected_unique_answer_strength") or 0.0)
+                if structure_constraints.get("expected_unique_answer_strength") not in (None, "")
+                else None
+            )
+        )
+        expected_unique_answer_strength_source = (
+            "validator_contract"
+            if contract_expected_unique_answer_strength is not None
+            else ("compatibility_source_question_analysis" if expected_unique_answer_strength is not None else "compatibility_disabled")
+        )
         correct_order = list(generated_question.correct_order or [])
         original_sentences = list(generated_question.original_sentences or [])
+        expected_order_size = expected_sortable_unit_count or len(original_sentences)
+        expected_order_sequence = list(range(1, expected_order_size + 1)) if expected_order_size else []
         option_orders = {
             key: self._extract_order_sequence(value)
             for key, value in (generated_question.options or {}).items()
         }
         answer = str(generated_question.answer or "").strip().upper()
-        analysis_orders = self._extract_order_sequences_from_text(generated_question.analysis or "")
+        analysis_orders = self._extract_reference_order_sequences(generated_question.analysis or "")
 
         checks = {
             "sentence_order_signal": {"passed": has_order_signal},
             "sentence_order_exam_style_prompt": {"passed": stem_exam_style},
             "sentence_order_material_unit_count": {"passed": material_unit_count >= 4, "count": material_unit_count},
             "sentence_order_option_unit_counts": {"passed": bool(option_unit_counts), "counts": option_unit_counts},
-            "sentence_order_unique_opener": {"passed": orderability["unique_opener_score"] >= 0.55, "score": orderability["unique_opener_score"]},
-            "sentence_order_binding_pairs": {"passed": orderability["binding_pair_count"] >= expected_binding_pair_count, "count": orderability["binding_pair_count"], "expected": expected_binding_pair_count},
-            "sentence_order_closure": {"passed": orderability["has_closing_role"], "context_closure_score": orderability["context_closure_score"]},
-            "sentence_order_exchange_risk": {"passed": orderability["exchange_risk"] <= 0.38, "score": orderability["exchange_risk"]},
-            "sentence_order_multi_path_risk": {"passed": orderability["multi_path_risk"] <= 0.40, "score": orderability["multi_path_risk"]},
-            "sentence_order_function_overlap": {"passed": orderability["function_overlap_score"] <= 0.46, "score": orderability["function_overlap_score"]},
-            "sentence_order_original_sentences": {"passed": len(original_sentences) == 6, "count": len(original_sentences)},
-            "sentence_order_correct_order": {"passed": len(correct_order) == 6 and sorted(correct_order) == [1, 2, 3, 4, 5, 6], "value": correct_order},
+            "sentence_order_unique_opener": {
+                "passed": True if unique_opener_min_score is None else orderability["unique_opener_score"] >= unique_opener_min_score,
+                "score": orderability["unique_opener_score"],
+                "threshold": unique_opener_min_score,
+                "source": unique_opener_min_score_source,
+                "required": unique_opener_min_score is not None,
+            },
+            "sentence_order_binding_pairs": {
+                "passed": True if expected_binding_pair_count is None else orderability["binding_pair_count"] >= expected_binding_pair_count,
+                "count": orderability["binding_pair_count"],
+                "expected": expected_binding_pair_count,
+                "source": expected_binding_pair_count_source,
+                "required": expected_binding_pair_count is not None,
+            },
+            "sentence_order_closure": {
+                "passed": True if closure_min_score is None else (orderability["has_closing_role"] and orderability["context_closure_score"] >= closure_min_score),
+                "context_closure_score": orderability["context_closure_score"],
+                "expected": closure_min_score,
+                "source": closure_min_score_source,
+                "required": closure_min_score is not None,
+            },
+            "sentence_order_exchange_risk": {
+                "passed": True if exchange_risk_max is None else orderability["exchange_risk"] <= exchange_risk_max,
+                "score": orderability["exchange_risk"],
+                "expected": exchange_risk_max,
+                "source": exchange_risk_max_source,
+                "required": exchange_risk_max is not None,
+            },
+            "sentence_order_multi_path_risk": {
+                "passed": True if multi_path_risk_max is None else orderability["multi_path_risk"] <= multi_path_risk_max,
+                "score": orderability["multi_path_risk"],
+                "expected": multi_path_risk_max,
+                "source": multi_path_risk_max_source,
+                "required": multi_path_risk_max is not None,
+            },
+            "sentence_order_function_overlap": {
+                "passed": True if function_overlap_max is None else orderability["function_overlap_score"] <= function_overlap_max,
+                "score": orderability["function_overlap_score"],
+                "expected": function_overlap_max,
+                "source": function_overlap_max_source,
+                "required": function_overlap_max is not None,
+            },
+            "sentence_order_original_sentences": {
+                "passed": (
+                    len(original_sentences) == expected_sortable_unit_count
+                    if expected_sortable_unit_count
+                    else len(original_sentences) >= 2
+                ),
+                "count": len(original_sentences),
+                "expected": expected_sortable_unit_count,
+                "source": expected_sortable_unit_count_source,
+            },
+            "sentence_order_correct_order": {
+                "passed": bool(correct_order) and (not expected_order_sequence or sorted(correct_order) == expected_order_sequence),
+                "value": correct_order,
+                "expected": expected_order_sequence,
+            },
         }
         errors: list[str] = []
         warnings: list[str] = []
@@ -412,10 +675,18 @@ class QuestionValidatorService:
             errors.append("sentence_order material does not preserve enough sortable units.")
         if option_unit_counts and len(set(option_unit_counts)) > 1:
             errors.append("sentence_order options do not use a consistent sortable-unit set.")
-        if len(original_sentences) != 6:
-            errors.append("sentence_order original_sentences must contain exactly 6 units.")
-        if len(correct_order) != 6 or sorted(correct_order) != [1, 2, 3, 4, 5, 6]:
-            errors.append("sentence_order correct_order must be a single 6-unit truth source.")
+        if expected_sortable_unit_count:
+            if len(original_sentences) != expected_sortable_unit_count:
+                errors.append(f"sentence_order original_sentences must contain exactly {expected_sortable_unit_count} units.")
+        elif len(original_sentences) < 2:
+            errors.append("sentence_order original_sentences must contain at least 2 units.")
+        if not correct_order or (expected_order_sequence and sorted(correct_order) != expected_order_sequence):
+            if expected_order_sequence:
+                errors.append(
+                    f"sentence_order correct_order must be a single truth source covering {len(expected_order_sequence)} sortable units."
+                )
+            else:
+                errors.append("sentence_order correct_order must be a non-empty ordering truth source.")
         correct_option_letters = [key for key, sequence in option_orders.items() if sequence == correct_order]
         checks["sentence_order_single_truth_option"] = {"passed": len(correct_option_letters) == 1, "matching_letters": correct_option_letters}
         if len(correct_option_letters) != 1:
@@ -437,53 +708,78 @@ class QuestionValidatorService:
             errors.append("sentence_order analysis must explicitly explain the same correct_order as the answer.")
         if len(analysis_orders) > 1 and any(sequence != correct_order for sequence in analysis_orders[1:]):
             errors.append("sentence_order analysis contains conflicting ordering sequences.")
-        if reference_unit_count:
-            aligned = option_unit_count == reference_unit_count or material_unit_count == reference_unit_count
+        if expected_sortable_unit_count:
+            aligned = option_unit_count == expected_sortable_unit_count or material_unit_count == expected_sortable_unit_count
             checks["sentence_order_reference_unit_alignment"] = {
                 "passed": aligned,
-                "reference_unit_count": reference_unit_count,
+                "reference_unit_count": expected_sortable_unit_count,
                 "generated_option_unit_count": option_unit_count,
                 "material_unit_count": material_unit_count,
+                "source": expected_sortable_unit_count_source,
             }
             if not aligned:
                 errors.append(
-                    f"sentence_order should preserve the reference sortable-unit count ({reference_unit_count}), but generated result drifted."
+                    f"sentence_order should preserve the reference sortable-unit count ({expected_sortable_unit_count}), but generated result drifted."
                 )
-        if orderability["unique_opener_score"] < 0.55:
+        if unique_opener_min_score is not None and orderability["unique_opener_score"] < unique_opener_min_score:
             errors.append("sentence_order material does not show a strong enough unique opener candidate.")
-        if orderability["binding_pair_count"] < expected_binding_pair_count:
+        if expected_binding_pair_count is not None and orderability["binding_pair_count"] < expected_binding_pair_count:
             errors.append("sentence_order material lacks enough deterministic binding pairs to support a unique-best sequence.")
-        if not orderability["has_closing_role"] or orderability["context_closure_score"] < 0.55:
+        if closure_min_score is not None and (not orderability["has_closing_role"] or orderability["context_closure_score"] < closure_min_score):
             errors.append("sentence_order material does not form a clear closing or closure role.")
-        if orderability["exchange_risk"] > 0.38:
+        if exchange_risk_max is not None and orderability["exchange_risk"] > exchange_risk_max:
             errors.append("sentence_order material remains too readable after key-unit exchange and is not uniquely orderable enough.")
-        if orderability["multi_path_risk"] > 0.40:
+        if multi_path_risk_max is not None and orderability["multi_path_risk"] > multi_path_risk_max:
             errors.append("sentence_order material admits too many near-plausible ordering paths.")
-        if orderability["function_overlap_score"] > 0.46:
+        if function_overlap_max is not None and orderability["function_overlap_score"] > function_overlap_max:
             errors.append("sentence_order material has overly similar unit functions, so the options feel interchangeable.")
-        if expected_unique_answer_strength:
+        if expected_unique_answer_strength is not None:
             unique_strength_ok = orderability["unique_answer_strength"] + 0.06 >= expected_unique_answer_strength
             checks["sentence_order_unique_answer_strength"] = {
                 "passed": unique_strength_ok,
                 "score": orderability["unique_answer_strength"],
                 "expected": expected_unique_answer_strength,
+                "source": expected_unique_answer_strength_source,
             }
             if not unique_strength_ok:
                 errors.append("sentence_order material does not reach the reference question's unique-answer strength.")
         logic_modes = structure_constraints.get("logic_modes") or []
-        if "timeline_sequence" in logic_modes:
+        required_reasoning_modes = set(contract_required_reasoning_modes)
+        reasoning_modes_source = "validator_contract" if contract_required_reasoning_modes else "compatibility_disabled"
+        if not required_reasoning_modes:
+            # Compatibility only for legacy source-question flows that still
+            # lack explicit validator_contract reasoning requirements.
+            required_reasoning_modes = {str(mode).strip() for mode in logic_modes if str(mode).strip()}
+            if required_reasoning_modes:
+                reasoning_modes_source = "compatibility_source_question_analysis"
+        timeline_reasoning_required = bool(required_reasoning_modes.intersection({"timeline_sequence", "temporal_chain"}))
+        binding_reasoning_required = bool(required_reasoning_modes.intersection({"deterministic_binding", "binding_clue", "binding_pairs"}))
+        head_tail_reasoning_required = bool(required_reasoning_modes.intersection({"head_tail_roles", "opener_closure_roles"}))
+        if timeline_reasoning_required:
             analysis_has_timeline = any(token in generated_question.analysis for token in ("先", "后", "随后", "最后", "时间"))
-            checks["sentence_order_timeline_reasoning"] = {"passed": analysis_has_timeline}
+            checks["sentence_order_timeline_reasoning"] = {
+                "passed": analysis_has_timeline,
+                "required": True,
+                "source": reasoning_modes_source,
+            }
             if not analysis_has_timeline:
                 warnings.append("reference question is timeline-oriented, but analysis does not clearly explain the time/order chain.")
-        if "deterministic_binding" in logic_modes:
+        if binding_reasoning_required:
             analysis_has_binding = any(token in generated_question.analysis for token in ("指代", "捆绑", "关联", "承接"))
-            checks["sentence_order_binding_reasoning"] = {"passed": analysis_has_binding}
+            checks["sentence_order_binding_reasoning"] = {
+                "passed": analysis_has_binding,
+                "required": True,
+                "source": reasoning_modes_source,
+            }
             if not analysis_has_binding:
                 warnings.append("reference question relies on deterministic binding, but analysis does not clearly explain the binding clues.")
         analysis_has_head_tail = any(token in generated_question.analysis for token in ("首句", "尾句", "收束", "总结"))
-        checks["sentence_order_head_tail_reasoning"] = {"passed": analysis_has_head_tail}
-        if not analysis_has_head_tail:
+        checks["sentence_order_head_tail_reasoning"] = {
+            "passed": analysis_has_head_tail if head_tail_reasoning_required else True,
+            "required": head_tail_reasoning_required,
+            "source": reasoning_modes_source,
+        }
+        if head_tail_reasoning_required and not analysis_has_head_tail:
             warnings.append("sentence_order analysis does not clearly explain opener/closing roles.")
         return errors, warnings, checks
 
@@ -494,13 +790,38 @@ class QuestionValidatorService:
     ) -> tuple[list[str], list[str], dict[str, Any]]:
         stem = generated_question.stem
         material_text = str(context.get("material_text") or "")
+        validator_contract = context.get("validator_contract") or {}
+        material_source = context.get("material_source") or {}
+        material_prompt_extras = (
+            material_source.get("prompt_extras") if isinstance(material_source, dict) and isinstance(material_source.get("prompt_extras"), dict) else {}
+        )
         source_analysis = context.get("source_question_analysis") or {}
         structure_constraints = source_analysis.get("structure_constraints") or {}
+        sentence_fill_contract = validator_contract.get("sentence_fill") if isinstance(validator_contract, dict) else None
+        structure_contract = validator_contract.get("structure_constraints") if isinstance(validator_contract, dict) else None
 
         has_blank_signal = any(token in material_text for token in ("____", "___", "[BLANK]", "（  ）", "( )"))
         has_fill_prompt = any(token in stem for token in ("填入", "依次填入", "横线", "最恰当"))
         blank_position = self._detect_blank_position(material_text)
-        reference_blank_position = str(structure_constraints.get("blank_position") or "")
+        contract_blank_position = ""
+        if isinstance(validator_contract, dict):
+            contract_blank_position = str(
+                validator_contract.get("blank_position")
+                or (sentence_fill_contract.get("blank_position") if isinstance(sentence_fill_contract, dict) else "")
+                or (structure_contract.get("blank_position") if isinstance(structure_contract, dict) else "")
+                or ""
+            )
+        runtime_blank_position = str(material_prompt_extras.get("blank_position") or "")
+        reference_blank_position = (
+            runtime_blank_position
+            or contract_blank_position
+            or str(structure_constraints.get("blank_position") or "")
+        )
+        reference_blank_position_source = (
+            "material_source.prompt_extras"
+            if runtime_blank_position
+            else ("validator_contract" if contract_blank_position else "compatibility_source_question_analysis")
+        )
 
         checks = {
             "sentence_fill_gap_signal": {"passed": has_blank_signal},
@@ -519,15 +840,34 @@ class QuestionValidatorService:
                 "passed": aligned,
                 "reference_blank_position": reference_blank_position,
                 "generated_blank_position": blank_position,
+                "source": reference_blank_position_source,
             }
             if not aligned:
                 errors.append(
                     f"sentence_fill should preserve the reference blank position ({reference_blank_position}), but generated material drifted."
                 )
-        function_type = str(structure_constraints.get("function_type") or "")
+        contract_function_type = ""
+        if isinstance(validator_contract, dict):
+            contract_function_type = str(
+                validator_contract.get("function_type")
+                or (sentence_fill_contract.get("function_type") if isinstance(sentence_fill_contract, dict) else "")
+                or (structure_contract.get("function_type") if isinstance(structure_contract, dict) else "")
+                or ""
+            )
+        runtime_function_type = str(material_prompt_extras.get("function_type") or "")
+        function_type = runtime_function_type or contract_function_type or str(structure_constraints.get("function_type") or "")
+        function_type_source = (
+            "material_source.prompt_extras"
+            if runtime_function_type
+            else ("validator_contract" if contract_function_type else "compatibility_source_question_analysis")
+        )
         if function_type == "bridge_both_sides":
             analysis_has_bridge = any(token in generated_question.analysis for token in ("承上启下", "承前启后", "前文", "后文"))
-            checks["sentence_fill_bridge_reasoning"] = {"passed": analysis_has_bridge}
+            checks["sentence_fill_bridge_reasoning"] = {
+                "passed": analysis_has_bridge,
+                "function_type": function_type,
+                "source": function_type_source,
+            }
             if not analysis_has_bridge:
                 warnings.append("reference fill question is bridge-oriented, but analysis does not clearly explain both-side linkage.")
         return errors, warnings, checks
@@ -668,6 +1008,17 @@ class QuestionValidatorService:
         if circled:
             return circled
         return [int(value) for value in re.findall(r"\d+", raw)]
+
+    def _extract_reference_order_sequences(self, text: str) -> list[list[int]]:
+        raw = str(text or "")
+        if not raw:
+            return []
+        sequences: list[list[int]] = []
+        for match in re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]{2,10}", raw):
+            sequence = self._extract_order_sequence(match)
+            if len(sequence) >= 2:
+                sequences.append(sequence)
+        return sequences
 
     def _extract_order_sequences_from_text(self, text: str) -> list[list[int]]:
         raw = str(text or "")

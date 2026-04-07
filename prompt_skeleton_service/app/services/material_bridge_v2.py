@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from typing import Any
 from pathlib import Path
@@ -10,6 +11,10 @@ import httpx
 from app.core.exceptions import DomainError
 from app.schemas.question import MaterialPolicy, MaterialSelectionResult
 from app.schemas.runtime import MaterialsConfig
+from app.services.question_card_binding import QuestionCardBindingService
+
+
+logger = logging.getLogger(__name__)
 
 
 class MaterialBridgeV2Service:
@@ -17,12 +22,14 @@ class MaterialBridgeV2Service:
 
     def __init__(self, config: MaterialsConfig) -> None:
         self.config = config
+        self.question_card_binding = QuestionCardBindingService()
 
     def select_materials(
         self,
         *,
         question_type: str,
         business_subtype: str | None,
+        question_card_id: str | None = None,
         difficulty_target: str,
         topic: str | None,
         text_direction: str | None,
@@ -33,6 +40,7 @@ class MaterialBridgeV2Service:
         article_ids: list[str] | None = None,
         article_limit: int = 12,
         business_card_ids: list[str] | None = None,
+        preferred_business_card_ids: list[str] | None = None,
         query_terms: list[str] | None = None,
         target_length: int | None = None,
         length_tolerance: int = 120,
@@ -41,16 +49,30 @@ class MaterialBridgeV2Service:
         exclude_material_ids: set[str] | None = None,
         usage_stats_lookup=None,
     ) -> tuple[list[MaterialSelectionResult], list[str]]:
-        business_family_id = self._resolve_business_family_id(question_type, business_subtype)
+        binding = self._resolve_question_card_binding(
+            question_type=question_type,
+            business_subtype=business_subtype,
+            question_card_id=question_card_id,
+        )
+        resolved_question_card_id = binding.get("question_card_id")
+        business_family_id = self._resolve_business_family_id(binding)
+        warnings: list[str] = []
+        binding_warning = self._missing_question_card_warning(
+            requested_question_card_id=question_card_id,
+            resolved_question_card_id=resolved_question_card_id,
+        )
+        if binding_warning:
+            warnings.append(binding_warning)
         requested_candidate_limit = max(min(self.config.candidate_pool_size, 16), count * 4)
         items = self._search_candidates(
             business_family_id=business_family_id,
-            question_card_id=None,
+            question_card_id=resolved_question_card_id,
             article_ids=article_ids or [],
             article_limit=article_limit,
             candidate_limit=requested_candidate_limit,
             min_card_score=self._min_card_score(difficulty_target),
             business_card_ids=business_card_ids or [],
+            preferred_business_card_ids=preferred_business_card_ids or [],
             query_terms=query_terms or [],
             target_length=target_length,
             length_tolerance=length_tolerance,
@@ -67,6 +89,7 @@ class MaterialBridgeV2Service:
                     document_genre=document_genre,
                     material_structure_label=material_structure_label,
                     material_policy=material_policy,
+                    has_explicit_question_card=bool(question_card_id),
                     requested_business_card_ids=business_card_ids or [],
                     structure_constraints=structure_constraints or {},
                     query_terms=query_terms or [],
@@ -79,7 +102,6 @@ class MaterialBridgeV2Service:
         )
         selections: list[MaterialSelectionResult] = []
         used_ids: set[str] = set()
-        warnings: list[str] = []
         strict_rejections: list[dict[str, Any]] = []
         excluded = set(material_policy.excluded_material_ids) if material_policy else set()
         excluded.update(exclude_material_ids or set())
@@ -129,9 +151,11 @@ class MaterialBridgeV2Service:
         *,
         question_type: str = "main_idea",
         business_subtype: str | None = "title_selection",
+        question_card_id: str | None = None,
         document_genre: str | None = None,
         material_structure_label: str | None = None,
         business_card_ids: list[str] | None = None,
+        preferred_business_card_ids: list[str] | None = None,
         query_terms: list[str] | None = None,
         target_length: int | None = None,
         length_tolerance: int = 120,
@@ -144,16 +168,28 @@ class MaterialBridgeV2Service:
         difficulty_target: str = "medium",
         usage_stats_lookup=None,
     ) -> list[MaterialSelectionResult]:
-        business_family_id = self._resolve_business_family_id(question_type, business_subtype)
+        binding = self._resolve_question_card_binding(
+            question_type=question_type,
+            business_subtype=business_subtype,
+            question_card_id=question_card_id,
+        )
+        resolved_question_card_id = binding.get("question_card_id")
+        business_family_id = self._resolve_business_family_id(binding)
+        self._log_missing_question_card_binding(
+            requested_question_card_id=question_card_id,
+            resolved_question_card_id=resolved_question_card_id,
+            method_name="list_material_options",
+        )
         items = self._attach_local_usage_stats(
             self._search_candidates(
                 business_family_id=business_family_id,
-                question_card_id=None,
+                question_card_id=resolved_question_card_id,
                 article_ids=article_ids or [],
                 article_limit=article_limit,
                 candidate_limit=max(min(self.config.candidate_pool_size, 16), limit * 4),
                 min_card_score=self._min_card_score(difficulty_target),
                 business_card_ids=business_card_ids or [],
+                preferred_business_card_ids=preferred_business_card_ids or [],
                 query_terms=query_terms or [],
                 target_length=target_length,
                 length_tolerance=length_tolerance,
@@ -171,6 +207,7 @@ class MaterialBridgeV2Service:
                     document_genre=document_genre,
                     material_structure_label=material_structure_label,
                     material_policy=None,
+                    has_explicit_question_card=bool(question_card_id),
                     requested_business_card_ids=business_card_ids or [],
                     structure_constraints=structure_constraints or {},
                     query_terms=query_terms or [],
@@ -200,39 +237,102 @@ class MaterialBridgeV2Service:
         *,
         question_type: str,
         business_subtype: str | None,
+        question_card_id: str | None = None,
         article_ids: list[str] | None = None,
         article_limit: int = 12,
         candidate_limit: int = 8,
         difficulty_target: str = "medium",
     ) -> dict[str, Any]:
-        business_family_id = self._resolve_business_family_id(question_type, business_subtype)
+        binding = self._resolve_question_card_binding(
+            question_type=question_type,
+            business_subtype=business_subtype,
+            question_card_id=question_card_id,
+        )
+        resolved_question_card_id = binding.get("question_card_id")
+        business_family_id = self._resolve_business_family_id(binding)
+        binding_warning = self._missing_question_card_warning(
+            requested_question_card_id=question_card_id,
+            resolved_question_card_id=resolved_question_card_id,
+        )
         items = self._search_candidates(
             business_family_id=business_family_id,
-            question_card_id=None,
+            question_card_id=resolved_question_card_id,
             article_ids=article_ids or [],
             article_limit=article_limit,
             candidate_limit=candidate_limit,
             min_card_score=self._min_card_score(difficulty_target),
             business_card_ids=[],
+            preferred_business_card_ids=[],
             query_terms=[],
             target_length=None,
             length_tolerance=120,
+            structure_constraints={},
             enable_anchor_adaptation=True,
         )
         return {
             "business_family_id": business_family_id,
+            "question_card_id": resolved_question_card_id,
+            "question_card_binding_warning": binding_warning,
             "items": items,
         }
 
-    def _resolve_business_family_id(self, question_type: str, business_subtype: str | None) -> str:
-        if question_type == "main_idea":
-            return "title_selection"
-        if question_type in {"continuation", "sentence_order", "sentence_fill"}:
-            return question_type
+    def _missing_question_card_warning(
+        self,
+        *,
+        requested_question_card_id: str | None,
+        resolved_question_card_id: str | None,
+    ) -> str | None:
+        if requested_question_card_id:
+            return None
+        if resolved_question_card_id:
+            return (
+                "question_card_id_missing: upstream did not provide an explicit question card binding; "
+                f"bridge derived question_card_id={resolved_question_card_id} from normalized question_card.runtime_binding."
+            )
+        return None
+
+    def _log_missing_question_card_binding(
+        self,
+        *,
+        requested_question_card_id: str | None,
+        resolved_question_card_id: str | None,
+        method_name: str,
+    ) -> None:
+        binding_warning = self._missing_question_card_warning(
+            requested_question_card_id=requested_question_card_id,
+            resolved_question_card_id=resolved_question_card_id,
+        )
+        if binding_warning:
+            logger.warning("%s %s", method_name, binding_warning)
+
+    def _resolve_question_card_binding(
+        self,
+        *,
+        question_type: str,
+        business_subtype: str | None,
+        question_card_id: str | None = None,
+    ) -> dict[str, Any]:
+        return self.question_card_binding.resolve(
+            question_card_id=question_card_id,
+            question_type=question_type,
+            business_subtype=business_subtype,
+            require_match=True,
+        )
+
+    def _resolve_business_family_id(self, binding: dict[str, Any]) -> str:
+        question_card = binding.get("question_card") or {}
+        business_family_id = str(question_card.get("business_family_id") or "").strip()
+        if business_family_id:
+            return business_family_id
+        runtime_binding = binding.get("runtime_binding") or {}
         raise DomainError(
-            "v2 material bridge does not support the requested question family yet.",
+            "Resolved question card binding did not provide a business_family_id.",
             status_code=422,
-            details={"question_type": question_type, "business_subtype": business_subtype},
+            details={
+                "question_card_id": binding.get("question_card_id"),
+                "question_type": runtime_binding.get("question_type"),
+                "business_subtype": runtime_binding.get("business_subtype"),
+            },
         )
 
     def _min_card_score(self, difficulty_target: str) -> float:
@@ -252,6 +352,7 @@ class MaterialBridgeV2Service:
         candidate_limit: int,
         min_card_score: float,
         business_card_ids: list[str],
+        preferred_business_card_ids: list[str],
         query_terms: list[str],
         target_length: int | None,
         length_tolerance: int,
@@ -266,6 +367,7 @@ class MaterialBridgeV2Service:
             "candidate_limit": candidate_limit,
             "min_card_score": min_card_score,
             "business_card_ids": business_card_ids,
+            "preferred_business_card_ids": preferred_business_card_ids,
             "query_terms": query_terms,
             "target_length": target_length,
             "length_tolerance": length_tolerance,
@@ -410,6 +512,7 @@ class MaterialBridgeV2Service:
         document_genre: str | None,
         material_structure_label: str | None,
         material_policy: MaterialPolicy | None,
+        has_explicit_question_card: bool,
         requested_business_card_ids: list[str],
         structure_constraints: dict[str, Any],
         query_terms: list[str],
@@ -442,7 +545,7 @@ class MaterialBridgeV2Service:
         if document_genre and candidate_genre == document_genre:
             score += 0.22
             reasons.append("document_genre_match")
-        if material_structure_label and candidate_structure == material_structure_label:
+        if material_structure_label and candidate_structure == material_structure_label and not has_explicit_question_card:
             score += 0.22
             reasons.append("material_structure_match")
         if material_policy and material_policy.preferred_document_genres and candidate_genre in material_policy.preferred_document_genres:
@@ -460,7 +563,9 @@ class MaterialBridgeV2Service:
         if selected_business_card:
             recommended_business_cards.add(selected_business_card)
         requested_card_set = {card_id for card_id in requested_business_card_ids if card_id}
-        if requested_card_set:
+        # Once an explicit question card is already bound upstream, bridge should
+        # not re-promote candidates via local business-card preference bonuses.
+        if requested_card_set and not has_explicit_question_card:
             if selected_business_card in requested_card_set:
                 score += 0.40
                 reasons.append("selected_business_card_exact")
@@ -468,17 +573,18 @@ class MaterialBridgeV2Service:
                 score += 0.20
                 reasons.append("business_card_recommendation_match")
         expected_unit_count = int(structure_constraints.get("sortable_unit_count") or 0)
-        if expected_unit_count > 0 and structure_constraints.get("preserve_unit_count"):
+        if expected_unit_count > 0 and structure_constraints.get("preserve_unit_count") and not has_explicit_question_card:
             actual_unit_count = int(sentence_order_profile.get("unit_count") or 0)
             if actual_unit_count != expected_unit_count:
-                return {
-                    "item": item,
-                    "score": -999.0,
-                    "reason": f"sentence_order_unit_count_mismatch expected={expected_unit_count} actual={actual_unit_count}",
-                }
+                unit_count_penalty = 0.42
+                score -= unit_count_penalty
+                reasons.append(
+                    f"sentence_order_unit_count_penalty={unit_count_penalty:.2f} expected={expected_unit_count} actual={actual_unit_count}"
+                )
         structure_bonus = self._structure_alignment_bonus(
             item=item,
             structure_constraints=structure_constraints,
+            has_explicit_question_card=has_explicit_question_card,
         )
         if structure_bonus:
             score += structure_bonus
@@ -501,6 +607,7 @@ class MaterialBridgeV2Service:
         *,
         item: dict[str, Any],
         structure_constraints: dict[str, Any],
+        has_explicit_question_card: bool,
     ) -> float:
         if not structure_constraints:
             return 0.0
@@ -510,7 +617,7 @@ class MaterialBridgeV2Service:
         sentence_order_profile = business_feature_profile.get("sentence_order_profile") or {}
 
         expected_blank_position = str(structure_constraints.get("blank_position") or "")
-        if expected_blank_position:
+        if expected_blank_position and not has_explicit_question_card:
             actual_blank_position = str(sentence_fill_profile.get("blank_position") or "")
             if actual_blank_position == expected_blank_position:
                 bonus += 0.34
@@ -518,13 +625,13 @@ class MaterialBridgeV2Service:
                 bonus -= 0.18
 
         expected_function_type = str(structure_constraints.get("function_type") or "")
-        if expected_function_type:
+        if expected_function_type and not has_explicit_question_card:
             actual_function_type = str(sentence_fill_profile.get("function_type") or "")
             if actual_function_type == expected_function_type:
                 bonus += 0.24
 
         expected_unit_count = int(structure_constraints.get("sortable_unit_count") or 0)
-        if expected_unit_count > 0:
+        if expected_unit_count > 0 and not has_explicit_question_card:
             actual_unit_count = int(sentence_order_profile.get("unit_count") or 0)
             if actual_unit_count == expected_unit_count:
                 bonus += 0.36
@@ -532,21 +639,21 @@ class MaterialBridgeV2Service:
                 bonus -= 0.80
 
         expected_logic_modes = set(structure_constraints.get("logic_modes") or [])
-        if expected_logic_modes:
+        if expected_logic_modes and not has_explicit_question_card:
             actual_logic_modes = set(sentence_order_profile.get("logic_modes") or [])
             shared = len(expected_logic_modes.intersection(actual_logic_modes))
             if shared > 0:
                 bonus += min(0.20, shared * 0.08)
 
         expected_binding_types = set(structure_constraints.get("binding_types") or [])
-        if expected_binding_types:
+        if expected_binding_types and not has_explicit_question_card:
             actual_binding_types = set(sentence_order_profile.get("binding_rules") or [])
             shared = len(expected_binding_types.intersection(actual_binding_types))
             if shared > 0:
                 bonus += min(0.16, shared * 0.08)
 
         expected_binding_pair_count = int(structure_constraints.get("expected_binding_pair_count") or 0)
-        if expected_binding_pair_count > 0:
+        if expected_binding_pair_count > 0 and not has_explicit_question_card:
             actual_binding_pair_count = float(sentence_order_profile.get("binding_pair_count") or 0.0)
             if actual_binding_pair_count >= expected_binding_pair_count:
                 bonus += 0.10
@@ -556,7 +663,7 @@ class MaterialBridgeV2Service:
                 bonus -= 0.08
 
         expected_progression = str(structure_constraints.get("discourse_progression_pattern") or "")
-        if expected_progression:
+        if expected_progression and not has_explicit_question_card:
             actual_logic_modes = set(sentence_order_profile.get("logic_modes") or [])
             if expected_progression == "timeline_or_action_sequence":
                 if actual_logic_modes.intersection({"timeline_sequence", "action_sequence"}):
@@ -564,7 +671,7 @@ class MaterialBridgeV2Service:
             elif expected_progression in actual_logic_modes:
                 bonus += 0.10
 
-        if structure_constraints.get("temporal_or_action_sequence_presence"):
+        if structure_constraints.get("temporal_or_action_sequence_presence") and not has_explicit_question_card:
             temporal_strength = max(
                 float(sentence_order_profile.get("temporal_order_strength") or 0.0),
                 float(sentence_order_profile.get("action_sequence_irreversibility") or 0.0),
@@ -572,7 +679,7 @@ class MaterialBridgeV2Service:
             bonus += min(0.08, temporal_strength * 0.08)
 
         expected_unique_answer_strength = float(structure_constraints.get("expected_unique_answer_strength") or 0.0)
-        if expected_unique_answer_strength > 0:
+        if expected_unique_answer_strength > 0 and not has_explicit_question_card:
             actual_strength = (
                 0.30 * float(sentence_order_profile.get("unique_opener_score") or 0.0)
                 + 0.22 * min(1.0, float(sentence_order_profile.get("binding_pair_count") or 0.0) / 3)
@@ -594,6 +701,10 @@ class MaterialBridgeV2Service:
         local_profile = item.get("local_profile") or {}
         article_profile = item.get("article_profile") or {}
         question_ready_context = item.get("question_ready_context") or {}
+        question_card_id = question_ready_context.get("question_card_id")
+        runtime_binding = question_ready_context.get("runtime_binding")
+        resolved_slots = question_ready_context.get("resolved_slots")
+        validator_contract = question_ready_context.get("validator_contract")
         selected_material_card = question_ready_context.get("selected_material_card")
         selected_business_card = question_ready_context.get("selected_business_card")
         generation_archetype = question_ready_context.get("generation_archetype")
@@ -616,6 +727,10 @@ class MaterialBridgeV2Service:
         return MaterialSelectionResult(
             material_id=str(item.get("candidate_id") or ""),
             article_id=str(item.get("article_id") or ""),
+            question_card_id=str(question_card_id) if question_card_id else None,
+            runtime_binding=dict(runtime_binding) if isinstance(runtime_binding, dict) else None,
+            resolved_slots=dict(resolved_slots) if isinstance(resolved_slots, dict) else None,
+            validator_contract=dict(validator_contract) if isinstance(validator_contract, dict) else None,
             text=consumable_text,
             original_text=str(item.get("original_text") or item.get("text") or ""),
             source={

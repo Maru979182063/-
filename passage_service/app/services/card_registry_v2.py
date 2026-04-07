@@ -106,6 +106,8 @@ class CardRegistryV2:
             meta = card.get("card_meta") or {}
             if not meta.get("enabled", True):
                 continue
+            if not meta.get("runtime_eligible", True):
+                continue
             mother_family_id = str(meta.get("mother_family_id") or "").strip()
             if mother_family_id not in aliases:
                 continue

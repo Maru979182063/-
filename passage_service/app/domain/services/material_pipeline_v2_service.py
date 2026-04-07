@@ -37,6 +37,7 @@ class MaterialPipelineV2Service(ServiceBase):
             business_family_id=business_family_id,
             question_card_id=payload.get("question_card_id"),
             business_card_ids=payload.get("business_card_ids") or [],
+            preferred_business_card_ids=payload.get("preferred_business_card_ids") or [],
             query_terms=payload.get("query_terms") or [],
             candidate_limit=payload.get("candidate_limit", 20),
             min_card_score=payload.get("min_card_score", 0.55),
@@ -60,7 +61,9 @@ class MaterialPipelineV2Service(ServiceBase):
         if business_family_id in {"sentence_order", "sentence_fill"}:
             cache_lookup_limit = max(candidate_limit * 40, 800)
         requested_business_card_ids = set(payload.get("business_card_ids") or [])
+        preferred_business_card_ids = set(payload.get("preferred_business_card_ids") or [])
         structure_constraints = dict(payload.get("structure_constraints") or {})
+        enforce_structure_gate = bool(requested_business_card_ids)
         materials = self.material_repo.list_v2_cached(
             business_family_id=business_family_id,
             material_ids=payload.get("material_ids") or None,
@@ -103,6 +106,14 @@ class MaterialPipelineV2Service(ServiceBase):
                     card_score = 2
                 elif requested_business_card_ids.intersection(set(cached_item.get("business_card_recommendations") or [])):
                     card_score = 1
+            elif preferred_business_card_ids:
+                cached_recommended = set(cached_item.get("business_card_recommendations") or [])
+                if selected_business_card:
+                    cached_recommended.add(selected_business_card)
+                if selected_business_card in preferred_business_card_ids:
+                    card_score = 1
+                elif preferred_business_card_ids.intersection(cached_recommended):
+                    card_score = 0.5
             else:
                 card_score = 1
             quality_score = float(cached_item.get("quality_score") or getattr(material, "quality_score", 0.0) or 0.0)
@@ -132,14 +143,20 @@ class MaterialPipelineV2Service(ServiceBase):
             if (
                 (entry[2][0] > 0 or not requested_business_card_ids)
                 and (entry[2][2] > 0 or not query_terms)
-                and entry[2][1] >= self._minimum_structure_score(business_family_id, structure_constraints)
+                and (
+                    not enforce_structure_gate
+                    or entry[2][1] >= self._minimum_structure_score(business_family_id, structure_constraints)
+                )
             )
         ]
         relaxed = [
             entry for entry in tier_candidates
             if (
                 (entry[2][0] > 0 or not requested_business_card_ids)
-                and entry[2][1] >= self._minimum_structure_score(business_family_id, structure_constraints)
+                and (
+                    not enforce_structure_gate
+                    or entry[2][1] >= self._minimum_structure_score(business_family_id, structure_constraints)
+                )
             )
         ]
         if strict:

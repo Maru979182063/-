@@ -12,6 +12,11 @@ card_meta:
     - 结尾
     - 对策
 
+feature_signature:
+  relation_type: 位置功能匹配
+  business_function: propose_countermeasure
+  relation_focus: 结尾空句承担提出对策或行动方向
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true

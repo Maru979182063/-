@@ -12,6 +12,11 @@ card_meta:
     - 中间
     - 启下
 
+feature_signature:
+  relation_type: 位置功能匹配
+  business_function: lead_next
+  relation_focus: 中间空句主要负责把话题引向后文展开
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true

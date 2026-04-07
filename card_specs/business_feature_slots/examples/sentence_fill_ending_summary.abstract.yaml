@@ -12,6 +12,11 @@ card_meta:
     - 结尾
     - 总结前文
 
+feature_signature:
+  relation_type: 位置功能匹配
+  business_function: summarize_previous_text
+  relation_focus: 结尾空句要对前文主线做收束总结
+
 retrieval_profile:
   hard_filters:
     require_complete_unit: true

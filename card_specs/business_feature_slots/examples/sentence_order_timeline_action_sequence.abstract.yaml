@@ -15,6 +15,7 @@ card_meta:
 
 feature_signature:
   relation_type: 时间与行动顺序
+  sentence_order_scoring_mode: timeline_action_sequence
   relation_focus: 判断时间推进与步骤先后
   typical_formats:
     - 将以上几个句子重新排列，语序正确的是……

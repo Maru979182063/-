@@ -7,11 +7,15 @@ card_meta:
   mother_family_id: main_idea
   business_subtype: __OPTIONAL__
   enabled: true
+  runtime_eligible: true
   source: textbook_business_card
   tags: []
 
 feature_signature:
   relation_type: __FILL_ME__
+  relation_family: __OPTIONAL__
+  sentence_order_scoring_mode: __OPTIONAL__
+  business_function: __OPTIONAL__
   relation_focus: __FILL_ME__
   typical_formats: []
   explicit_markers:

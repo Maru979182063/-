@@ -6,6 +6,7 @@ card_meta:
   description: 按横线位置、句子功能、句内句际关系来判断最合适填句的教材型业务卡。
   mother_family_id: sentence_fill
   enabled: false
+  runtime_eligible: false
   source: textbook_business_card
   tags:
     - 语句填空题

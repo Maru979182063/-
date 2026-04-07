@@ -15,6 +15,7 @@ card_meta:
 
 feature_signature:
   relation_type: 行文逻辑
+  sentence_order_scoring_mode: discourse_logic
   relation_focus: 判断板块推进和篇章顺序
   typical_formats:
     - 将以上几个句子重新排列，语序正确的是……

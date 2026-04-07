@@ -147,6 +147,19 @@ generation_archetypes:
     - 比较选项内部短语顺序
     - 排除伪通顺表达
 validator_contract:
+  sentence_order:
+    sortable_unit_count: 6
+    expected_binding_pair_count: 2
+    expected_unique_answer_strength: 0.6
+  thresholds:
+    unique_opener_min_score: 0.56
+    closure_min_score: 0.6
+    exchange_risk_max: 0.34
+    multi_path_risk_max: 0.36
+    function_overlap_max: 0.42
+  reasoning:
+    required_modes:
+    - head_tail_roles
   extension_rules:
   - 语句排序标准母卡统一按6句排序单元制作；若材料不能稳定提供6个可排序句子，则应在生成前淘汰，不得改做3句、4句或7句排序。
   - 正确顺序必须能解释首句为何可起、尾句为何可收、中段为何能接，不得只给结果不讲接口。
@@ -155,7 +168,32 @@ validator_contract:
   - 若尾句带有‘因此/所以/总之/可见/无论如何’等收束信号，正确项应优先把该句置后。
   - 变体排序题需显式说明其不依赖首尾锚点，而依赖固定搭配、语义流程或价值排序。
   - block-group 排序题必须优先保证唯一较优序列，不能只证明“能够解释出一种顺序”。
+answer_grounding:
+  require_material_traceability: true
+  disallow_unsupported_extensions: true
+  unsupported_extension_types:
+  - stance
+  - causal_chain
+  - countermeasure
+  - conclusion
+  - evaluative_claim
+  require_correct_option_material_defensibility: true
+  distractor_sources:
+  - non_key_detail
+  - scope_shift
+  - partial_reading
+  - unsupported_extension
+  require_analysis_material_evidence: true
+  align_with_reference_elimination_style: true
+  preserve_sortable_units: true
+  preserve_sentence_level_units: true
+  allow_minimal_local_cue_repair: true
+  cue_repair_requires_latent_clues: true
 normalized_from: sentence_order_standard_question_card.yaml
+reference_hard_constraints:
+  allow_minimal_cue_sharpening: true
+  avoid_trivial_correct_order: true
+  require_unique_defensible_order: true
 normalization_notes:
 - required_candidate_types expanded to cover all preferred material cards
 - required_profiles expanded to include signals required by preferred material cards
