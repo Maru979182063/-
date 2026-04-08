@@ -49,6 +49,26 @@ ACTION_MEASURE_MARKERS = ("通过", "采取", "推动", "完善", "优化", "健
 class MaterialPipelineV2:
     INDEX_VERSION = "v2.index.20260402b"
     SENTENCE_ORDER_FIXED_UNIT_COUNT = 6
+    TASK_SCORING_THRESHOLDS = {
+        "main_idea": {
+            "recommended": 0.50,
+            "review_readiness": 0.60,
+            "review_penalty": 0.28,
+            "fallback_review_score": 0.40,
+        },
+        "sentence_fill": {
+            "recommended": 0.54,
+            "review_readiness": 0.58,
+            "review_penalty": 0.28,
+            "fallback_review_score": 0.42,
+        },
+        "sentence_order": {
+            "recommended": 0.56,
+            "review_readiness": 0.58,
+            "review_penalty": 0.24,
+            "fallback_review_score": 0.46,
+        },
+    }
 
     def __init__(self) -> None:
         config_bundle = get_config_bundle()
@@ -1965,7 +1985,14 @@ class MaterialPipelineV2:
         if not ranked:
             return []
 
-        ranked.sort(key=lambda item: (item.get("meta", {}).get("planner_score", 0.0), self._candidate_priority_boost(item)), reverse=True)
+        ranked.sort(
+            key=lambda item: (
+                item.get("meta", {}).get("planner_score", 0.0),
+                self._primary_candidate_final_score(item),
+                self._candidate_priority_boost(item),
+            ),
+            reverse=True,
+        )
         selected: list[dict[str, Any]] = []
         type_counts: Counter[str] = Counter()
         seen: set[tuple[str, str]] = set()
@@ -2290,7 +2317,9 @@ class MaterialPipelineV2:
         signal_profile["task_scoring"] = task_scoring
         signal_profile.update(self._flatten_task_scoring(task_scoring))
         meta = dict(candidate.get("meta") or {})
-        meta["scoring"] = task_scoring
+        task_family = self._candidate_task_family(candidate)
+        meta["task_scoring"] = task_scoring
+        meta["scoring"] = dict(task_scoring.get(task_family) or {}) if task_family else {}
         candidate["meta"] = meta
         return signal_profile
 
@@ -2571,9 +2600,94 @@ class MaterialPipelineV2:
             flattened[f"{prefix}_final_score"] = float(payload.get("final_candidate_score") or 0.0)
             flattened[f"{prefix}_risk_penalties"] = dict(payload.get("risk_penalties") or {})
             flattened[f"{prefix}_score_trace"] = dict(payload.get("score_trace") or {})
+            flattened[f"{prefix}_difficulty_vector"] = dict(payload.get("difficulty_vector") or {})
+            flattened[f"{prefix}_difficulty_band_hint"] = str(payload.get("difficulty_band_hint") or "")
+            flattened[f"{prefix}_difficulty_trace"] = dict(payload.get("difficulty_trace") or {})
             flattened[f"{prefix}_recommended"] = bool(payload.get("recommended"))
             flattened[f"{prefix}_needs_review"] = bool(payload.get("needs_review"))
         return flattened
+
+    def _candidate_task_family(self, candidate: dict[str, Any]) -> str | None:
+        candidate_type = str(candidate.get("candidate_type") or "")
+        if candidate_type in {"whole_passage", "closed_span", "multi_paragraph_unit"}:
+            return "main_idea"
+        if candidate_type == "functional_slot_unit":
+            return "sentence_fill"
+        if candidate_type == "ordered_unit_group":
+            return "sentence_order"
+        return None
+
+    def _task_scoring_thresholds(self, task_family: str) -> dict[str, float]:
+        return dict(self.TASK_SCORING_THRESHOLDS.get(task_family, {}))
+
+    def _total_penalty(self, penalties: dict[str, float]) -> float:
+        return self._round_score(sum(float(value or 0.0) for value in penalties.values()))
+
+    def _average_score(self, values: list[float] | tuple[float, ...]) -> float:
+        if not values:
+            return 0.0
+        return self._round_score(sum(float(value or 0.0) for value in values) / len(values))
+
+    def _primary_candidate_final_score(self, candidate: dict[str, Any]) -> float:
+        task_family = self._candidate_task_family(candidate)
+        task_scoring = ((candidate.get("neutral_signal_profile") or {}).get("task_scoring") or {})
+        if not task_family or not isinstance(task_scoring.get(task_family), dict):
+            return 0.0
+        return float(task_scoring.get(task_family, {}).get("final_candidate_score") or 0.0)
+
+    def _difficulty_band_hint(
+        self,
+        *,
+        task_family: str,
+        difficulty_vector: dict[str, float],
+        final_candidate_score: float,
+        total_penalty: float,
+        recommended: bool,
+        needs_review: bool,
+    ) -> tuple[str, dict[str, Any]]:
+        vector_values = [float(value or 0.0) for value in difficulty_vector.values()]
+        average_difficulty = self._average_score(vector_values)
+        high_dimensions = [key for key, value in difficulty_vector.items() if float(value or 0.0) >= 0.67]
+        medium_dimensions = [key for key, value in difficulty_vector.items() if float(value or 0.0) >= 0.45]
+        core_hard_dimensions = [
+            key
+            for key in ("ambiguity_score", "reasoning_depth_score", "constraint_intensity_score")
+            if float(difficulty_vector.get(key) or 0.0) >= 0.62
+        ]
+
+        if (len(high_dimensions) >= 2 and len(core_hard_dimensions) >= 2) or average_difficulty >= 0.68:
+            band = "hard"
+            band_reason = "multi_dimensional_difficulty_high"
+        elif average_difficulty <= 0.38 and len(medium_dimensions) <= 1 and float(difficulty_vector.get("ambiguity_score") or 0.0) < 0.55:
+            band = "easy"
+            band_reason = "overall_difficulty_low"
+        else:
+            band = "medium"
+            band_reason = "mixed_difficulty_profile"
+
+        quality_difficulty_note = "difficulty_and_quality_balanced"
+        if total_penalty >= 0.55 and average_difficulty < 0.62:
+            quality_difficulty_note = "high_risk_but_not_high_difficulty"
+        elif band == "hard" and final_candidate_score < 0.35:
+            quality_difficulty_note = "hard_but_currently_weak_candidate"
+        elif band == "hard":
+            quality_difficulty_note = "structurally_hard_candidate"
+        elif final_candidate_score < 0.35 and average_difficulty < 0.45:
+            quality_difficulty_note = "not_hard_but_currently_weak_candidate"
+
+        return band, {
+            "task_family": task_family,
+            "average_difficulty": average_difficulty,
+            "high_dimensions": high_dimensions,
+            "medium_dimensions": medium_dimensions,
+            "core_hard_dimensions": core_hard_dimensions,
+            "band_reason": band_reason,
+            "quality_difficulty_note": quality_difficulty_note,
+            "final_candidate_score": self._round_score(final_candidate_score),
+            "total_penalty": self._round_score(total_penalty),
+            "recommended": bool(recommended),
+            "needs_review": bool(needs_review),
+        }
 
     def _build_main_idea_scoring(
         self,
@@ -2585,6 +2699,15 @@ class MaterialPipelineV2:
         closure_score = float(signal_profile.get("main_idea_closure_score") or 0.0)
         theme_lift_score = float(signal_profile.get("main_idea_lift_score") or 0.0)
         example_dominance_penalty = float(signal_profile.get("main_idea_example_dominance_score") or 0.0)
+        thresholds = self._task_scoring_thresholds("main_idea")
+        structure_scores = {
+            "single_center_score": self._round_score(single_center_score),
+            "closure_score": self._round_score(closure_score),
+            "theme_lift_score": self._round_score(theme_lift_score),
+        }
+        risk_penalties = {
+            "example_dominance_penalty": self._round_score(example_dominance_penalty),
+        }
         readiness_score = self._round_score(
             0.40 * single_center_score
             + 0.30 * closure_score
@@ -2593,33 +2716,122 @@ class MaterialPipelineV2:
         final_candidate_score = self._round_score(
             readiness_score - 0.35 * example_dominance_penalty
         )
+        total_penalty = self._total_penalty(risk_penalties)
         recommended = bool(
             signal_profile.get("main_idea_eligible")
-            and final_candidate_score >= 0.50
+            and final_candidate_score >= thresholds.get("recommended", 0.50)
         )
         needs_review = bool(
-            readiness_score >= 0.60 and example_dominance_penalty >= 0.28
-            or (not recommended and readiness_score >= 0.52 and final_candidate_score >= 0.40)
+            (
+                readiness_score >= thresholds.get("review_readiness", 0.60)
+                and total_penalty >= thresholds.get("review_penalty", 0.28)
+            )
+            or (
+                not recommended
+                and readiness_score >= max(0.52, thresholds.get("review_readiness", 0.60) - 0.08)
+                and final_candidate_score >= thresholds.get("fallback_review_score", 0.40)
+            )
         )
         reason = str(signal_profile.get("main_idea_eligibility_reason") or "main_idea_unscored")
+        recommendation_reason = "eligible_and_above_threshold" if recommended else reason
+        review_reason = ""
+        if needs_review:
+            if readiness_score >= thresholds.get("review_readiness", 0.60) and total_penalty >= thresholds.get("review_penalty", 0.28):
+                review_reason = "readiness_high_but_example_penalty_high"
+            else:
+                review_reason = "borderline_main_idea_candidate"
+        multi_dimension_cohesion = self._round_score(float(signal_profile.get("multi_dimension_cohesion") or 0.0))
+        branch_focus_strength = self._round_score(float(signal_profile.get("branch_focus_strength") or 0.0))
+        difficulty_vector = {
+            "complexity_score": self._round_score(
+                0.38 * structure_scores["closure_score"]
+                + 0.37 * structure_scores["theme_lift_score"]
+                + 0.25 * multi_dimension_cohesion
+            ),
+            "ambiguity_score": self._round_score(
+                0.45 * risk_penalties["example_dominance_penalty"]
+                + 0.35 * (1 - structure_scores["single_center_score"])
+                + 0.20 * branch_focus_strength
+            ),
+            "reasoning_depth_score": self._round_score(
+                0.45 * structure_scores["theme_lift_score"]
+                + 0.35 * structure_scores["closure_score"]
+                + 0.20 * structure_scores["single_center_score"]
+            ),
+            "constraint_intensity_score": self._round_score(
+                0.36 * structure_scores["single_center_score"]
+                + 0.32 * structure_scores["closure_score"]
+                + 0.32 * structure_scores["theme_lift_score"]
+            ),
+        }
+        difficulty_band_hint, difficulty_band_decision = self._difficulty_band_hint(
+            task_family="main_idea",
+            difficulty_vector=difficulty_vector,
+            final_candidate_score=final_candidate_score,
+            total_penalty=total_penalty,
+            recommended=recommended,
+            needs_review=needs_review,
+        )
+        difficulty_trace = {
+            "source_fields": {
+                "main_idea_single_center_score": structure_scores["single_center_score"],
+                "main_idea_closure_score": structure_scores["closure_score"],
+                "main_idea_lift_score": structure_scores["theme_lift_score"],
+                "main_idea_example_dominance_score": risk_penalties["example_dominance_penalty"],
+                "multi_dimension_cohesion": multi_dimension_cohesion,
+                "branch_focus_strength": branch_focus_strength,
+            },
+            "aggregations": {
+                "complexity_formula": "0.38 * closure_score + 0.37 * theme_lift_score + 0.25 * multi_dimension_cohesion",
+                "ambiguity_formula": "0.45 * example_dominance_penalty + 0.35 * (1 - single_center_score) + 0.20 * branch_focus_strength",
+                "reasoning_depth_formula": "0.45 * theme_lift_score + 0.35 * closure_score + 0.20 * single_center_score",
+                "constraint_intensity_formula": "0.36 * single_center_score + 0.32 * closure_score + 0.32 * theme_lift_score",
+                "difficulty_vector": difficulty_vector,
+            },
+            "band_decision": difficulty_band_decision,
+        }
         return {
             "task_family": "main_idea",
-            "structure_scores": {
-                "single_center_score": self._round_score(single_center_score),
-                "closure_score": self._round_score(closure_score),
-                "theme_lift_score": self._round_score(theme_lift_score),
-            },
+            "structure_scores": structure_scores,
             "readiness_score": readiness_score,
-            "risk_penalties": {
-                "example_dominance_penalty": self._round_score(example_dominance_penalty),
-            },
+            "risk_penalties": risk_penalties,
             "final_candidate_score": final_candidate_score,
             "recommended": recommended,
             "needs_review": needs_review,
+            "difficulty_vector": difficulty_vector,
+            "difficulty_band_hint": difficulty_band_hint,
+            "difficulty_trace": difficulty_trace,
             "score_trace": {
-                "eligibility_reason": reason,
+                "source_fields": {
+                    "main_idea_single_center_score": structure_scores["single_center_score"],
+                    "main_idea_closure_score": structure_scores["closure_score"],
+                    "main_idea_lift_score": structure_scores["theme_lift_score"],
+                    "main_idea_example_dominance_score": risk_penalties["example_dominance_penalty"],
+                    "main_idea_eligible": bool(signal_profile.get("main_idea_eligible")),
+                    "main_idea_eligibility_reason": reason,
+                },
+                "aggregations": {
+                    "readiness_formula": "0.40 * single_center_score + 0.30 * closure_score + 0.30 * theme_lift_score",
+                    "readiness_components": {
+                        "single_center_component": self._round_score(0.40 * structure_scores["single_center_score"]),
+                        "closure_component": self._round_score(0.30 * structure_scores["closure_score"]),
+                        "theme_lift_component": self._round_score(0.30 * structure_scores["theme_lift_score"]),
+                    },
+                    "final_formula": "main_idea_readiness_score - 0.35 * example_dominance_penalty",
+                    "final_components": {
+                        "readiness_component": readiness_score,
+                        "example_dominance_penalty_component": self._round_score(0.35 * risk_penalties["example_dominance_penalty"]),
+                        "total_penalty": total_penalty,
+                    },
+                },
+                "decision": {
+                    "recommended_reason": recommendation_reason,
+                    "needs_review_reason": review_reason,
+                    "recommended_threshold": thresholds.get("recommended", 0.50),
+                    "review_readiness_threshold": thresholds.get("review_readiness", 0.60),
+                    "review_penalty_threshold": thresholds.get("review_penalty", 0.28),
+                },
                 "candidate_type": str(candidate.get("candidate_type") or ""),
-                "recommended_threshold": 0.50,
             },
         }
 
@@ -2642,6 +2854,7 @@ class MaterialPipelineV2:
         standalone_readability = float(signal_profile.get("standalone_readability") or 0.0)
         sentence_count = max(1, len(self.sentence_splitter.split(str(candidate.get("text") or ""))))
         text_length = len(str(candidate.get("text") or ""))
+        thresholds = self._task_scoring_thresholds("sentence_fill")
 
         if slot_function == "carry_previous":
             primary_slot_dependency_score = carry_dependency_score
@@ -2685,6 +2898,16 @@ class MaterialPipelineV2:
                 + 0.45 * max(0, text_length - 48) / 52,
             )
         )
+        structure_scores = {
+            "blank_value_score": blank_value_score,
+            "primary_slot_dependency_score": self._round_score(primary_slot_dependency_score),
+            "role_confidence_score": role_confidence_score,
+        }
+        risk_penalties = {
+            "standalone_penalty": standalone_penalty,
+            "role_ambiguity_penalty": role_ambiguity_penalty,
+            "overlong_penalty": overlong_penalty,
+        }
 
         readiness_score = self._round_score(
             0.50 * blank_value_score
@@ -2697,41 +2920,159 @@ class MaterialPipelineV2:
             - 0.15 * role_ambiguity_penalty
             - 0.10 * overlong_penalty
         )
+        total_penalty = self._total_penalty(risk_penalties)
         recommended = bool(
             candidate_type == "functional_slot_unit"
             and signal_profile.get("slot_explicit_ready")
             and blank_value_ready
-            and final_candidate_score >= 0.54
+            and final_candidate_score >= thresholds.get("recommended", 0.54)
         )
         needs_review = bool(
-            readiness_score >= 0.58 and (
-                standalone_penalty >= 0.28
-                or role_ambiguity_penalty >= 0.26
-                or (not recommended and final_candidate_score >= 0.42)
+            (
+                readiness_score >= thresholds.get("review_readiness", 0.58)
+                and total_penalty >= thresholds.get("review_penalty", 0.28)
+            )
+            or (
+                not recommended
+                and readiness_score >= max(0.50, thresholds.get("review_readiness", 0.58) - 0.08)
+                and final_candidate_score >= thresholds.get("fallback_review_score", 0.42)
             )
         )
+        recommendation_reason = "slot_ready_with_blank_value" if recommended else "fill_candidate_below_threshold_or_not_ready"
+        review_reason = ""
+        if needs_review:
+            if readiness_score >= thresholds.get("review_readiness", 0.58) and total_penalty >= thresholds.get("review_penalty", 0.28):
+                review_reason = "readiness_high_but_penalties_high"
+            else:
+                review_reason = "borderline_fill_candidate"
+        meta = candidate.get("meta") or {}
+        slot_context_sentence_range = list(meta.get("slot_context_sentence_range") or [])
+        slot_sentence_range = list(meta.get("slot_sentence_range") or [])
+        context_span_score = 0.0
+        if len(slot_context_sentence_range) >= 2:
+            context_span_score = self._round_score(
+                min(
+                    1.0,
+                    (int(slot_context_sentence_range[-1]) - int(slot_context_sentence_range[0]) + 1) / 4,
+                )
+            )
+        slot_function_complexity = self._round_score(
+            {
+                "carry_previous": 0.48,
+                "bridge_both_sides": 0.76,
+                "lead_next": 0.54,
+                "topic_intro": 0.42,
+                "summary": 0.36,
+                "ending_summary": 0.40,
+                "countermeasure": 0.58,
+            }.get(slot_function, 0.45)
+        )
+        difficulty_vector = {
+            "complexity_score": self._round_score(
+                0.45 * structure_scores["primary_slot_dependency_score"]
+                + 0.25 * structure_scores["blank_value_score"]
+                + 0.15 * context_span_score
+                + 0.15 * slot_function_complexity
+            ),
+            "ambiguity_score": self._round_score(
+                0.45 * risk_penalties["role_ambiguity_penalty"]
+                + 0.25 * risk_penalties["standalone_penalty"]
+                + 0.30 * (1 - structure_scores["role_confidence_score"])
+            ),
+            "reasoning_depth_score": self._round_score(
+                0.55 * structure_scores["primary_slot_dependency_score"]
+                + 0.35 * structure_scores["blank_value_score"]
+                + 0.10 * slot_function_complexity
+            ),
+            "constraint_intensity_score": self._round_score(
+                0.40 * structure_scores["blank_value_score"]
+                + 0.35 * structure_scores["primary_slot_dependency_score"]
+                + 0.25 * structure_scores["role_confidence_score"]
+            ),
+        }
+        difficulty_band_hint, difficulty_band_decision = self._difficulty_band_hint(
+            task_family="sentence_fill",
+            difficulty_vector=difficulty_vector,
+            final_candidate_score=final_candidate_score,
+            total_penalty=total_penalty,
+            recommended=recommended,
+            needs_review=needs_review,
+        )
+        difficulty_trace = {
+            "source_fields": {
+                "slot_role": slot_role,
+                "slot_function": slot_function,
+                "blank_value_score": structure_scores["blank_value_score"],
+                "primary_slot_dependency_score": structure_scores["primary_slot_dependency_score"],
+                "role_confidence_score": structure_scores["role_confidence_score"],
+                "standalone_penalty": risk_penalties["standalone_penalty"],
+                "role_ambiguity_penalty": risk_penalties["role_ambiguity_penalty"],
+                "overlong_penalty": risk_penalties["overlong_penalty"],
+                "slot_context_sentence_range": slot_context_sentence_range,
+                "slot_sentence_range": slot_sentence_range,
+                "context_span_score": context_span_score,
+                "slot_function_complexity": slot_function_complexity,
+            },
+            "aggregations": {
+                "complexity_formula": "0.45 * primary_slot_dependency_score + 0.25 * blank_value_score + 0.15 * context_span_score + 0.15 * slot_function_complexity",
+                "ambiguity_formula": "0.45 * role_ambiguity_penalty + 0.25 * standalone_penalty + 0.30 * (1 - role_confidence_score)",
+                "reasoning_depth_formula": "0.55 * primary_slot_dependency_score + 0.35 * blank_value_score + 0.10 * slot_function_complexity",
+                "constraint_intensity_formula": "0.40 * blank_value_score + 0.35 * primary_slot_dependency_score + 0.25 * role_confidence_score",
+                "difficulty_vector": difficulty_vector,
+            },
+            "band_decision": difficulty_band_decision,
+        }
         return {
             "task_family": "sentence_fill",
-            "structure_scores": {
-                "blank_value_score": blank_value_score,
-                "primary_slot_dependency_score": self._round_score(primary_slot_dependency_score),
-                "role_confidence_score": role_confidence_score,
-            },
+            "structure_scores": structure_scores,
             "readiness_score": readiness_score,
-            "risk_penalties": {
-                "standalone_penalty": standalone_penalty,
-                "role_ambiguity_penalty": role_ambiguity_penalty,
-                "overlong_penalty": overlong_penalty,
-            },
+            "risk_penalties": risk_penalties,
             "final_candidate_score": final_candidate_score,
             "recommended": recommended,
             "needs_review": needs_review,
+            "difficulty_vector": difficulty_vector,
+            "difficulty_band_hint": difficulty_band_hint,
+            "difficulty_trace": difficulty_trace,
             "score_trace": {
-                "slot_role": slot_role,
-                "slot_function": slot_function,
-                "blank_value_ready": blank_value_ready,
+                "source_fields": {
+                    "slot_role": slot_role,
+                    "slot_function": slot_function,
+                    "blank_value_ready": blank_value_ready,
+                    "blank_value_reason": str((candidate.get("meta") or {}).get("blank_value_reason") or ""),
+                    "slot_classification_reason": str((candidate.get("meta") or {}).get("slot_classification_reason") or ""),
+                    "slot_carry_dependency_score": self._round_score(carry_dependency_score),
+                    "slot_bridge_dependency_score": self._round_score(bridge_dependency_score),
+                    "slot_forward_dependency_score": self._round_score(forward_dependency_score),
+                    "slot_explicit_ready": bool(signal_profile.get("slot_explicit_ready")),
+                    "standalone_readability": self._round_score(standalone_readability),
+                    "sentence_count": sentence_count,
+                    "text_length": text_length,
+                },
+                "aggregations": {
+                    "primary_slot_selector": slot_function or "fallback_max_dependency",
+                    "readiness_formula": "0.50 * blank_value_score + 0.30 * primary_slot_dependency_score + 0.20 * role_confidence_score",
+                    "readiness_components": {
+                        "blank_value_component": self._round_score(0.50 * structure_scores["blank_value_score"]),
+                        "primary_dependency_component": self._round_score(0.30 * structure_scores["primary_slot_dependency_score"]),
+                        "role_confidence_component": self._round_score(0.20 * structure_scores["role_confidence_score"]),
+                    },
+                    "final_formula": "fill_readiness_score - 0.25 * standalone_penalty - 0.15 * role_ambiguity_penalty - 0.10 * overlong_penalty",
+                    "final_components": {
+                        "readiness_component": readiness_score,
+                        "standalone_penalty_component": self._round_score(0.25 * risk_penalties["standalone_penalty"]),
+                        "role_ambiguity_penalty_component": self._round_score(0.15 * risk_penalties["role_ambiguity_penalty"]),
+                        "overlong_penalty_component": self._round_score(0.10 * risk_penalties["overlong_penalty"]),
+                        "total_penalty": total_penalty,
+                    },
+                },
+                "decision": {
+                    "recommended_reason": recommendation_reason,
+                    "needs_review_reason": review_reason,
+                    "recommended_threshold": thresholds.get("recommended", 0.54),
+                    "review_readiness_threshold": thresholds.get("review_readiness", 0.58),
+                    "review_penalty_threshold": thresholds.get("review_penalty", 0.28),
+                },
                 "candidate_type": candidate_type,
-                "classification_reason": str((candidate.get("meta") or {}).get("slot_classification_reason") or ""),
             },
         }
 
@@ -2747,6 +3088,7 @@ class MaterialPipelineV2:
         pairwise_constraints = list(meta.get("pairwise_constraints") or [])
         local_bindings = list(meta.get("local_bindings") or [])
         grouped_unit_count = int(meta.get("grouped_unit_count") or 0)
+        thresholds = self._task_scoring_thresholds("sentence_order")
         first_stability = 1.0 if first_candidate_indices == [0] else 0.78 if 0 in first_candidate_indices and len(first_candidate_indices) <= 2 else 0.56 if 0 in first_candidate_indices else 0.0
         last_index = self.SENTENCE_ORDER_FIXED_UNIT_COUNT - 1
         last_stability = 1.0 if last_candidate_indices == [last_index] else 0.78 if last_index in last_candidate_indices and len(last_candidate_indices) <= 2 else 0.56 if last_index in last_candidate_indices else 0.0
@@ -2768,6 +3110,18 @@ class MaterialPipelineV2:
         last_instability_penalty = self._round_score(1.0 - last_stability)
         weak_constraint_penalty = self._round_score(max(0.0, 0.55 - pairwise_constraint_score) / 0.55)
         over_merge_penalty = self._round_score(min(1.0, grouped_unit_count / 3))
+        structure_scores = {
+            "first_eligibility_score": first_eligibility_score,
+            "last_eligibility_score": last_eligibility_score,
+            "pairwise_constraint_score": pairwise_constraint_score,
+            "local_binding_score": local_binding_score,
+        }
+        risk_penalties = {
+            "first_instability_penalty": first_instability_penalty,
+            "last_instability_penalty": last_instability_penalty,
+            "weak_constraint_penalty": weak_constraint_penalty,
+            "over_merge_penalty": over_merge_penalty,
+        }
         readiness_score = self._round_score(
             0.25 * first_eligibility_score
             + 0.25 * last_eligibility_score
@@ -2781,44 +3135,143 @@ class MaterialPipelineV2:
             - 0.20 * weak_constraint_penalty
             - 0.10 * over_merge_penalty
         )
+        total_penalty = self._total_penalty(risk_penalties)
         recommended = bool(
             candidate.get("candidate_type") == "ordered_unit_group"
             and int(meta.get("group_size") or 0) == self.SENTENCE_ORDER_FIXED_UNIT_COUNT
-            and final_candidate_score >= 0.56
+            and final_candidate_score >= thresholds.get("recommended", 0.56)
         )
         needs_review = bool(
-            readiness_score >= 0.58 and (
-                first_instability_penalty >= 0.24
-                or last_instability_penalty >= 0.24
-                or weak_constraint_penalty >= 0.22
-                or (not recommended and final_candidate_score >= 0.46)
+            (
+                readiness_score >= thresholds.get("review_readiness", 0.58)
+                and total_penalty >= thresholds.get("review_penalty", 0.24)
+            )
+            or (
+                not recommended
+                and readiness_score >= max(0.50, thresholds.get("review_readiness", 0.58) - 0.08)
+                and final_candidate_score >= thresholds.get("fallback_review_score", 0.46)
             )
         )
+        recommendation_reason = "six_unit_group_above_threshold" if recommended else "sentence_order_candidate_below_threshold_or_incomplete"
+        review_reason = ""
+        if needs_review:
+            if readiness_score >= thresholds.get("review_readiness", 0.58) and total_penalty >= thresholds.get("review_penalty", 0.24):
+                review_reason = "readiness_high_but_order_risk_high"
+            else:
+                review_reason = "borderline_sentence_order_candidate"
+        group_size = int(meta.get("group_size") or 0)
+        group_size_score = self._round_score(min(1.0, group_size / self.SENTENCE_ORDER_FIXED_UNIT_COUNT)) if self.SENTENCE_ORDER_FIXED_UNIT_COUNT else 0.0
+        grouped_unit_complexity = self._round_score(min(1.0, grouped_unit_count / 2)) if grouped_unit_count > 0 else 0.0
+        difficulty_vector = {
+            "complexity_score": self._round_score(
+                0.40 * structure_scores["pairwise_constraint_score"]
+                + 0.25 * structure_scores["local_binding_score"]
+                + 0.20 * group_size_score
+                + 0.15 * grouped_unit_complexity
+            ),
+            "ambiguity_score": self._round_score(
+                0.35 * risk_penalties["first_instability_penalty"]
+                + 0.35 * risk_penalties["last_instability_penalty"]
+                + 0.30 * risk_penalties["weak_constraint_penalty"]
+            ),
+            "reasoning_depth_score": self._round_score(
+                0.40 * structure_scores["pairwise_constraint_score"]
+                + 0.30 * structure_scores["local_binding_score"]
+                + 0.15 * structure_scores["first_eligibility_score"]
+                + 0.15 * structure_scores["last_eligibility_score"]
+            ),
+            "constraint_intensity_score": self._round_score(
+                0.45 * structure_scores["pairwise_constraint_score"]
+                + 0.30 * structure_scores["local_binding_score"]
+                + 0.15 * structure_scores["first_eligibility_score"]
+                + 0.10 * structure_scores["last_eligibility_score"]
+                - 0.20 * risk_penalties["weak_constraint_penalty"]
+            ),
+        }
+        difficulty_band_hint, difficulty_band_decision = self._difficulty_band_hint(
+            task_family="sentence_order",
+            difficulty_vector=difficulty_vector,
+            final_candidate_score=final_candidate_score,
+            total_penalty=total_penalty,
+            recommended=recommended,
+            needs_review=needs_review,
+        )
+        difficulty_trace = {
+            "source_fields": {
+                "first_eligibility_score": structure_scores["first_eligibility_score"],
+                "last_eligibility_score": structure_scores["last_eligibility_score"],
+                "pairwise_constraint_score": structure_scores["pairwise_constraint_score"],
+                "local_binding_score": structure_scores["local_binding_score"],
+                "first_instability_penalty": risk_penalties["first_instability_penalty"],
+                "last_instability_penalty": risk_penalties["last_instability_penalty"],
+                "weak_constraint_penalty": risk_penalties["weak_constraint_penalty"],
+                "over_merge_penalty": risk_penalties["over_merge_penalty"],
+                "group_size": group_size,
+                "grouped_unit_count": grouped_unit_count,
+                "group_size_score": group_size_score,
+                "grouped_unit_complexity": grouped_unit_complexity,
+            },
+            "aggregations": {
+                "complexity_formula": "0.40 * pairwise_constraint_score + 0.25 * local_binding_score + 0.20 * group_size_score + 0.15 * grouped_unit_complexity",
+                "ambiguity_formula": "0.35 * first_instability_penalty + 0.35 * last_instability_penalty + 0.30 * weak_constraint_penalty",
+                "reasoning_depth_formula": "0.40 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.15 * last_eligibility_score",
+                "constraint_intensity_formula": "0.45 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.10 * last_eligibility_score - 0.20 * weak_constraint_penalty",
+                "difficulty_vector": difficulty_vector,
+            },
+            "band_decision": difficulty_band_decision,
+        }
         return {
             "task_family": "sentence_order",
-            "structure_scores": {
-                "first_eligibility_score": first_eligibility_score,
-                "last_eligibility_score": last_eligibility_score,
-                "pairwise_constraint_score": pairwise_constraint_score,
-                "local_binding_score": local_binding_score,
-            },
+            "structure_scores": structure_scores,
             "readiness_score": readiness_score,
-            "risk_penalties": {
-                "first_instability_penalty": first_instability_penalty,
-                "last_instability_penalty": last_instability_penalty,
-                "weak_constraint_penalty": weak_constraint_penalty,
-                "over_merge_penalty": over_merge_penalty,
-            },
+            "risk_penalties": risk_penalties,
             "final_candidate_score": final_candidate_score,
             "recommended": recommended,
             "needs_review": needs_review,
+            "difficulty_vector": difficulty_vector,
+            "difficulty_band_hint": difficulty_band_hint,
+            "difficulty_trace": difficulty_trace,
             "score_trace": {
-                "candidate_type": str(candidate.get("candidate_type") or ""),
-                "group_size": int(meta.get("group_size") or 0),
-                "first_candidate_indices": first_candidate_indices,
-                "last_candidate_indices": last_candidate_indices,
-                "pairwise_constraint_count": len(pairwise_constraints),
-                "local_binding_count": local_binding_count,
+                "source_fields": {
+                    "candidate_type": str(candidate.get("candidate_type") or ""),
+                    "group_size": int(meta.get("group_size") or 0),
+                    "grouped_unit_count": grouped_unit_count,
+                    "first_candidate_indices": first_candidate_indices,
+                    "last_candidate_indices": last_candidate_indices,
+                    "pairwise_constraint_count": len(pairwise_constraints),
+                    "local_binding_count": local_binding_count,
+                    "sequence_integrity": self._round_score(float(signal_profile.get("sequence_integrity") or 0.0)),
+                    "unique_opener_score": self._round_score(float(signal_profile.get("unique_opener_score") or 0.0)),
+                    "closing_signal_strength": self._round_score(float(signal_profile.get("closing_signal_strength") or 0.0)),
+                    "local_binding_strength": self._round_score(float(signal_profile.get("local_binding_strength") or 0.0)),
+                    "normalization_reason": str(meta.get("normalization_reason") or ""),
+                    "ordering_reason_trace": dict(meta.get("ordering_reason_trace") or {}),
+                },
+                "aggregations": {
+                    "readiness_formula": "0.25 * first_eligibility_score + 0.25 * last_eligibility_score + 0.30 * pairwise_constraint_score + 0.20 * local_binding_score",
+                    "readiness_components": {
+                        "first_component": self._round_score(0.25 * structure_scores["first_eligibility_score"]),
+                        "last_component": self._round_score(0.25 * structure_scores["last_eligibility_score"]),
+                        "pairwise_component": self._round_score(0.30 * structure_scores["pairwise_constraint_score"]),
+                        "local_binding_component": self._round_score(0.20 * structure_scores["local_binding_score"]),
+                    },
+                    "final_formula": "sentence_order_readiness_score - 0.25 * first_instability_penalty - 0.30 * last_instability_penalty - 0.20 * weak_constraint_penalty - 0.10 * over_merge_penalty",
+                    "final_components": {
+                        "readiness_component": readiness_score,
+                        "first_instability_penalty_component": self._round_score(0.25 * risk_penalties["first_instability_penalty"]),
+                        "last_instability_penalty_component": self._round_score(0.30 * risk_penalties["last_instability_penalty"]),
+                        "weak_constraint_penalty_component": self._round_score(0.20 * risk_penalties["weak_constraint_penalty"]),
+                        "over_merge_penalty_component": self._round_score(0.10 * risk_penalties["over_merge_penalty"]),
+                        "total_penalty": total_penalty,
+                    },
+                },
+                "decision": {
+                    "recommended_reason": recommendation_reason,
+                    "needs_review_reason": review_reason,
+                    "recommended_threshold": thresholds.get("recommended", 0.56),
+                    "review_readiness_threshold": thresholds.get("review_readiness", 0.58),
+                    "review_penalty_threshold": thresholds.get("review_penalty", 0.24),
+                },
             },
         }
 
@@ -3885,6 +4338,282 @@ class MaterialPipelineV2:
                 score -= 0.02
 
         return max(0.0, min(1.0, score))
+
+    def rank_external_fallback_items(
+        self,
+        *,
+        items: list[dict[str, Any]],
+        business_family_id: str,
+        query_terms: list[str] | None = None,
+        reference_items: list[dict[str, Any]] | None = None,
+        candidate_limit: int = 20,
+    ) -> dict[str, Any]:
+        query_terms = [str(term).strip() for term in (query_terms or []) if str(term).strip()]
+        reference_items = list(reference_items or [])
+        accepted: list[dict[str, Any]] = []
+        rejected: list[dict[str, Any]] = []
+        for item in items:
+            structure_match_score = self._external_structure_match_score(
+                item=item,
+                business_family_id=business_family_id,
+                reference_items=reference_items,
+            )
+            selected_task_scoring = dict(item.get("selected_task_scoring") or {})
+            task_final_score = float(selected_task_scoring.get("final_candidate_score") or 0.0)
+            quality_score = float(item.get("quality_score") or 0.0)
+            query_match_score = float(((item.get("retrieval_match_profile") or {}).get("match_score")) or 0.0)
+            signal_profile = item.get("neutral_signal_profile") or {}
+            context_dependency = float(signal_profile.get("context_dependency") or 0.0)
+            branch_focus_strength = float(signal_profile.get("branch_focus_strength") or 0.0)
+            risk_penalties = {
+                "context_dependency_penalty": self._round_score(0.18 * context_dependency),
+                "branch_focus_penalty": self._round_score(0.10 * max(0.0, branch_focus_strength - 0.45)),
+            }
+            readiness_score = self._round_score(
+                0.40 * task_final_score
+                + 0.35 * structure_match_score
+                + 0.15 * quality_score
+                + 0.10 * query_match_score
+            )
+            final_candidate_score = self._round_score(
+                max(0.0, readiness_score - self._total_penalty(risk_penalties))
+            )
+            recommended = bool(
+                structure_match_score >= 0.58
+                and task_final_score >= 0.46
+                and final_candidate_score >= 0.54
+            )
+            needs_review = bool(
+                not recommended
+                and structure_match_score >= 0.50
+                and readiness_score >= 0.48
+                and final_candidate_score >= 0.42
+            )
+            external_match_profile = {
+                "structure_match_score": structure_match_score,
+                "task_final_score": self._round_score(task_final_score),
+                "quality_score": self._round_score(quality_score),
+                "query_match_score": self._round_score(query_match_score),
+                "readiness_score": readiness_score,
+                "risk_penalties": risk_penalties,
+                "final_candidate_score": final_candidate_score,
+                "recommended": recommended,
+                "needs_review": needs_review,
+                "reference_candidate_id": self._best_external_reference_id(
+                    item=item,
+                    business_family_id=business_family_id,
+                    reference_items=reference_items,
+                ),
+                "reason": self._external_match_reason(
+                    structure_match_score=structure_match_score,
+                    task_final_score=task_final_score,
+                    final_candidate_score=final_candidate_score,
+                    recommended=recommended,
+                    needs_review=needs_review,
+                ),
+            }
+            annotated = deepcopy(item)
+            annotated["external_match_profile"] = external_match_profile
+            if recommended:
+                accepted.append(annotated)
+            else:
+                rejected.append(annotated)
+
+        accepted.sort(
+            key=lambda entry: (
+                float((entry.get("external_match_profile") or {}).get("final_candidate_score") or 0.0),
+                float(entry.get("quality_score") or 0.0),
+            ),
+            reverse=True,
+        )
+        rejected.sort(
+            key=lambda entry: (
+                float((entry.get("external_match_profile") or {}).get("final_candidate_score") or 0.0),
+                float((entry.get("external_match_profile") or {}).get("structure_match_score") or 0.0),
+            ),
+            reverse=True,
+        )
+        accepted = self._select_diverse_items(accepted, candidate_limit) if accepted else []
+        return {
+            "items": accepted,
+            "rejected_items": rejected,
+        }
+
+    def _external_match_reason(
+        self,
+        *,
+        structure_match_score: float,
+        task_final_score: float,
+        final_candidate_score: float,
+        recommended: bool,
+        needs_review: bool,
+    ) -> str:
+        if recommended:
+            return "external_structure_aligned"
+        if structure_match_score < 0.58:
+            return "structure_mismatch"
+        if task_final_score < 0.46:
+            return "task_readiness_weak"
+        if needs_review:
+            return "needs_review_before_adopt"
+        if final_candidate_score < 0.54:
+            return "final_score_below_threshold"
+        return "external_rejected"
+
+    def _best_external_reference_id(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+        reference_items: list[dict[str, Any]],
+    ) -> str | None:
+        if not reference_items:
+            return None
+        best_id = None
+        best_score = -1.0
+        for reference in reference_items:
+            score = self._external_pair_structure_similarity(
+                item=item,
+                reference_item=reference,
+                business_family_id=business_family_id,
+            )
+            if score > best_score:
+                best_score = score
+                best_id = str(reference.get("candidate_id") or "")
+        return best_id or None
+
+    def _external_structure_match_score(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+        reference_items: list[dict[str, Any]],
+    ) -> float:
+        if reference_items:
+            return self._round_score(
+                max(
+                    self._external_pair_structure_similarity(
+                        item=item,
+                        reference_item=reference_item,
+                        business_family_id=business_family_id,
+                    )
+                    for reference_item in reference_items
+                )
+            )
+        selected_task_scoring = dict(item.get("selected_task_scoring") or {})
+        quality_score = float(item.get("quality_score") or 0.0)
+        return self._round_score(
+            0.70 * float(selected_task_scoring.get("final_candidate_score") or 0.0)
+            + 0.30 * quality_score
+        )
+
+    def _external_pair_structure_similarity(
+        self,
+        *,
+        item: dict[str, Any],
+        reference_item: dict[str, Any],
+        business_family_id: str,
+    ) -> float:
+        item_text = str(item.get("text") or "")
+        reference_text = str(reference_item.get("text") or "")
+        item_candidate_type = str(item.get("candidate_type") or "")
+        reference_candidate_type = str(reference_item.get("candidate_type") or "")
+        type_match = self._candidate_type_structure_affinity(
+            item_candidate_type=item_candidate_type,
+            reference_candidate_type=reference_candidate_type,
+            business_family_id=business_family_id,
+        )
+        item_paragraph_count = max(1, item_text.count("\n\n") + 1)
+        reference_paragraph_count = max(1, reference_text.count("\n\n") + 1)
+        item_sentence_count = max(1, len(self.sentence_splitter.split(item_text)))
+        reference_sentence_count = max(1, len(self.sentence_splitter.split(reference_text)))
+        paragraph_similarity = self._shape_similarity(item_paragraph_count, reference_paragraph_count)
+        sentence_similarity = self._shape_similarity(item_sentence_count, reference_sentence_count)
+        item_scoring = dict(item.get("selected_task_scoring") or {})
+        reference_scoring = dict(reference_item.get("selected_task_scoring") or {})
+        readiness_similarity = 1.0 - min(
+            1.0,
+            abs(float(item_scoring.get("readiness_score") or 0.0) - float(reference_scoring.get("readiness_score") or 0.0)),
+        )
+        family_shape_similarity = self._task_family_structure_similarity(
+            business_family_id=business_family_id,
+            item=item,
+            reference_item=reference_item,
+        )
+        return max(
+            0.0,
+            min(
+                1.0,
+                0.25 * type_match
+                + 0.20 * paragraph_similarity
+                + 0.15 * sentence_similarity
+                + 0.20 * readiness_similarity
+                + 0.20 * family_shape_similarity,
+            ),
+        )
+
+    def _candidate_type_structure_affinity(
+        self,
+        *,
+        item_candidate_type: str,
+        reference_candidate_type: str,
+        business_family_id: str,
+    ) -> float:
+        if item_candidate_type == reference_candidate_type:
+            return 1.0
+        paragraph_like = {"whole_passage", "closed_span", "multi_paragraph_unit"}
+        if item_candidate_type in paragraph_like and reference_candidate_type in paragraph_like:
+            return 0.74 if business_family_id == "title_selection" else 0.58
+        if {item_candidate_type, reference_candidate_type} <= {"sentence_block_group", "ordered_unit_group"}:
+            return 0.82
+        if {item_candidate_type, reference_candidate_type} <= {"functional_slot_unit", "closed_span"}:
+            return 0.55
+        return 0.18
+
+    def _shape_similarity(self, left: int, right: int) -> float:
+        gap = abs(int(left) - int(right))
+        return max(0.0, min(1.0, 1.0 - gap / max(int(left), int(right), 1)))
+
+    def _task_family_structure_similarity(
+        self,
+        *,
+        business_family_id: str,
+        item: dict[str, Any],
+        reference_item: dict[str, Any],
+    ) -> float:
+        item_profile = item.get("neutral_signal_profile") or {}
+        reference_profile = reference_item.get("neutral_signal_profile") or {}
+        if business_family_id == "title_selection":
+            item_center = float(item_profile.get("main_idea_single_center_score") or item_profile.get("single_center_strength") or 0.0)
+            ref_center = float(reference_profile.get("main_idea_single_center_score") or reference_profile.get("single_center_strength") or 0.0)
+            item_closure = float(item_profile.get("main_idea_closure_score") or item_profile.get("closure_score") or 0.0)
+            ref_closure = float(reference_profile.get("main_idea_closure_score") or reference_profile.get("closure_score") or 0.0)
+            item_lift = float(item_profile.get("main_idea_lift_score") or item_profile.get("titleability") or 0.0)
+            ref_lift = float(reference_profile.get("main_idea_lift_score") or reference_profile.get("titleability") or 0.0)
+            return max(
+                0.0,
+                min(
+                    1.0,
+                    1.0
+                    - (
+                        0.40 * abs(item_center - ref_center)
+                        + 0.30 * abs(item_closure - ref_closure)
+                        + 0.30 * abs(item_lift - ref_lift)
+                    ),
+                ),
+            )
+        if business_family_id == "sentence_fill":
+            item_blank = float(item_profile.get("fill_readiness_score") or 0.0)
+            ref_blank = float(reference_profile.get("fill_readiness_score") or 0.0)
+            item_role = str(item_profile.get("slot_function") or "")
+            ref_role = str(reference_profile.get("slot_function") or "")
+            role_match = 1.0 if item_role and item_role == ref_role else 0.45
+            return max(0.0, min(1.0, 0.55 * role_match + 0.45 * (1.0 - abs(item_blank - ref_blank))))
+        if business_family_id == "sentence_order":
+            item_order = float(item_profile.get("sentence_order_readiness_score") or 0.0)
+            ref_order = float(reference_profile.get("sentence_order_readiness_score") or 0.0)
+            return max(0.0, min(1.0, 1.0 - abs(item_order - ref_order)))
+        return 0.0
 
     def _adapt_candidate_window(
         self,

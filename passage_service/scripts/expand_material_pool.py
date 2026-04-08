@@ -19,16 +19,21 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 from app.core.config import get_config_bundle
-from app.core.enums import MaterialStatus, ReleaseChannel
+from app.core.enums import MaterialStatus, ReleaseChannel, ReviewStatus
 from app.domain.services.ingest_service import run_crawl_for_source
 from app.domain.services.pool_service import PoolService
 from app.infra.db.orm.article import ArticleORM
 from app.infra.db.orm.material_span import MaterialSpanORM
+from app.infra.db.orm.review import TaggingReviewORM
 from app.infra.db.session import get_session, init_db
 from app.infra.plugins.loader import load_plugins
 
 
 QUESTION_TYPES = ("main_idea", "continuation", "sentence_order", "sentence_fill")
+SERVABLE_REVIEW_STATUSES = {
+    ReviewStatus.AUTO_TAGGED.value,
+    ReviewStatus.REVIEW_CONFIRMED.value,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -90,6 +95,15 @@ def _article_source_lookup(session) -> dict[str, str]:
         article.id: str(article.source or "unknown")
         for article in session.scalars(select(ArticleORM))
     }
+
+
+def _review_status_lookup(session, material_ids: list[str]) -> dict[str, str]:
+    if not material_ids:
+        return {}
+    rows = session.execute(
+        select(TaggingReviewORM.material_id, TaggingReviewORM.status).where(TaggingReviewORM.material_id.in_(material_ids))
+    ).all()
+    return {material_id: status for material_id, status in rows}
 
 
 def _stable_state(session, pool_service: PoolService) -> tuple[Counter, Counter, Counter]:
@@ -164,8 +178,11 @@ def promote_gray_materials(
             )
         )
     )
+    review_status_lookup = _review_status_lookup(session, [item.id for item in gray_candidates])
     ranked: list[tuple[float, MaterialSpanORM, set[str]]] = []
     for item in gray_candidates:
+        if review_status_lookup.get(item.id) not in SERVABLE_REVIEW_STATUSES:
+            continue
         covered_types = _material_question_types(pool_service, item)
         if not covered_types:
             continue

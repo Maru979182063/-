@@ -461,6 +461,645 @@ class QuestionRepository:
             for row in rows
         ]
 
+    def list_feedback_backtest_units(
+        self,
+        *,
+        item_id: str | None = None,
+        question_type: str | None = None,
+        question_card_id: str | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            if item_id:
+                rows = conn.execute(
+                    """
+                    SELECT action_id, item_id, action_type, payload_json, created_at
+                    FROM question_review_actions
+                    WHERE item_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (item_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT action_id, item_id, action_type, payload_json, created_at
+                    FROM question_review_actions
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+
+        units: list[dict[str, Any]] = []
+        for row in rows:
+            payload = json.loads(row["payload_json"] or "{}")
+            unit = payload.get("feedback_backtest_unit") or {}
+            if not isinstance(unit, dict) or not unit:
+                continue
+            if question_type and unit.get("question_type") != question_type:
+                continue
+            if question_card_id and unit.get("question_card_id") != question_card_id:
+                continue
+            units.append(
+                {
+                    "action_id": row["action_id"],
+                    "item_id": row["item_id"],
+                    "action_type": row["action_type"],
+                    "created_at": row["created_at"],
+                    **unit,
+                }
+            )
+        return units
+
+    @staticmethod
+    def _rate(numerator: int, denominator: int) -> float | None:
+        if denominator <= 0:
+            return None
+        return round(numerator / denominator, 4)
+
+    @staticmethod
+    def _normalize_outcome_bucket(unit: dict[str, Any]) -> str:
+        if unit.get("accepted_as_is"):
+            return "confirm"
+        if unit.get("revised_then_kept"):
+            return "modify"
+        if unit.get("discarded"):
+            return "discard"
+        return "other"
+
+    @staticmethod
+    def _top_penalties(units: list[dict[str, Any]], *, limit: int = 5) -> list[dict[str, Any]]:
+        penalty_counts: dict[str, int] = {}
+        for unit in units:
+            penalties = unit.get("key_penalties") or {}
+            if not isinstance(penalties, dict):
+                continue
+            for key, value in penalties.items():
+                try:
+                    numeric_value = float(value or 0.0)
+                except (TypeError, ValueError):
+                    numeric_value = 0.0
+                if numeric_value <= 0:
+                    continue
+                penalty_counts[str(key)] = penalty_counts.get(str(key), 0) + 1
+        return [
+            {"penalty": key, "count": count}
+            for key, count in sorted(penalty_counts.items(), key=lambda entry: entry[1], reverse=True)[:limit]
+        ]
+
+    @staticmethod
+    def _selection_state_distribution(units: list[dict[str, Any]]) -> dict[str, Any]:
+        distribution: dict[str, Any] = {}
+        for state in ("recommended", "hold", "weak_candidate"):
+            state_units = [unit for unit in units if unit.get("selection_state") == state]
+            outcome_counts = {"confirm": 0, "modify": 0, "discard": 0, "other": 0}
+            for unit in state_units:
+                bucket = QuestionRepository._normalize_outcome_bucket(unit)
+                outcome_counts[bucket] = outcome_counts.get(bucket, 0) + 1
+            total = len(state_units)
+            distribution[state] = {
+                "count": total,
+                "confirm_count": outcome_counts["confirm"],
+                "modify_count": outcome_counts["modify"],
+                "discard_count": outcome_counts["discard"],
+                "other_count": outcome_counts["other"],
+                "confirm_rate": QuestionRepository._rate(outcome_counts["confirm"], total),
+                "modify_rate": QuestionRepository._rate(outcome_counts["modify"], total),
+                "discard_rate": QuestionRepository._rate(outcome_counts["discard"], total),
+            }
+        return distribution
+
+    @staticmethod
+    def _difficulty_band_distribution(units: list[dict[str, Any]]) -> dict[str, Any]:
+        distribution: dict[str, Any] = {}
+        for band in ("easy", "medium", "hard"):
+            band_units = [unit for unit in units if str(unit.get("difficulty_band_hint") or "").lower() == band]
+            outcome_counts = {"confirm": 0, "modify": 0, "discard": 0, "other": 0}
+            for unit in band_units:
+                bucket = QuestionRepository._normalize_outcome_bucket(unit)
+                outcome_counts[bucket] = outcome_counts.get(bucket, 0) + 1
+            total = len(band_units)
+            distribution[band] = {
+                "count": total,
+                "confirm_count": outcome_counts["confirm"],
+                "revised_then_kept_count": outcome_counts["modify"],
+                "discard_count": outcome_counts["discard"],
+                "other_count": outcome_counts["other"],
+                "confirm_rate": QuestionRepository._rate(outcome_counts["confirm"], total),
+                "revised_then_kept_rate": QuestionRepository._rate(outcome_counts["modify"], total),
+                "discard_rate": QuestionRepository._rate(outcome_counts["discard"], total),
+            }
+        return distribution
+
+    @staticmethod
+    def _preference_profiles_seen(units: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        preference_profiles_seen: dict[str, int] = {}
+        for unit in units:
+            profile = unit.get("preference_profile") or {}
+            if not isinstance(profile, dict):
+                continue
+            signature = json.dumps(profile, ensure_ascii=False, sort_keys=True)
+            preference_profiles_seen[signature] = preference_profiles_seen.get(signature, 0) + 1
+        return [
+            {"profile": json.loads(signature), "count": count}
+            for signature, count in sorted(preference_profiles_seen.items(), key=lambda entry: entry[1], reverse=True)
+        ]
+
+    def _summarize_backtest_units(
+        self,
+        units: list[dict[str, Any]],
+        *,
+        include_group_breakdowns: bool = True,
+        include_samples: bool = True,
+    ) -> dict[str, Any]:
+        total = len(units)
+        recommended_units = [unit for unit in units if unit.get("selection_state") == "recommended"]
+        hold_units = [unit for unit in units if unit.get("selection_state") == "hold"]
+        weak_units = [unit for unit in units if unit.get("selection_state") == "weak_candidate"]
+        suggested_repair_units = [unit for unit in units if unit.get("repair_suggested")]
+        needs_review_units = [unit for unit in units if unit.get("needs_review") is True]
+        discarded_units = [unit for unit in units if unit.get("discarded")]
+
+        summary: dict[str, Any] = {
+            "total_units": total,
+            "recommended_confirmed_rate": self._rate(
+                sum(1 for unit in recommended_units if unit.get("accepted_as_is")),
+                len(recommended_units),
+            ),
+            "hold_revised_then_kept_rate": self._rate(
+                sum(1 for unit in hold_units if unit.get("revised_then_kept")),
+                len(hold_units),
+            ),
+            "repair_suggested_taken_rate": self._rate(
+                sum(1 for unit in suggested_repair_units if unit.get("repair_path_taken")),
+                len(suggested_repair_units),
+            ),
+            "needs_review_false_positive_rate": self._rate(
+                sum(1 for unit in needs_review_units if unit.get("accepted_as_is")),
+                len(needs_review_units),
+            ),
+            "weak_candidate_discard_rate": self._rate(
+                sum(1 for unit in weak_units if unit.get("discarded")),
+                len(weak_units),
+            ),
+            "top_discard_penalties": self._top_penalties(discarded_units),
+            "preference_profiles_seen": self._preference_profiles_seen(units),
+        }
+        if include_group_breakdowns:
+            summary["selection_state_outcomes"] = self._selection_state_distribution(units)
+            summary["question_type_breakdown"] = {
+                question_type: self._summarize_backtest_units(
+                    [unit for unit in units if unit.get("question_type") == question_type],
+                    include_group_breakdowns=False,
+                    include_samples=False,
+                )
+                for question_type in ("main_idea", "sentence_fill", "sentence_order")
+                if any(unit.get("question_type") == question_type for unit in units)
+            }
+            summary["difficulty_band_outcomes"] = self._difficulty_band_distribution(units)
+        if include_samples:
+            summary["sample_units"] = units[:5]
+        return summary
+
+    def get_feedback_backtest_summary(
+        self,
+        *,
+        question_type: str | None = None,
+        question_card_id: str | None = None,
+        limit: int = 500,
+    ) -> dict[str, Any]:
+        units = self.list_feedback_backtest_units(
+            item_id=None,
+            question_type=question_type,
+            question_card_id=question_card_id,
+            limit=limit,
+        )
+        return self._summarize_backtest_units(units, include_group_breakdowns=True, include_samples=True)
+
+    @staticmethod
+    def _normalize_penalty_diagnosis(
+        *,
+        count: int,
+        discard_rate: float | None,
+        revised_rate: float | None,
+        accepted_rate: float | None,
+        false_positive_rate: float | None,
+    ) -> tuple[str, str]:
+        discard_rate = float(discard_rate or 0.0)
+        revised_rate = float(revised_rate or 0.0)
+        accepted_rate = float(accepted_rate or 0.0)
+        false_positive_rate = float(false_positive_rate or 0.0)
+        if count < 2:
+            return "insufficient_data", "Need more reviewed samples before reading this penalty as a stable signal."
+        if discard_rate >= 0.6 and revised_rate <= 0.25:
+            return "likely_high_signal", "This penalty co-occurs with discard often and rarely survives repair."
+        if revised_rate >= 0.45:
+            return "common_repairable_risk", "This penalty shows up frequently in candidates that are revised then kept."
+        if accepted_rate >= 0.35 or false_positive_rate >= 0.3:
+            return "possible_over_penalization", "This penalty often appears on candidates that are still accepted as-is."
+        return "mixed_signal", "This penalty currently mixes discard and keep outcomes without a clear direction."
+
+    def get_penalty_diagnostics(
+        self,
+        *,
+        question_type: str | None = None,
+        question_card_id: str | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        units = self.list_feedback_backtest_units(
+            item_id=None,
+            question_type=question_type,
+            question_card_id=question_card_id,
+            limit=limit,
+        )
+        diagnostics: dict[str, dict[str, Any]] = {}
+        for unit in units:
+            penalties = unit.get("key_penalties") or {}
+            if not isinstance(penalties, dict):
+                continue
+            for penalty_name, raw_value in penalties.items():
+                try:
+                    numeric_value = float(raw_value or 0.0)
+                except (TypeError, ValueError):
+                    numeric_value = 0.0
+                if numeric_value <= 0:
+                    continue
+                entry = diagnostics.setdefault(
+                    str(penalty_name),
+                    {
+                        "penalty": str(penalty_name),
+                        "count": 0,
+                        "discard_count": 0,
+                        "revised_then_kept_count": 0,
+                        "accepted_as_is_count": 0,
+                        "needs_review_false_positive_count": 0,
+                        "question_types": set(),
+                        "question_card_ids": set(),
+                    },
+                )
+                entry["count"] += 1
+                entry["question_types"].add(str(unit.get("question_type") or "unknown"))
+                if unit.get("question_card_id"):
+                    entry["question_card_ids"].add(str(unit.get("question_card_id")))
+                if unit.get("discarded"):
+                    entry["discard_count"] += 1
+                if unit.get("revised_then_kept"):
+                    entry["revised_then_kept_count"] += 1
+                if unit.get("accepted_as_is"):
+                    entry["accepted_as_is_count"] += 1
+                if unit.get("needs_review") and unit.get("accepted_as_is"):
+                    entry["needs_review_false_positive_count"] += 1
+
+        results: list[dict[str, Any]] = []
+        for entry in diagnostics.values():
+            count = int(entry["count"])
+            discard_rate = self._rate(int(entry["discard_count"]), count)
+            revised_rate = self._rate(int(entry["revised_then_kept_count"]), count)
+            accepted_rate = self._rate(int(entry["accepted_as_is_count"]), count)
+            false_positive_rate = self._rate(int(entry["needs_review_false_positive_count"]), count)
+            diagnosis, hint = self._normalize_penalty_diagnosis(
+                count=count,
+                discard_rate=discard_rate,
+                revised_rate=revised_rate,
+                accepted_rate=accepted_rate,
+                false_positive_rate=false_positive_rate,
+            )
+            results.append(
+                {
+                    "penalty": entry["penalty"],
+                    "count": count,
+                    "discard_count": int(entry["discard_count"]),
+                    "revised_then_kept_count": int(entry["revised_then_kept_count"]),
+                    "accepted_as_is_count": int(entry["accepted_as_is_count"]),
+                    "needs_review_false_positive_count": int(entry["needs_review_false_positive_count"]),
+                    "discard_rate": discard_rate,
+                    "revised_then_kept_rate": revised_rate,
+                    "accepted_as_is_rate": accepted_rate,
+                    "needs_review_false_positive_rate": false_positive_rate,
+                    "question_types": sorted(entry["question_types"]),
+                    "question_card_ids": sorted(entry["question_card_ids"]),
+                    "diagnosis": diagnosis,
+                    "hint": hint,
+                }
+            )
+        return sorted(results, key=lambda entry: (entry["count"], entry["discard_count"]), reverse=True)
+
+    @staticmethod
+    def _normalize_threshold_diagnosis(
+        *,
+        failed_sample_count: int,
+        kept_rate: float | None,
+        discard_rate: float | None,
+    ) -> tuple[str, str]:
+        kept_rate = float(kept_rate or 0.0)
+        discard_rate = float(discard_rate or 0.0)
+        if failed_sample_count < 2:
+            return "insufficient_data", "Need more threshold-hit samples before drawing a calibration conclusion."
+        if kept_rate >= 0.5:
+            return "likely_too_strict", "Many samples blocked by this threshold were later kept after review or repair."
+        if discard_rate >= 0.6:
+            return "likely_reasonable", "Most samples blocked by this threshold were later discarded."
+        return "mixed_signal", "This threshold has mixed outcomes and should be watched, not auto-adjusted."
+
+    def get_threshold_diagnostics(
+        self,
+        *,
+        question_type: str | None = None,
+        question_card_id: str | None = None,
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        units = self.list_feedback_backtest_units(
+            item_id=None,
+            question_type=question_type,
+            question_card_id=question_card_id,
+            limit=limit,
+        )
+        diagnostics: dict[str, dict[str, Any]] = {}
+        for unit in units:
+            threshold_failures = unit.get("threshold_failures") or []
+            if not isinstance(threshold_failures, list):
+                continue
+            for failure in threshold_failures:
+                if not isinstance(failure, dict):
+                    continue
+                threshold_name = str(failure.get("threshold_name") or failure.get("check_name") or "").strip()
+                if not threshold_name:
+                    continue
+                entry = diagnostics.setdefault(
+                    threshold_name,
+                    {
+                        "threshold_name": threshold_name,
+                        "failed_sample_count": 0,
+                        "discard_count": 0,
+                        "revised_then_kept_count": 0,
+                        "accepted_as_is_count": 0,
+                        "question_types": set(),
+                        "question_card_ids": set(),
+                        "sources": set(),
+                        "sample_failures": [],
+                    },
+                )
+                entry["failed_sample_count"] += 1
+                entry["question_types"].add(str(unit.get("question_type") or "unknown"))
+                if unit.get("question_card_id"):
+                    entry["question_card_ids"].add(str(unit.get("question_card_id")))
+                if failure.get("source"):
+                    entry["sources"].add(str(failure.get("source")))
+                if len(entry["sample_failures"]) < 5:
+                    entry["sample_failures"].append(
+                        {
+                            "item_id": unit.get("item_id"),
+                            "selection_state": unit.get("selection_state"),
+                            "review_action": unit.get("review_action"),
+                            "actual": failure.get("actual"),
+                            "threshold": failure.get("threshold"),
+                            "allowed_range": failure.get("allowed_range"),
+                            "difficulty_band": failure.get("difficulty_band"),
+                        }
+                    )
+                if unit.get("discarded"):
+                    entry["discard_count"] += 1
+                if unit.get("revised_then_kept"):
+                    entry["revised_then_kept_count"] += 1
+                if unit.get("accepted_as_is"):
+                    entry["accepted_as_is_count"] += 1
+
+        results: list[dict[str, Any]] = []
+        for entry in diagnostics.values():
+            failed_sample_count = int(entry["failed_sample_count"])
+            kept_count = int(entry["accepted_as_is_count"]) + int(entry["revised_then_kept_count"])
+            kept_rate = self._rate(kept_count, failed_sample_count)
+            discard_rate = self._rate(int(entry["discard_count"]), failed_sample_count)
+            diagnosis, hint = self._normalize_threshold_diagnosis(
+                failed_sample_count=failed_sample_count,
+                kept_rate=kept_rate,
+                discard_rate=discard_rate,
+            )
+            results.append(
+                {
+                    "threshold_name": entry["threshold_name"],
+                    "failed_sample_count": failed_sample_count,
+                    "discard_count": int(entry["discard_count"]),
+                    "revised_then_kept_count": int(entry["revised_then_kept_count"]),
+                    "accepted_as_is_count": int(entry["accepted_as_is_count"]),
+                    "discard_rate": discard_rate,
+                    "revised_then_kept_rate": self._rate(int(entry["revised_then_kept_count"]), failed_sample_count),
+                    "accepted_as_is_rate": self._rate(int(entry["accepted_as_is_count"]), failed_sample_count),
+                    "question_types": sorted(entry["question_types"]),
+                    "question_card_ids": sorted(entry["question_card_ids"]),
+                    "sources": sorted(entry["sources"]),
+                    "diagnosis": diagnosis,
+                    "hint": hint,
+                    "sample_failures": entry["sample_failures"],
+                }
+            )
+        return sorted(results, key=lambda entry: entry["failed_sample_count"], reverse=True)
+
+    @staticmethod
+    def _comparison_candidate_id(candidate: dict[str, Any], fallback_index: int) -> str:
+        for key in ("candidate_id", "material_id", "item_id", "id", "label", "name"):
+            value = candidate.get(key)
+            if value not in (None, ""):
+                return str(value)
+        return f"candidate_{fallback_index}"
+
+    @staticmethod
+    def _is_boundary_candidate(candidate: dict[str, Any]) -> bool:
+        selection_state = str(candidate.get("selection_state") or "")
+        if selection_state == "hold":
+            return True
+        try:
+            final_score = float(candidate.get("final_candidate_score") or 0.0)
+        except (TypeError, ValueError):
+            final_score = 0.0
+        return selection_state != "weak_candidate" and 0.3 <= final_score <= 0.7
+
+    def compare_preference_effect(
+        self,
+        *,
+        neutral_candidates: list[dict[str, Any]],
+        preference_candidates: list[dict[str, Any]],
+        preference_profile: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        neutral_index: dict[str, tuple[int, dict[str, Any]]] = {
+            self._comparison_candidate_id(candidate, idx): (idx, candidate)
+            for idx, candidate in enumerate(neutral_candidates)
+        }
+        preference_index: dict[str, tuple[int, dict[str, Any]]] = {
+            self._comparison_candidate_id(candidate, idx): (idx, candidate)
+            for idx, candidate in enumerate(preference_candidates)
+        }
+        common_ids = [candidate_id for candidate_id in neutral_index.keys() if candidate_id in preference_index]
+
+        reordered_candidates: list[dict[str, Any]] = []
+        selection_state_changes: list[dict[str, Any]] = []
+        unsafe_weak_promotion = False
+        boundary_only_shift = True
+
+        for candidate_id in common_ids:
+            neutral_rank, neutral_candidate = neutral_index[candidate_id]
+            preference_rank, preference_candidate = preference_index[candidate_id]
+            neutral_state = str(neutral_candidate.get("selection_state") or "")
+            preference_state = str(preference_candidate.get("selection_state") or "")
+            if neutral_state != preference_state:
+                selection_state_changes.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "from_state": neutral_state,
+                        "to_state": preference_state,
+                    }
+                )
+            if neutral_rank != preference_rank:
+                reordered_candidates.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "from_rank": neutral_rank,
+                        "to_rank": preference_rank,
+                        "rank_shift": neutral_rank - preference_rank,
+                        "selection_state": preference_state or neutral_state,
+                    }
+                )
+                if not self._is_boundary_candidate(neutral_candidate) and not self._is_boundary_candidate(preference_candidate):
+                    boundary_only_shift = False
+            if neutral_state == "weak_candidate" and preference_state != "weak_candidate":
+                unsafe_weak_promotion = True
+
+        nonweak_neutral_order = [
+            candidate_id
+            for candidate_id in common_ids
+            if str(neutral_index[candidate_id][1].get("selection_state") or "") != "weak_candidate"
+        ]
+        for candidate_id in common_ids:
+            neutral_rank, neutral_candidate = neutral_index[candidate_id]
+            preference_rank, preference_candidate = preference_index[candidate_id]
+            if str(neutral_candidate.get("selection_state") or "") != "weak_candidate":
+                continue
+            for other_id in nonweak_neutral_order:
+                other_neutral_rank, _ = neutral_index[other_id]
+                other_preference_rank, _ = preference_index[other_id]
+                if neutral_rank > other_neutral_rank and preference_rank < other_preference_rank:
+                    unsafe_weak_promotion = True
+                    break
+            if unsafe_weak_promotion:
+                break
+
+        if unsafe_weak_promotion:
+            diagnosis = "unsafe_shift"
+            hint = "Preference changed ordering in a way that promotes weak candidates beyond safe boundary use."
+        elif reordered_candidates and not selection_state_changes and boundary_only_shift:
+            diagnosis = "safe_preference_shift"
+            hint = "Preference only adjusted boundary ordering and kept selection states stable."
+        elif reordered_candidates or selection_state_changes:
+            diagnosis = "borderline_shift"
+            hint = "Preference changed ordering or state near the boundary, but no weak promotion was detected."
+        else:
+            diagnosis = "no_material_change"
+            hint = "Preference did not materially change ranking or behavior on this sample set."
+
+        return {
+            "preference_profile": preference_profile or {},
+            "candidate_count": len(common_ids),
+            "reordered_candidates": sorted(reordered_candidates, key=lambda entry: abs(int(entry["rank_shift"])), reverse=True),
+            "selection_state_changes": selection_state_changes,
+            "boundary_only_shift": boundary_only_shift,
+            "unsafe_weak_promotion": unsafe_weak_promotion,
+            "diagnosis": diagnosis,
+            "hint": hint,
+            "neutral_top_order": common_ids[: min(5, len(common_ids))],
+            "preference_top_order": [
+                self._comparison_candidate_id(candidate, idx) for idx, candidate in enumerate(preference_candidates[:5])
+            ],
+        }
+
+    def get_backtest_calibration_recommendations(
+        self,
+        *,
+        question_type: str | None = None,
+        question_card_id: str | None = None,
+        limit: int = 500,
+        preference_effect: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        summary = self.get_feedback_backtest_summary(
+            question_type=question_type,
+            question_card_id=question_card_id,
+            limit=limit,
+        )
+        penalty_diagnostics = self.get_penalty_diagnostics(
+            question_type=question_type,
+            question_card_id=question_card_id,
+            limit=limit,
+        )
+        threshold_diagnostics = self.get_threshold_diagnostics(
+            question_type=question_type,
+            question_card_id=question_card_id,
+            limit=limit,
+        )
+
+        threshold_recommendations = [
+            {
+                "type": "threshold",
+                "threshold_name": diagnostic["threshold_name"],
+                "diagnosis": diagnostic["diagnosis"],
+                "suggestion": diagnostic["hint"],
+            }
+            for diagnostic in threshold_diagnostics
+            if diagnostic["diagnosis"] in {"likely_too_strict", "likely_reasonable"}
+        ]
+        penalty_recommendations = [
+            {
+                "type": "penalty",
+                "penalty": diagnostic["penalty"],
+                "diagnosis": diagnostic["diagnosis"],
+                "suggestion": diagnostic["hint"],
+            }
+            for diagnostic in penalty_diagnostics
+            if diagnostic["diagnosis"] in {"likely_high_signal", "common_repairable_risk", "possible_over_penalization"}
+        ]
+
+        preference_recommendations: list[dict[str, Any]] = []
+        if preference_effect:
+            diagnosis = str(preference_effect.get("diagnosis") or "")
+            if diagnosis == "safe_preference_shift":
+                preference_recommendations.append(
+                    {
+                        "type": "preference",
+                        "diagnosis": diagnosis,
+                        "suggestion": "Current preference profile appears to improve boundary ordering without unsafe promotion.",
+                    }
+                )
+            elif diagnosis == "borderline_shift":
+                preference_recommendations.append(
+                    {
+                        "type": "preference",
+                        "diagnosis": diagnosis,
+                        "suggestion": "Preference changed boundary behavior; watch hold/repair sensitivity before broadening it.",
+                    }
+                )
+            elif diagnosis == "unsafe_shift":
+                preference_recommendations.append(
+                    {
+                        "type": "preference",
+                        "diagnosis": diagnosis,
+                        "suggestion": "Preference is too aggressive and risks pulling weak candidates upward.",
+                    }
+                )
+
+        return {
+            "summary_reference": {
+                "total_units": summary.get("total_units"),
+                "recommended_confirmed_rate": summary.get("recommended_confirmed_rate"),
+                "hold_revised_then_kept_rate": summary.get("hold_revised_then_kept_rate"),
+                "repair_suggested_taken_rate": summary.get("repair_suggested_taken_rate"),
+                "needs_review_false_positive_rate": summary.get("needs_review_false_positive_rate"),
+                "weak_candidate_discard_rate": summary.get("weak_candidate_discard_rate"),
+            },
+            "threshold_recommendations": threshold_recommendations,
+            "penalty_recommendations": penalty_recommendations,
+            "preference_recommendations": preference_recommendations,
+        }
+
     def get_version_pair_diff(self, item_id: str, from_version: int, to_version: int) -> dict | None:
         versions = self.list_versions(item_id)
         by_no = {version["version_no"]: version for version in versions}

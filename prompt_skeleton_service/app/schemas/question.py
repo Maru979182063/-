@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.decoder import BatchMeta, DifyFormInput
 from app.schemas.item import QuestionItem
@@ -139,6 +139,121 @@ class MaterialSelectionResult(BaseModel):
     selection_reason: str
 
 
+def _coerce_float(value: Any) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return round(numeric, 4)
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off"}:
+        return False
+    return None
+
+
+def _normalize_float_mapping(payload: Any) -> dict[str, float]:
+    if not isinstance(payload, dict):
+        return {}
+    normalized: dict[str, float] = {}
+    for key, value in payload.items():
+        numeric = _coerce_float(value)
+        if numeric is None:
+            continue
+        normalized[str(key)] = numeric
+    return normalized
+
+
+def _top_positive_values(payload: Any, *, limit: int = 3) -> dict[str, float]:
+    ranked = sorted(
+        (
+            (key, value)
+            for key, value in _normalize_float_mapping(payload).items()
+            if value > 0
+        ),
+        key=lambda entry: entry[1],
+        reverse=True,
+    )
+    return {key: value for key, value in ranked[:limit]}
+
+
+def _material_feedback_snapshot(item: dict[str, Any]) -> dict[str, Any]:
+    material_source = item.get("material_source")
+    if not isinstance(material_source, dict):
+        material_source = {}
+
+    explicit_snapshot = item.get("feedback_snapshot")
+    if isinstance(explicit_snapshot, dict) and explicit_snapshot:
+        return dict(explicit_snapshot)
+
+    nested_snapshot = material_source.get("feedback_snapshot")
+    if isinstance(nested_snapshot, dict) and nested_snapshot:
+        return dict(nested_snapshot)
+
+    scoring = material_source.get("scoring") if isinstance(material_source.get("scoring"), dict) else {}
+    if not scoring and isinstance(material_source.get("selected_task_scoring"), dict):
+        scoring = material_source.get("selected_task_scoring") or {}
+    decision_meta = material_source.get("decision_meta") if isinstance(material_source.get("decision_meta"), dict) else {}
+    scoring_summary = decision_meta.get("scoring_summary") if isinstance(decision_meta.get("scoring_summary"), dict) else {}
+    difficulty_trace = scoring.get("difficulty_trace") if isinstance(scoring.get("difficulty_trace"), dict) else {}
+    band_decision = difficulty_trace.get("band_decision") if isinstance(difficulty_trace.get("band_decision"), dict) else {}
+    difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+    risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+
+    return {
+        "selection_state": decision_meta.get("selection_state"),
+        "review_like_risk": _coerce_bool(decision_meta.get("review_like_risk")),
+        "repair_suggested": _coerce_bool(decision_meta.get("repair_suggested")),
+        "decision_reason": decision_meta.get("decision_reason"),
+        "repair_reason": decision_meta.get("repair_reason"),
+        "quality_difficulty_note": decision_meta.get("quality_difficulty_note") or band_decision.get("quality_difficulty_note"),
+        "final_candidate_score": _coerce_float(scoring.get("final_candidate_score") or scoring_summary.get("final_candidate_score")),
+        "readiness_score": _coerce_float(scoring.get("readiness_score") or scoring_summary.get("readiness_score")),
+        "total_penalty": _coerce_float(scoring_summary.get("total_penalty")),
+        "difficulty_band_hint": scoring.get("difficulty_band_hint") or scoring_summary.get("difficulty_band_hint"),
+        "difficulty_vector": _normalize_float_mapping(difficulty_vector),
+        "key_penalties": _normalize_float_mapping(decision_meta.get("key_penalties") or _top_positive_values(risk_penalties, limit=3)),
+        "key_difficulty_dimensions": _normalize_float_mapping(
+            decision_meta.get("key_difficulty_dimensions") or _top_positive_values(difficulty_vector, limit=3)
+        ),
+        "recommended": _coerce_bool(scoring.get("recommended") if "recommended" in scoring else scoring_summary.get("recommended")),
+        "needs_review": _coerce_bool(scoring.get("needs_review") if "needs_review" in scoring else scoring_summary.get("needs_review")),
+    }
+
+
+def _normalized_feedback_payload(item: dict[str, Any]) -> dict[str, Any]:
+    payload = _material_feedback_snapshot(item)
+    quality_note = payload.get("quality_note")
+    if quality_note is None:
+        quality_note = payload.get("quality_difficulty_note")
+    return {
+        "selection_state": payload.get("selection_state"),
+        "review_like_risk": _coerce_bool(payload.get("review_like_risk")),
+        "repair_suggested": _coerce_bool(payload.get("repair_suggested")),
+        "decision_reason": payload.get("decision_reason"),
+        "repair_reason": payload.get("repair_reason"),
+        "quality_note": quality_note,
+        "quality_difficulty_note": quality_note,
+        "final_candidate_score": _coerce_float(payload.get("final_candidate_score")),
+        "readiness_score": _coerce_float(payload.get("readiness_score")),
+        "total_penalty": _coerce_float(payload.get("total_penalty")),
+        "difficulty_band_hint": payload.get("difficulty_band_hint"),
+        "difficulty_vector": _normalize_float_mapping(payload.get("difficulty_vector")),
+        "key_penalties": _normalize_float_mapping(payload.get("key_penalties")),
+        "key_difficulty_dimensions": _normalize_float_mapping(payload.get("key_difficulty_dimensions")),
+        "recommended": _coerce_bool(payload.get("recommended")),
+        "needs_review": _coerce_bool(payload.get("needs_review")),
+    }
+
+
 class QuestionGenerationItem(QuestionItem):
     batch_id: str
     created_at: str | None = None
@@ -152,6 +267,44 @@ class QuestionGenerationItem(QuestionItem):
     material_previously_used: bool = False
     material_last_used_at: str | None = None
     revision_count: int = 0
+    feedback_snapshot: dict[str, Any] = Field(default_factory=dict)
+    selection_state: str | None = None
+    review_like_risk: bool | None = None
+    repair_suggested: bool | None = None
+    final_candidate_score: float | None = None
+    readiness_score: float | None = None
+    total_penalty: float | None = None
+    decision_reason: str | None = None
+    repair_reason: str | None = None
+    quality_note: str | None = None
+    difficulty_band_hint: str | None = None
+    difficulty_vector: dict[str, float] = Field(default_factory=dict)
+    key_penalties: dict[str, float] = Field(default_factory=dict)
+    key_difficulty_dimensions: dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_feedback_fields(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+
+        feedback = _normalized_feedback_payload(value)
+        updated = dict(value)
+        updated["feedback_snapshot"] = feedback
+        updated["selection_state"] = feedback["selection_state"]
+        updated["review_like_risk"] = feedback["review_like_risk"]
+        updated["repair_suggested"] = feedback["repair_suggested"]
+        updated["final_candidate_score"] = feedback["final_candidate_score"]
+        updated["readiness_score"] = feedback["readiness_score"]
+        updated["total_penalty"] = feedback["total_penalty"]
+        updated["decision_reason"] = feedback["decision_reason"]
+        updated["repair_reason"] = feedback["repair_reason"]
+        updated["quality_note"] = feedback["quality_note"]
+        updated["difficulty_band_hint"] = feedback["difficulty_band_hint"]
+        updated["difficulty_vector"] = feedback["difficulty_vector"]
+        updated["key_penalties"] = feedback["key_penalties"]
+        updated["key_difficulty_dimensions"] = feedback["key_difficulty_dimensions"]
+        return updated
 
 
 class QuestionGenerationBatchResponse(BaseModel):

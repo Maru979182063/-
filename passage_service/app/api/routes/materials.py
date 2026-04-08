@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.core.exceptions import ConflictError
 from app.domain.services.dify_export_service import DifyExportService
 from app.domain.services.pool_service import PoolService
 from app.domain.services.reprocess_service import ReprocessService
@@ -61,7 +62,10 @@ def get_material_stats(
 
 @router.post("/materials/promote")
 def promote_material(payload: PromoteRequest, db: Session = Depends(get_db)) -> dict:
-    item = PoolService(db).promote(payload.material_id, payload.status, payload.release_channel)
+    try:
+        item = PoolService(db).promote(payload.material_id, payload.status, payload.release_channel)
+    except ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"material_id": item.id, "status": item.status, "release_channel": item.release_channel}
 
 

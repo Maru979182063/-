@@ -248,6 +248,16 @@ validator_contract:
     require_legal_tail: true
     require_binding_pairs_intact: true
     require_complete_ordering_chain: true
+    min_complexity_score: 0.7
+    min_constraint_intensity_score: 0.7
+    max_first_instability_penalty: 0.35
+    max_last_instability_penalty: 0.35
+    max_weak_constraint_penalty: 0.2
+    max_total_penalty: 0.67
+    review_if_high_readiness_high_penalty: true
+    difficulty_band_allowed:
+    - medium
+    - hard
     fail_reasons:
       sentence_count_mismatch: sentence_count_must_equal_6
       illegal_head: no_legal_head_sentence

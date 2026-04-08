@@ -1,0 +1,837 @@
+{
+  "main_idea": {
+    "boundary": {
+      "text": "“当前，反腐败斗争形势仍然严峻复杂，铲除腐败滋生土壤和条件任务仍然艰巨繁重。”这次全会上，习近平总书记重申“两个仍然”的重大判断，强调要“保持高压态势不动摇”“不断提高反腐败穿透力”“在一体推进上下更大功夫”，为纵深推进反腐败斗争指明了方法路径。\n\n随着反腐败斗争进入深水区，触及利益越来越深，贪腐行为的关联性隐蔽性越来越强，查处难度越来越大。只有把握腐败的新动向新特点，创新手段方式，及时发现、准确识别、有效治理各类腐败问题，才能不断提高反腐败穿透力。\n\n不正之风和腐败问题互为表里、同根同源。由风及腐、风腐交织是许多违纪违法案件的鲜明特点。日前播出的电视专题片《一步不停歇 半步不退让》第一集《纠风治乱为民》中，有落马官员在镜头前忏悔，“我其实违法犯罪，都是从吃喝问题，从违反（中央）八项规定（精神）开始的”。",
+      "scoring": {
+        "task_family": "main_idea",
+        "structure_scores": {
+          "single_center_score": 0.4824,
+          "closure_score": 0.6616,
+          "theme_lift_score": 0.556
+        },
+        "readiness_score": 0.5582,
+        "risk_penalties": {
+          "example_dominance_penalty": 0.1788
+        },
+        "final_candidate_score": 0.4956,
+        "recommended": false,
+        "needs_review": true,
+        "difficulty_vector": {
+          "complexity_score": 0.4846,
+          "ambiguity_score": 0.3056,
+          "reasoning_depth_score": 0.5782,
+          "constraint_intensity_score": 0.5633
+        },
+        "difficulty_band_hint": "medium",
+        "difficulty_trace": {
+          "source_fields": {
+            "main_idea_single_center_score": 0.4824,
+            "main_idea_closure_score": 0.6616,
+            "main_idea_lift_score": 0.556,
+            "main_idea_example_dominance_score": 0.1788,
+            "multi_dimension_cohesion": 0.11,
+            "branch_focus_strength": 0.22
+          },
+          "aggregations": {
+            "complexity_formula": "0.38 * closure_score + 0.37 * theme_lift_score + 0.25 * multi_dimension_cohesion",
+            "ambiguity_formula": "0.45 * example_dominance_penalty + 0.35 * (1 - single_center_score) + 0.20 * branch_focus_strength",
+            "reasoning_depth_formula": "0.45 * theme_lift_score + 0.35 * closure_score + 0.20 * single_center_score",
+            "constraint_intensity_formula": "0.36 * single_center_score + 0.32 * closure_score + 0.32 * theme_lift_score",
+            "difficulty_vector": {
+              "complexity_score": 0.4846,
+              "ambiguity_score": 0.3056,
+              "reasoning_depth_score": 0.5782,
+              "constraint_intensity_score": 0.5633
+            }
+          },
+          "band_decision": {
+            "task_family": "main_idea",
+            "average_difficulty": 0.4829,
+            "high_dimensions": [],
+            "medium_dimensions": [
+              "complexity_score",
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "core_hard_dimensions": [],
+            "band_reason": "mixed_difficulty_profile",
+            "quality_difficulty_note": "difficulty_and_quality_balanced",
+            "final_candidate_score": 0.4956,
+            "total_penalty": 0.1788,
+            "recommended": false,
+            "needs_review": true
+          }
+        },
+        "score_trace": {
+          "source_fields": {
+            "main_idea_single_center_score": 0.4824,
+            "main_idea_closure_score": 0.6616,
+            "main_idea_lift_score": 0.556,
+            "main_idea_example_dominance_score": 0.1788,
+            "main_idea_eligible": true,
+            "main_idea_eligibility_reason": "main_idea_eligible"
+          },
+          "aggregations": {
+            "readiness_formula": "0.40 * single_center_score + 0.30 * closure_score + 0.30 * theme_lift_score",
+            "readiness_components": {
+              "single_center_component": 0.193,
+              "closure_component": 0.1985,
+              "theme_lift_component": 0.1668
+            },
+            "final_formula": "main_idea_readiness_score - 0.35 * example_dominance_penalty",
+            "final_components": {
+              "readiness_component": 0.5582,
+              "example_dominance_penalty_component": 0.0626,
+              "total_penalty": 0.1788
+            }
+          },
+          "decision": {
+            "recommended_reason": "main_idea_eligible",
+            "needs_review_reason": "borderline_main_idea_candidate",
+            "recommended_threshold": 0.5,
+            "review_readiness_threshold": 0.6,
+            "review_penalty_threshold": 0.28
+          },
+          "candidate_type": "multi_paragraph_unit"
+        }
+      },
+      "title": "人民日报评论员：更加清醒坚定地推进反腐败斗争——论学习贯彻习近平总书记二十届中央纪委五次全会重要讲话精神--观点--人民网"
+    },
+    "weak": {
+      "text": "“管党治党越有效，经济社会发展的保障就越有力。”新时代以来的实践表明，党的自我革命和经济社会发展是紧密相联、相互促进、相得益彰的。“十五五”时期我国发展环境面临深刻复杂变化，通过党的自我革命，弘扬新风正气、纠治顽瘴痼疾，营造良好政治生态，激励干部担当作为，凝聚民心民力，就能为经济社会发展源源不断注入正能量。",
+      "scoring": {
+        "task_family": "main_idea",
+        "structure_scores": {
+          "single_center_score": 0.3629,
+          "closure_score": 0.3721,
+          "theme_lift_score": 0.335
+        },
+        "readiness_score": 0.3573,
+        "risk_penalties": {
+          "example_dominance_penalty": 0.3025
+        },
+        "final_candidate_score": 0.2514,
+        "recommended": false,
+        "needs_review": false,
+        "difficulty_vector": {
+          "complexity_score": 0.2928,
+          "ambiguity_score": 0.4031,
+          "reasoning_depth_score": 0.3536,
+          "constraint_intensity_score": 0.3569
+        },
+        "difficulty_band_hint": "easy",
+        "difficulty_trace": {
+          "source_fields": {
+            "main_idea_single_center_score": 0.3629,
+            "main_idea_closure_score": 0.3721,
+            "main_idea_lift_score": 0.335,
+            "main_idea_example_dominance_score": 0.3025,
+            "multi_dimension_cohesion": 0.11,
+            "branch_focus_strength": 0.22
+          },
+          "aggregations": {
+            "complexity_formula": "0.38 * closure_score + 0.37 * theme_lift_score + 0.25 * multi_dimension_cohesion",
+            "ambiguity_formula": "0.45 * example_dominance_penalty + 0.35 * (1 - single_center_score) + 0.20 * branch_focus_strength",
+            "reasoning_depth_formula": "0.45 * theme_lift_score + 0.35 * closure_score + 0.20 * single_center_score",
+            "constraint_intensity_formula": "0.36 * single_center_score + 0.32 * closure_score + 0.32 * theme_lift_score",
+            "difficulty_vector": {
+              "complexity_score": 0.2928,
+              "ambiguity_score": 0.4031,
+              "reasoning_depth_score": 0.3536,
+              "constraint_intensity_score": 0.3569
+            }
+          },
+          "band_decision": {
+            "task_family": "main_idea",
+            "average_difficulty": 0.3516,
+            "high_dimensions": [],
+            "medium_dimensions": [],
+            "core_hard_dimensions": [],
+            "band_reason": "overall_difficulty_low",
+            "quality_difficulty_note": "not_hard_but_currently_weak_candidate",
+            "final_candidate_score": 0.2514,
+            "total_penalty": 0.3025,
+            "recommended": false,
+            "needs_review": false
+          }
+        },
+        "score_trace": {
+          "source_fields": {
+            "main_idea_single_center_score": 0.3629,
+            "main_idea_closure_score": 0.3721,
+            "main_idea_lift_score": 0.335,
+            "main_idea_example_dominance_score": 0.3025,
+            "main_idea_eligible": false,
+            "main_idea_eligibility_reason": "single_center_weak"
+          },
+          "aggregations": {
+            "readiness_formula": "0.40 * single_center_score + 0.30 * closure_score + 0.30 * theme_lift_score",
+            "readiness_components": {
+              "single_center_component": 0.1452,
+              "closure_component": 0.1116,
+              "theme_lift_component": 0.1005
+            },
+            "final_formula": "main_idea_readiness_score - 0.35 * example_dominance_penalty",
+            "final_components": {
+              "readiness_component": 0.3573,
+              "example_dominance_penalty_component": 0.1059,
+              "total_penalty": 0.3025
+            }
+          },
+          "decision": {
+            "recommended_reason": "single_center_weak",
+            "needs_review_reason": "",
+            "recommended_threshold": 0.5,
+            "review_readiness_threshold": 0.6,
+            "review_penalty_threshold": 0.28
+          },
+          "candidate_type": "closed_span"
+        }
+      },
+      "title": "人民日报评论员：更加清醒坚定地推进反腐败斗争——论学习贯彻习近平总书记二十届中央纪委五次全会重要讲话精神--观点--人民网"
+    }
+  },
+  "sentence_fill": {
+    "bridge_high_penalty": {
+      "text": "???????????????????????????????????????????????????????????????????????",
+      "scoring": {
+        "task_family": "sentence_fill",
+        "structure_scores": {
+          "blank_value_score": 0.88,
+          "primary_slot_dependency_score": 0.88,
+          "role_confidence_score": 0.7286
+        },
+        "readiness_score": 0.8497,
+        "risk_penalties": {
+          "standalone_penalty": 0.0,
+          "role_ambiguity_penalty": 0.6786,
+          "overlong_penalty": 1.0
+        },
+        "final_candidate_score": 0.6479,
+        "recommended": true,
+        "needs_review": true,
+        "difficulty_vector": {
+          "complexity_score": 0.73,
+          "ambiguity_score": 0.3868,
+          "reasoning_depth_score": 0.868,
+          "constraint_intensity_score": 0.8422
+        },
+        "difficulty_band_hint": "hard",
+        "difficulty_trace": {
+          "source_fields": {
+            "slot_role": "middle",
+            "slot_function": "bridge_both_sides",
+            "blank_value_score": 0.88,
+            "primary_slot_dependency_score": 0.88,
+            "role_confidence_score": 0.7286,
+            "standalone_penalty": 0.0,
+            "role_ambiguity_penalty": 0.6786,
+            "overlong_penalty": 1.0,
+            "slot_context_sentence_range": [],
+            "slot_sentence_range": [],
+            "context_span_score": 0.0,
+            "slot_function_complexity": 0.76
+          },
+          "aggregations": {
+            "complexity_formula": "0.45 * primary_slot_dependency_score + 0.25 * blank_value_score + 0.15 * context_span_score + 0.15 * slot_function_complexity",
+            "ambiguity_formula": "0.45 * role_ambiguity_penalty + 0.25 * standalone_penalty + 0.30 * (1 - role_confidence_score)",
+            "reasoning_depth_formula": "0.55 * primary_slot_dependency_score + 0.35 * blank_value_score + 0.10 * slot_function_complexity",
+            "constraint_intensity_formula": "0.40 * blank_value_score + 0.35 * primary_slot_dependency_score + 0.25 * role_confidence_score",
+            "difficulty_vector": {
+              "complexity_score": 0.73,
+              "ambiguity_score": 0.3868,
+              "reasoning_depth_score": 0.868,
+              "constraint_intensity_score": 0.8422
+            }
+          },
+          "band_decision": {
+            "task_family": "sentence_fill",
+            "average_difficulty": 0.7067,
+            "high_dimensions": [
+              "complexity_score",
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "medium_dimensions": [
+              "complexity_score",
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "core_hard_dimensions": [
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "band_reason": "multi_dimensional_difficulty_high",
+            "quality_difficulty_note": "structurally_hard_candidate",
+            "final_candidate_score": 0.6479,
+            "total_penalty": 1.0,
+            "recommended": true,
+            "needs_review": true
+          }
+        },
+        "score_trace": {
+          "source_fields": {
+            "slot_role": "middle",
+            "slot_function": "bridge_both_sides",
+            "blank_value_ready": true,
+            "blank_value_reason": "middle_bridge_blank_value",
+            "slot_classification_reason": "middle_bridge_both_sides_dense",
+            "slot_carry_dependency_score": 0.74,
+            "slot_bridge_dependency_score": 0.88,
+            "slot_forward_dependency_score": 0.79,
+            "slot_explicit_ready": true,
+            "standalone_readability": 0.5,
+            "sentence_count": 71,
+            "text_length": 71
+          },
+          "aggregations": {
+            "primary_slot_selector": "bridge_both_sides",
+            "readiness_formula": "0.50 * blank_value_score + 0.30 * primary_slot_dependency_score + 0.20 * role_confidence_score",
+            "readiness_components": {
+              "blank_value_component": 0.44,
+              "primary_dependency_component": 0.264,
+              "role_confidence_component": 0.1457
+            },
+            "final_formula": "fill_readiness_score - 0.25 * standalone_penalty - 0.15 * role_ambiguity_penalty - 0.10 * overlong_penalty",
+            "final_components": {
+              "readiness_component": 0.8497,
+              "standalone_penalty_component": 0.0,
+              "role_ambiguity_penalty_component": 0.1018,
+              "overlong_penalty_component": 0.1,
+              "total_penalty": 1.0
+            }
+          },
+          "decision": {
+            "recommended_reason": "slot_ready_with_blank_value",
+            "needs_review_reason": "readiness_high_but_penalties_high",
+            "recommended_threshold": 0.54,
+            "review_readiness_threshold": 0.58,
+            "review_penalty_threshold": 0.28
+          },
+          "candidate_type": "functional_slot_unit"
+        }
+      }
+    },
+    "summary_weak": {
+      "text": "???????????????",
+      "scoring": {
+        "task_family": "sentence_fill",
+        "structure_scores": {
+          "blank_value_score": 0.58,
+          "primary_slot_dependency_score": 0.3,
+          "role_confidence_score": 0.0
+        },
+        "readiness_score": 0.38,
+        "risk_penalties": {
+          "standalone_penalty": 0.0,
+          "role_ambiguity_penalty": 0.8571,
+          "overlong_penalty": 1.0
+        },
+        "final_candidate_score": 0.1514,
+        "recommended": false,
+        "needs_review": false,
+        "difficulty_vector": {
+          "complexity_score": 0.334,
+          "ambiguity_score": 0.6857,
+          "reasoning_depth_score": 0.404,
+          "constraint_intensity_score": 0.337
+        },
+        "difficulty_band_hint": "medium",
+        "difficulty_trace": {
+          "source_fields": {
+            "slot_role": "ending",
+            "slot_function": "summary",
+            "blank_value_score": 0.58,
+            "primary_slot_dependency_score": 0.3,
+            "role_confidence_score": 0.0,
+            "standalone_penalty": 0.0,
+            "role_ambiguity_penalty": 0.8571,
+            "overlong_penalty": 1.0,
+            "slot_context_sentence_range": [],
+            "slot_sentence_range": [],
+            "context_span_score": 0.0,
+            "slot_function_complexity": 0.36
+          },
+          "aggregations": {
+            "complexity_formula": "0.45 * primary_slot_dependency_score + 0.25 * blank_value_score + 0.15 * context_span_score + 0.15 * slot_function_complexity",
+            "ambiguity_formula": "0.45 * role_ambiguity_penalty + 0.25 * standalone_penalty + 0.30 * (1 - role_confidence_score)",
+            "reasoning_depth_formula": "0.55 * primary_slot_dependency_score + 0.35 * blank_value_score + 0.10 * slot_function_complexity",
+            "constraint_intensity_formula": "0.40 * blank_value_score + 0.35 * primary_slot_dependency_score + 0.25 * role_confidence_score",
+            "difficulty_vector": {
+              "complexity_score": 0.334,
+              "ambiguity_score": 0.6857,
+              "reasoning_depth_score": 0.404,
+              "constraint_intensity_score": 0.337
+            }
+          },
+          "band_decision": {
+            "task_family": "sentence_fill",
+            "average_difficulty": 0.4402,
+            "high_dimensions": [
+              "ambiguity_score"
+            ],
+            "medium_dimensions": [
+              "ambiguity_score"
+            ],
+            "core_hard_dimensions": [
+              "ambiguity_score"
+            ],
+            "band_reason": "mixed_difficulty_profile",
+            "quality_difficulty_note": "high_risk_but_not_high_difficulty",
+            "final_candidate_score": 0.1514,
+            "total_penalty": 1.0,
+            "recommended": false,
+            "needs_review": false
+          }
+        },
+        "score_trace": {
+          "source_fields": {
+            "slot_role": "ending",
+            "slot_function": "summary",
+            "blank_value_ready": true,
+            "blank_value_reason": "ending_summary_blank_value",
+            "slot_classification_reason": "ending_summary_explicit",
+            "slot_carry_dependency_score": 0.18,
+            "slot_bridge_dependency_score": 0.22,
+            "slot_forward_dependency_score": 0.05,
+            "slot_explicit_ready": true,
+            "standalone_readability": 0.5,
+            "sentence_count": 15,
+            "text_length": 15
+          },
+          "aggregations": {
+            "primary_slot_selector": "summary",
+            "readiness_formula": "0.50 * blank_value_score + 0.30 * primary_slot_dependency_score + 0.20 * role_confidence_score",
+            "readiness_components": {
+              "blank_value_component": 0.29,
+              "primary_dependency_component": 0.09,
+              "role_confidence_component": 0.0
+            },
+            "final_formula": "fill_readiness_score - 0.25 * standalone_penalty - 0.15 * role_ambiguity_penalty - 0.10 * overlong_penalty",
+            "final_components": {
+              "readiness_component": 0.38,
+              "standalone_penalty_component": 0.0,
+              "role_ambiguity_penalty_component": 0.1286,
+              "overlong_penalty_component": 0.1,
+              "total_penalty": 1.0
+            }
+          },
+          "decision": {
+            "recommended_reason": "fill_candidate_below_threshold_or_not_ready",
+            "needs_review_reason": "",
+            "recommended_threshold": 0.54,
+            "review_readiness_threshold": 0.58,
+            "review_penalty_threshold": 0.28
+          },
+          "candidate_type": "functional_slot_unit"
+        }
+      }
+    }
+  },
+  "sentence_order": {
+    "strong": {
+      "text": "???????\n???????\n???????\n???????\n???????\n???????",
+      "scoring": {
+        "task_family": "sentence_order",
+        "structure_scores": {
+          "first_eligibility_score": 0.6627,
+          "last_eligibility_score": 0.658,
+          "pairwise_constraint_score": 1.0,
+          "local_binding_score": 0.7
+        },
+        "readiness_score": 0.7702,
+        "risk_penalties": {
+          "first_instability_penalty": 0.0,
+          "last_instability_penalty": 0.0,
+          "weak_constraint_penalty": 0.0,
+          "over_merge_penalty": 0.0
+        },
+        "final_candidate_score": 0.7702,
+        "recommended": true,
+        "needs_review": false,
+        "difficulty_vector": {
+          "complexity_score": 0.775,
+          "ambiguity_score": 0.0,
+          "reasoning_depth_score": 0.8081,
+          "constraint_intensity_score": 0.8252
+        },
+        "difficulty_band_hint": "hard",
+        "difficulty_trace": {
+          "source_fields": {
+            "first_eligibility_score": 0.6627,
+            "last_eligibility_score": 0.658,
+            "pairwise_constraint_score": 1.0,
+            "local_binding_score": 0.7,
+            "first_instability_penalty": 0.0,
+            "last_instability_penalty": 0.0,
+            "weak_constraint_penalty": 0.0,
+            "over_merge_penalty": 0.0,
+            "group_size": 6,
+            "grouped_unit_count": 0,
+            "group_size_score": 1.0,
+            "grouped_unit_complexity": 0.0
+          },
+          "aggregations": {
+            "complexity_formula": "0.40 * pairwise_constraint_score + 0.25 * local_binding_score + 0.20 * group_size_score + 0.15 * grouped_unit_complexity",
+            "ambiguity_formula": "0.35 * first_instability_penalty + 0.35 * last_instability_penalty + 0.30 * weak_constraint_penalty",
+            "reasoning_depth_formula": "0.40 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.15 * last_eligibility_score",
+            "constraint_intensity_formula": "0.45 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.10 * last_eligibility_score - 0.20 * weak_constraint_penalty",
+            "difficulty_vector": {
+              "complexity_score": 0.775,
+              "ambiguity_score": 0.0,
+              "reasoning_depth_score": 0.8081,
+              "constraint_intensity_score": 0.8252
+            }
+          },
+          "band_decision": {
+            "task_family": "sentence_order",
+            "average_difficulty": 0.6021,
+            "high_dimensions": [
+              "complexity_score",
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "medium_dimensions": [
+              "complexity_score",
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "core_hard_dimensions": [
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "band_reason": "multi_dimensional_difficulty_high",
+            "quality_difficulty_note": "structurally_hard_candidate",
+            "final_candidate_score": 0.7702,
+            "total_penalty": 0.0,
+            "recommended": true,
+            "needs_review": false
+          }
+        },
+        "score_trace": {
+          "source_fields": {
+            "candidate_type": "ordered_unit_group",
+            "group_size": 6,
+            "grouped_unit_count": 0,
+            "first_candidate_indices": [
+              0
+            ],
+            "last_candidate_indices": [
+              5
+            ],
+            "pairwise_constraint_count": 4,
+            "local_binding_count": 2,
+            "sequence_integrity": 0.4992,
+            "unique_opener_score": 0.2504,
+            "closing_signal_strength": 0.24,
+            "local_binding_strength": 0.35,
+            "normalization_reason": "raw_six_units",
+            "ordering_reason_trace": {
+              "ordering_reason": "ordered_unit_group_ready"
+            }
+          },
+          "aggregations": {
+            "readiness_formula": "0.25 * first_eligibility_score + 0.25 * last_eligibility_score + 0.30 * pairwise_constraint_score + 0.20 * local_binding_score",
+            "readiness_components": {
+              "first_component": 0.1657,
+              "last_component": 0.1645,
+              "pairwise_component": 0.3,
+              "local_binding_component": 0.14
+            },
+            "final_formula": "sentence_order_readiness_score - 0.25 * first_instability_penalty - 0.30 * last_instability_penalty - 0.20 * weak_constraint_penalty - 0.10 * over_merge_penalty",
+            "final_components": {
+              "readiness_component": 0.7702,
+              "first_instability_penalty_component": 0.0,
+              "last_instability_penalty_component": 0.0,
+              "weak_constraint_penalty_component": 0.0,
+              "over_merge_penalty_component": 0.0,
+              "total_penalty": 0.0
+            }
+          },
+          "decision": {
+            "recommended_reason": "six_unit_group_above_threshold",
+            "needs_review_reason": "",
+            "recommended_threshold": 0.56,
+            "review_readiness_threshold": 0.58,
+            "review_penalty_threshold": 0.24
+          }
+        }
+      },
+      "original_sentences": [
+        "???????",
+        "???????",
+        "???????",
+        "???????",
+        "???????",
+        "???????"
+      ]
+    },
+    "merge_risk": {
+      "text": "???????\n???????\n???????\n???????\n???????\n???????",
+      "scoring": {
+        "task_family": "sentence_order",
+        "structure_scores": {
+          "first_eligibility_score": 0.6627,
+          "last_eligibility_score": 0.658,
+          "pairwise_constraint_score": 1.0,
+          "local_binding_score": 0.7
+        },
+        "readiness_score": 0.7702,
+        "risk_penalties": {
+          "first_instability_penalty": 0.0,
+          "last_instability_penalty": 0.0,
+          "weak_constraint_penalty": 0.0,
+          "over_merge_penalty": 0.6667
+        },
+        "final_candidate_score": 0.7035,
+        "recommended": true,
+        "needs_review": true,
+        "difficulty_vector": {
+          "complexity_score": 0.925,
+          "ambiguity_score": 0.0,
+          "reasoning_depth_score": 0.8081,
+          "constraint_intensity_score": 0.8252
+        },
+        "difficulty_band_hint": "hard",
+        "difficulty_trace": {
+          "source_fields": {
+            "first_eligibility_score": 0.6627,
+            "last_eligibility_score": 0.658,
+            "pairwise_constraint_score": 1.0,
+            "local_binding_score": 0.7,
+            "first_instability_penalty": 0.0,
+            "last_instability_penalty": 0.0,
+            "weak_constraint_penalty": 0.0,
+            "over_merge_penalty": 0.6667,
+            "group_size": 6,
+            "grouped_unit_count": 2,
+            "group_size_score": 1.0,
+            "grouped_unit_complexity": 1.0
+          },
+          "aggregations": {
+            "complexity_formula": "0.40 * pairwise_constraint_score + 0.25 * local_binding_score + 0.20 * group_size_score + 0.15 * grouped_unit_complexity",
+            "ambiguity_formula": "0.35 * first_instability_penalty + 0.35 * last_instability_penalty + 0.30 * weak_constraint_penalty",
+            "reasoning_depth_formula": "0.40 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.15 * last_eligibility_score",
+            "constraint_intensity_formula": "0.45 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.10 * last_eligibility_score - 0.20 * weak_constraint_penalty",
+            "difficulty_vector": {
+              "complexity_score": 0.925,
+              "ambiguity_score": 0.0,
+              "reasoning_depth_score": 0.8081,
+              "constraint_intensity_score": 0.8252
+            }
+          },
+          "band_decision": {
+            "task_family": "sentence_order",
+            "average_difficulty": 0.6396,
+            "high_dimensions": [
+              "complexity_score",
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "medium_dimensions": [
+              "complexity_score",
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "core_hard_dimensions": [
+              "reasoning_depth_score",
+              "constraint_intensity_score"
+            ],
+            "band_reason": "multi_dimensional_difficulty_high",
+            "quality_difficulty_note": "structurally_hard_candidate",
+            "final_candidate_score": 0.7035,
+            "total_penalty": 0.6667,
+            "recommended": true,
+            "needs_review": true
+          }
+        },
+        "score_trace": {
+          "source_fields": {
+            "candidate_type": "ordered_unit_group",
+            "group_size": 6,
+            "grouped_unit_count": 2,
+            "first_candidate_indices": [
+              0
+            ],
+            "last_candidate_indices": [
+              5
+            ],
+            "pairwise_constraint_count": 4,
+            "local_binding_count": 2,
+            "sequence_integrity": 0.4992,
+            "unique_opener_score": 0.2504,
+            "closing_signal_strength": 0.24,
+            "local_binding_strength": 0.35,
+            "normalization_reason": "merged_to_six:2",
+            "ordering_reason_trace": {
+              "ordering_reason": "ordered_unit_group_ready"
+            }
+          },
+          "aggregations": {
+            "readiness_formula": "0.25 * first_eligibility_score + 0.25 * last_eligibility_score + 0.30 * pairwise_constraint_score + 0.20 * local_binding_score",
+            "readiness_components": {
+              "first_component": 0.1657,
+              "last_component": 0.1645,
+              "pairwise_component": 0.3,
+              "local_binding_component": 0.14
+            },
+            "final_formula": "sentence_order_readiness_score - 0.25 * first_instability_penalty - 0.30 * last_instability_penalty - 0.20 * weak_constraint_penalty - 0.10 * over_merge_penalty",
+            "final_components": {
+              "readiness_component": 0.7702,
+              "first_instability_penalty_component": 0.0,
+              "last_instability_penalty_component": 0.0,
+              "weak_constraint_penalty_component": 0.0,
+              "over_merge_penalty_component": 0.0667,
+              "total_penalty": 0.6667
+            }
+          },
+          "decision": {
+            "recommended_reason": "six_unit_group_above_threshold",
+            "needs_review_reason": "readiness_high_but_order_risk_high",
+            "recommended_threshold": 0.56,
+            "review_readiness_threshold": 0.58,
+            "review_penalty_threshold": 0.24
+          }
+        }
+      },
+      "original_sentences": [
+        "???????",
+        "???????",
+        "???????",
+        "???????",
+        "???????",
+        "???????"
+      ]
+    },
+    "weak": {
+      "text": "???????\n???????\n???????\n???????\n???????\n???????",
+      "scoring": {
+        "task_family": "sentence_order",
+        "structure_scores": {
+          "first_eligibility_score": 0.4207,
+          "last_eligibility_score": 0.416,
+          "pairwise_constraint_score": 0.3797,
+          "local_binding_score": 0.14
+        },
+        "readiness_score": 0.3511,
+        "risk_penalties": {
+          "first_instability_penalty": 0.44,
+          "last_instability_penalty": 0.44,
+          "weak_constraint_penalty": 0.3096,
+          "over_merge_penalty": 0.0
+        },
+        "final_candidate_score": 0.0472,
+        "recommended": false,
+        "needs_review": false,
+        "difficulty_vector": {
+          "complexity_score": 0.3869,
+          "ambiguity_score": 0.4009,
+          "reasoning_depth_score": 0.3194,
+          "constraint_intensity_score": 0.2557
+        },
+        "difficulty_band_hint": "easy",
+        "difficulty_trace": {
+          "source_fields": {
+            "first_eligibility_score": 0.4207,
+            "last_eligibility_score": 0.416,
+            "pairwise_constraint_score": 0.3797,
+            "local_binding_score": 0.14,
+            "first_instability_penalty": 0.44,
+            "last_instability_penalty": 0.44,
+            "weak_constraint_penalty": 0.3096,
+            "over_merge_penalty": 0.0,
+            "group_size": 6,
+            "grouped_unit_count": 0,
+            "group_size_score": 1.0,
+            "grouped_unit_complexity": 0.0
+          },
+          "aggregations": {
+            "complexity_formula": "0.40 * pairwise_constraint_score + 0.25 * local_binding_score + 0.20 * group_size_score + 0.15 * grouped_unit_complexity",
+            "ambiguity_formula": "0.35 * first_instability_penalty + 0.35 * last_instability_penalty + 0.30 * weak_constraint_penalty",
+            "reasoning_depth_formula": "0.40 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.15 * last_eligibility_score",
+            "constraint_intensity_formula": "0.45 * pairwise_constraint_score + 0.30 * local_binding_score + 0.15 * first_eligibility_score + 0.10 * last_eligibility_score - 0.20 * weak_constraint_penalty",
+            "difficulty_vector": {
+              "complexity_score": 0.3869,
+              "ambiguity_score": 0.4009,
+              "reasoning_depth_score": 0.3194,
+              "constraint_intensity_score": 0.2557
+            }
+          },
+          "band_decision": {
+            "task_family": "sentence_order",
+            "average_difficulty": 0.3407,
+            "high_dimensions": [],
+            "medium_dimensions": [],
+            "core_hard_dimensions": [],
+            "band_reason": "overall_difficulty_low",
+            "quality_difficulty_note": "high_risk_but_not_high_difficulty",
+            "final_candidate_score": 0.0472,
+            "total_penalty": 1.0,
+            "recommended": false,
+            "needs_review": false
+          }
+        },
+        "score_trace": {
+          "source_fields": {
+            "candidate_type": "ordered_unit_group",
+            "group_size": 6,
+            "grouped_unit_count": 0,
+            "first_candidate_indices": [
+              0,
+              1,
+              2
+            ],
+            "last_candidate_indices": [
+              3,
+              4,
+              5
+            ],
+            "pairwise_constraint_count": 1,
+            "local_binding_count": 0,
+            "sequence_integrity": 0.4992,
+            "unique_opener_score": 0.2504,
+            "closing_signal_strength": 0.24,
+            "local_binding_strength": 0.35,
+            "normalization_reason": "raw_six_units",
+            "ordering_reason_trace": {
+              "ordering_reason": "ordering_constraints_too_weak"
+            }
+          },
+          "aggregations": {
+            "readiness_formula": "0.25 * first_eligibility_score + 0.25 * last_eligibility_score + 0.30 * pairwise_constraint_score + 0.20 * local_binding_score",
+            "readiness_components": {
+              "first_component": 0.1052,
+              "last_component": 0.104,
+              "pairwise_component": 0.1139,
+              "local_binding_component": 0.028
+            },
+            "final_formula": "sentence_order_readiness_score - 0.25 * first_instability_penalty - 0.30 * last_instability_penalty - 0.20 * weak_constraint_penalty - 0.10 * over_merge_penalty",
+            "final_components": {
+              "readiness_component": 0.3511,
+              "first_instability_penalty_component": 0.11,
+              "last_instability_penalty_component": 0.132,
+              "weak_constraint_penalty_component": 0.0619,
+              "over_merge_penalty_component": 0.0,
+              "total_penalty": 1.0
+            }
+          },
+          "decision": {
+            "recommended_reason": "sentence_order_candidate_below_threshold_or_incomplete",
+            "needs_review_reason": "",
+            "recommended_threshold": 0.56,
+            "review_readiness_threshold": 0.58,
+            "review_penalty_threshold": 0.24
+          }
+        }
+      },
+      "original_sentences": [
+        "???????",
+        "???????",
+        "???????",
+        "???????",
+        "???????",
+        "???????"
+      ]
+    }
+  }
+}

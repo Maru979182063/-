@@ -3,50 +3,229 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>行测题目制作 v0.8</title>
-    <link rel="stylesheet" href="/demo-static/styles.css?v=20260402f" />
+    <title>前端工作台 Demo</title>
+    <link rel="stylesheet" href="/demo-static/styles.css?v=20260408a" />
+    <style>
+      .screen-subtitle {
+        margin: -18px 0 28px;
+        color: var(--muted);
+        line-height: 1.75;
+        max-width: 920px;
+      }
+
+      .builder-note,
+      .status-banner {
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: #f7faff;
+        line-height: 1.7;
+      }
+
+      .builder-note {
+        color: var(--muted);
+      }
+
+      .status-banner[hidden] {
+        display: none !important;
+      }
+
+      .status-banner-error {
+        border-color: #f0c0c0;
+        background: #fff6f6;
+        color: #8c3535;
+      }
+
+      .status-banner-info {
+        border-color: #d4e4fb;
+        background: #f4f9ff;
+        color: #255f9a;
+      }
+
+      .builder-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .field-compact {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .field-compact span {
+        font-size: 14px;
+        font-weight: 700;
+        color: #30415e;
+      }
+
+      .field-help {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .status-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .signal-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid transparent;
+      }
+
+      .signal-chip-neutral {
+        background: #eef2f7;
+        color: #40516f;
+      }
+
+      .signal-chip-recommended {
+        background: #edf9f4;
+        color: #1d6c49;
+        border-color: #caeddc;
+      }
+
+      .signal-chip-hold {
+        background: #fff7db;
+        color: #8b6700;
+        border-color: #f4e1a0;
+      }
+
+      .signal-chip-weak {
+        background: #fff0f0;
+        color: #a13d3d;
+        border-color: #f0c0c0;
+      }
+
+      .signal-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .explain-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .explain-list li {
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #f7faff;
+        line-height: 1.7;
+      }
+
+      .inline-feedback {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .support-box {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .compact-pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.75;
+      }
+
+      .empty-state {
+        padding: 28px;
+        border: 1px dashed var(--line);
+        border-radius: 20px;
+        background: #fbfdff;
+        color: var(--muted);
+        text-align: center;
+        line-height: 1.8;
+      }
+
+      @media (max-width: 900px) {
+        .signal-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
   </head>
   <body>
     <div class="page-shell">
       <section id="builderScreen" class="screen active">
         <div class="hero-card">
-          <h1>行测题目制作 v0.8</h1>
+          <h1>前端工作台 Demo</h1>
+          <p class="screen-subtitle">
+            这一页只承担参数录入、主链提交、结果展示和评审动作承载。
+            不在前端定义题型规则，不在前端推导校验语义。
+          </p>
 
           <form id="generateForm" class="builder-form">
+            <div class="builder-note">
+              构建区本轮只发送后端真实消费字段：题型、业务子类、数量、难度、文本方向、材料结构、可选参考母题、可选材料偏好。
+            </div>
+
             <div class="builder-grid">
               <label class="field">
-                <span>当前支持题目</span>
+                <span>题型</span>
                 <select id="questionFocus" name="question_focus"></select>
               </label>
 
               <label class="field">
-                <span>二级分类</span>
+                <span>业务子类</span>
                 <select id="specialType" name="special_question_type"></select>
               </label>
 
               <label class="field">
-                <span>难度需求</span>
-                <select id="difficultyLevel" name="difficulty_level">
-                  <option value="简单">简单</option>
-                  <option value="中等" selected>中等</option>
-                  <option value="困难">困难</option>
-                </select>
+                <span>难度</span>
+                <select id="difficultyLevel" name="difficulty_level"></select>
               </label>
 
               <label class="field">
-                <span>文本风格方向</span>
+                <span>文本方向</span>
                 <select id="textDirection" name="text_direction"></select>
               </label>
 
               <label class="field">
-                <span>文段结构逻辑</span>
+                <span>材料结构</span>
                 <select id="materialStructure" name="material_structure"></select>
+              </label>
+
+              <label class="field">
+                <span>材料偏好</span>
+                <input
+                  id="preferredGenres"
+                  name="preferred_document_genres"
+                  type="text"
+                  placeholder="可选，逗号分隔，如：政策文, 科普文"
+                />
               </label>
             </div>
 
             <div class="count-card">
               <div class="count-head">
-                <span>生成条目数</span>
+                <span>生成数量</span>
                 <strong id="countValue">1</strong>
               </div>
               <input id="count" name="count" type="range" min="1" max="5" value="1" />
@@ -62,22 +241,24 @@
             <section class="reference-card">
               <div class="reference-card-head">
                 <div>
-                  <h2>参考题驱动生题</h2>
-                  <p>可选填写。你可以先把整道原题直接粘进“原题文段”，系统会先自动拆题回填，再按原题结构和风格检索文段制作相似题。</p>
+                  <h2>参考母题</h2>
+                  <p>
+                    可选填写。支持直接粘贴整道原题，再自动拆成材料、题干、选项、答案和解析，作为生成时的参考输入。
+                  </p>
                 </div>
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-                  <span class="reference-badge">V2 检索增强</span>
+                  <span class="reference-badge">可选输入</span>
                   <button id="sourceQuestionDetectBtn" type="button" class="secondary-btn">自动拆题并回填</button>
                 </div>
               </div>
 
-               <div class="reference-grid">
-                 <label class="reference-field reference-field-full">
-                   <span>原题文段</span>
-                   <textarea
-                      id="sourceQuestionPassage"
+              <div class="reference-grid">
+                <label class="reference-field reference-field-full">
+                  <span>原题全文</span>
+                  <textarea
+                    id="sourceQuestionPassage"
                     rows="6"
-                    placeholder="可直接粘贴整道原题原文。点击“自动拆题并回填”后，系统会自动拆成材料、题干、选项、答案、解析。"
+                    placeholder="可直接粘贴整道原题。点击“自动拆题并回填”后，系统会尝试拆成材料、题干、选项、答案、解析。"
                   ></textarea>
                 </label>
 
@@ -118,20 +299,23 @@
                   </select>
                 </label>
 
-                 <label class="reference-field reference-field-wide">
-                   <span>原题解析</span>
-                   <textarea
-                     id="sourceQuestionAnalysis"
+                <label class="reference-field reference-field-wide">
+                  <span>原题解析</span>
+                  <textarea
+                    id="sourceQuestionAnalysis"
                     rows="3"
-                    placeholder="可选。填写后会连同原题一起作为 few-shot 风格模板。"
-                   ></textarea>
-                 </label>
-               </div>
-               <div id="sourceQuestionParseStatus" class="reference-parse-status" hidden></div>
-             </section>
+                    placeholder="可选。填写后会和原题一起作为 few-shot 风格参考。"
+                  ></textarea>
+                </label>
+              </div>
+
+              <div id="sourceQuestionParseStatus" class="reference-parse-status" hidden></div>
+            </section>
+
+            <div id="builderError" class="status-banner status-banner-error" hidden></div>
 
             <div class="action-center">
-              <button id="generateBtn" type="submit" class="primary-btn">提交</button>
+              <button id="generateBtn" type="submit" class="primary-btn">提交生成</button>
             </div>
           </form>
         </div>
@@ -139,19 +323,25 @@
 
       <section id="loadingScreen" class="screen">
         <div class="loading-card">
-          <h1>行测题目制作 v0.8</h1>
+          <h1>前端工作台 Demo</h1>
+          <p class="screen-subtitle">
+            加载区只负责请求过程可见化、最小错误提示和成功后的结果切换。
+          </p>
+
           <div class="loading-layout">
             <div class="loading-left">
-              <h2>流程加载中</h2>
+              <h2>当前进度</h2>
               <div id="loadingSteps" class="step-list"></div>
             </div>
+
             <div class="loading-right">
               <div class="node-card">
-                <div class="node-title">当前运行节点展示</div>
-                <div id="loadingNode" class="node-text">等待开始...</div>
-                <p id="loadingNodeDesc" class="node-desc">系统将按既定流程完成出题、校验与审核。</p>
+                <div class="node-title">当前节点</div>
+                <div id="loadingNode" class="node-text">等待提交...</div>
+                <p id="loadingNodeDesc" class="node-desc">请求发出后，会在这里显示当前阶段和最小结果说明。</p>
               </div>
-              <button id="cancelLoadingBtn" type="button" class="ghost-btn">返回上一页</button>
+              <div id="loadingError" class="status-banner status-banner-error" hidden></div>
+              <button id="cancelLoadingBtn" type="button" class="ghost-btn">返回构建区</button>
             </div>
           </div>
         </div>
@@ -161,20 +351,22 @@
         <div class="result-shell">
           <div class="result-header">
             <div>
-              <h1>行测题目制作 v0.8</h1>
+              <h1>前端工作台 Demo</h1>
               <p id="resultBatchInfo">等待本次生成结果...</p>
             </div>
+
             <div class="result-header-actions">
-              <button id="backToBuilderBtn" type="button" class="ghost-btn">返回首页</button>
-              <button id="exportApprovedBtn" type="button" class="primary-btn">一键下载通过题目</button>
+              <button id="backToBuilderBtn" type="button" class="ghost-btn">返回构建区</button>
+              <button id="exportApprovedBtn" type="button" class="primary-btn">导出已通过题目</button>
             </div>
           </div>
 
+          <div id="resultSummary" class="status-strip"></div>
           <div id="resultList" class="result-list"></div>
         </div>
       </section>
     </div>
 
-    <script src="/demo-static/app_v2.js?v=20260402f"></script>
+    <script src="/demo-static/app_v2.js?v=20260408a"></script>
   </body>
 </html>

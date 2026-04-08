@@ -177,6 +177,15 @@ validator_contract:
     enforce_title_like: true
     enforce_material_fit: true
     enforce_option_diversity: true
+    min_final_candidate_score: 0.35
+    min_readiness_score: 0.45
+    max_total_penalty: 0.4
+    review_if_high_readiness_high_penalty: true
+    min_reasoning_depth_score: 0.45
+    max_ambiguity_score: 0.5
+    difficulty_band_allowed:
+    - medium
+    - hard
   extension_rules:
   - 正确标题必须包含核心对象或其稳定上位替代表达
   - 正确标题不得只是过程链复述；优先命名式/判断式标题

@@ -2,13 +2,21 @@ from collections import Counter
 
 from sqlalchemy import select
 
+from app.core.enums import MaterialStatus, ReleaseChannel, ReviewStatus
+from app.core.exceptions import ConflictError
 from app.domain.services._common import ServiceBase
 from app.infra.db.orm.article import ArticleORM
 from app.infra.db.orm.material_span import MaterialSpanORM
+from app.infra.db.orm.review import TaggingReviewORM
 from app.rules.family_config import get_family_names
 
 
 class PoolService(ServiceBase):
+    SERVABLE_REVIEW_STATUSES = {
+        ReviewStatus.AUTO_TAGGED.value,
+        ReviewStatus.REVIEW_CONFIRMED.value,
+    }
+
     def __init__(self, session) -> None:
         super().__init__(session)
         family_names = get_family_names()
@@ -127,9 +135,25 @@ class PoolService(ServiceBase):
         }
 
     def promote(self, material_id: str, status: str, release_channel: str):
+        self._ensure_stable_promotion_allowed(
+            material_id=material_id,
+            status=status,
+            release_channel=release_channel,
+        )
         material = self.material_repo.update_status(material_id, status=status, release_channel=release_channel)
         self.audit_repo.log("material", material_id, "state_change", {"status": status, "release_channel": release_channel})
         return material
+
+    def _ensure_stable_promotion_allowed(self, *, material_id: str, status: str, release_channel: str) -> None:
+        if status != MaterialStatus.PROMOTED.value or release_channel != ReleaseChannel.STABLE.value:
+            return
+        review_status = self.session.scalar(
+            select(TaggingReviewORM.status).where(TaggingReviewORM.material_id == material_id)
+        )
+        if review_status not in self.SERVABLE_REVIEW_STATUSES:
+            raise ConflictError(
+                "Cannot promote material into the stable pool before review is completed."
+            )
 
     def get_pool_stats(self, *, status: str | None = None, release_channel: str | None = None) -> dict:
         articles = list(self.session.scalars(select(ArticleORM)))

@@ -156,6 +156,15 @@ validator_contract:
     require_axis_coverage: true
     disallow_detail_as_answer: true
     disallow_example_as_answer: true
+    min_final_candidate_score: 0.3
+    min_readiness_score: 0.4
+    max_total_penalty: 0.45
+    review_if_high_readiness_high_penalty: true
+    min_reasoning_depth_score: 0.4
+    max_ambiguity_score: 0.58
+    difficulty_band_allowed:
+    - medium
+    - hard
   extension_rules:
   - 正确项必须说明全文围绕的中心对象以及文章在说明/解释/论证什么。
   - 至少1个错误项与正确项共享对象域，但在主轴、抽象层级或重心上失效。

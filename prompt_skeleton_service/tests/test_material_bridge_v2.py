@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 import types
+import sqlite3
+import tempfile
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
@@ -217,7 +219,136 @@ class MaterialBridgeV2UnitTest(TestCase):
             },
             query_terms=[],
             target_length=None,
+            preference_profile=None,
         )
 
         self.assertGreater(result["score"], -999.0)
         self.assertIn("sentence_order_unit_count_penalty", result["reason"])
+
+    def test_search_candidates_filters_review_pending_remote_items(self) -> None:
+        self.service._post_v2_search = Mock(
+            return_value={
+                "items": [
+                    {"candidate_id": "mat-pending", "review_status": "review_pending"},
+                    {"candidate_id": "mat-ok", "review_status": "auto_tagged"},
+                ]
+            }
+        )
+
+        items = self.service._search_candidates(
+            business_family_id="title_selection",
+            question_card_id="question.title_selection.standard_v1",
+            article_ids=[],
+            article_limit=12,
+            candidate_limit=8,
+            min_card_score=0.55,
+            business_card_ids=[],
+            preferred_business_card_ids=[],
+            query_terms=[],
+            target_length=None,
+            length_tolerance=120,
+            structure_constraints={},
+            enable_anchor_adaptation=True,
+        )
+
+        self.assertEqual(items, [{"candidate_id": "mat-ok", "review_status": "auto_tagged"}])
+
+    def test_local_sqlite_fallback_excludes_review_pending_materials(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = f"{temp_dir}\\bridge_fallback.db"
+            connection = sqlite3.connect(db_path)
+            try:
+                cursor = connection.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE material_spans (
+                        id TEXT PRIMARY KEY,
+                        article_id TEXT,
+                        quality_score REAL,
+                        usage_count INTEGER,
+                        last_used_at TEXT,
+                        v2_business_family_ids TEXT,
+                        v2_index_payload TEXT,
+                        is_primary INTEGER,
+                        v2_index_version TEXT,
+                        status TEXT,
+                        release_channel TEXT,
+                        updated_at TEXT
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE tagging_reviews (
+                        material_id TEXT PRIMARY KEY,
+                        status TEXT,
+                        updated_at TEXT
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO material_spans
+                    (id, article_id, quality_score, usage_count, last_used_at, v2_business_family_ids, v2_index_payload, is_primary, v2_index_version, status, release_channel, updated_at)
+                    VALUES
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "mat-pending",
+                        "article-1",
+                        0.9,
+                        0,
+                        None,
+                        '["title_selection"]',
+                        '{"title_selection": {"candidate_id": "mat-pending", "article_id": "article-1", "text": "pending"}}',
+                        1,
+                        "v2",
+                        "promoted",
+                        "stable",
+                        "2026-04-08T00:00:00",
+                        "mat-ok",
+                        "article-2",
+                        0.8,
+                        0,
+                        None,
+                        '["title_selection"]',
+                        '{"title_selection": {"candidate_id": "mat-ok", "article_id": "article-2", "text": "ok"}}',
+                        1,
+                        "v2",
+                        "promoted",
+                        "stable",
+                        "2026-04-08T00:00:00",
+                    ),
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO tagging_reviews (material_id, status, updated_at)
+                    VALUES (?, ?, ?), (?, ?, ?)
+                    """,
+                    (
+                        "mat-pending",
+                        "review_pending",
+                        "2026-04-08T00:00:00",
+                        "mat-ok",
+                        "auto_tagged",
+                        "2026-04-08T00:00:00",
+                    ),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            with patch.object(self.service, "_fallback_db_path", return_value=bridge_module.Path(db_path)):
+                items = self.service._search_candidates_local_sqlite(
+                    {
+                        "business_family_id": "title_selection",
+                        "candidate_limit": 4,
+                        "article_ids": [],
+                        "business_card_ids": [],
+                        "query_terms": [],
+                    }
+                )
+
+        self.assertEqual([item["candidate_id"] for item in items], ["mat-ok"])
+        self.assertEqual(items[0]["review_status"], "auto_tagged")

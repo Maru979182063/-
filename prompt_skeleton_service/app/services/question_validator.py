@@ -57,6 +57,206 @@ class QuestionValidatorService:
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _coerce_float(value: Any) -> float | None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _lookup_contract_value(
+        sources: list[tuple[dict[str, Any] | None, str]],
+        field_names: tuple[str, ...],
+    ) -> tuple[Any, str]:
+        for payload, source in sources:
+            if not isinstance(payload, dict):
+                continue
+            for field_name in field_names:
+                if payload.get(field_name) not in (None, ""):
+                    return payload.get(field_name), source
+        return None, ""
+
+    @staticmethod
+    def _read_nested_value(payload: dict[str, Any] | None, path: tuple[str, ...]) -> Any:
+        current: Any = payload or {}
+        for key in path:
+            if not isinstance(current, dict):
+                return None
+            current = current.get(key)
+        return current
+
+    @staticmethod
+    def _normalize_band_allowed(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            bands = [part.strip().lower() for part in value.replace("|", ",").split(",") if part.strip()]
+            return [band for band in bands if band in {"easy", "medium", "hard"}]
+        if isinstance(value, (list, tuple, set)):
+            bands = [str(part).strip().lower() for part in value if str(part).strip()]
+            return [band for band in bands if band in {"easy", "medium", "hard"}]
+        return []
+
+    def _task_family_for_context(self, context: dict[str, Any]) -> str:
+        question_type = str(context.get("question_type") or "").strip()
+        business_subtype = str(context.get("business_subtype") or "").strip()
+        if question_type in {"main_idea", "sentence_fill", "sentence_order"}:
+            return question_type
+        if business_subtype == "title_selection":
+            return "main_idea"
+        return question_type
+
+    def _extract_material_scoring(self, context: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        material_source = context.get("material_source") or {}
+        if not isinstance(material_source, dict):
+            return {}, "missing"
+        scoring = material_source.get("scoring")
+        if isinstance(scoring, dict) and scoring:
+            return dict(scoring), "material_source.scoring"
+        selected_task_scoring = material_source.get("selected_task_scoring")
+        if isinstance(selected_task_scoring, dict) and selected_task_scoring:
+            return dict(selected_task_scoring), "material_source.selected_task_scoring"
+        task_scoring = material_source.get("task_scoring")
+        task_family = self._task_family_for_context(context)
+        if isinstance(task_scoring, dict) and isinstance(task_scoring.get(task_family), dict):
+            return dict(task_scoring.get(task_family) or {}), f"material_source.task_scoring.{task_family}"
+        return {}, "missing"
+
+    def _material_scoring_compatibility_profile(self, *, task_family: str, business_subtype: str | None = None) -> dict[str, Any]:
+        if task_family == "main_idea" and business_subtype == "title_selection":
+            return {
+                "min_final_candidate_score": 0.35,
+                "min_readiness_score": 0.45,
+                "max_total_penalty": 0.40,
+                "review_if_high_readiness_high_penalty": True,
+                "min_reasoning_depth_score": 0.45,
+                "max_ambiguity_score": 0.50,
+            }
+        if task_family == "main_idea":
+            return {
+                "min_final_candidate_score": 0.30,
+                "min_readiness_score": 0.40,
+                "max_total_penalty": 0.45,
+                "review_if_high_readiness_high_penalty": True,
+                "min_reasoning_depth_score": 0.40,
+                "max_ambiguity_score": 0.58,
+            }
+        if task_family == "sentence_fill":
+            return {
+                "min_final_candidate_score": 0.20,
+                "min_readiness_score": 0.35,
+                "max_total_penalty": 0.90,
+                "review_if_high_readiness_high_penalty": True,
+                "min_reasoning_depth_score": 0.45,
+                "min_constraint_intensity_score": 0.40,
+                "max_role_ambiguity_penalty": 0.75,
+                "max_standalone_penalty": 0.65,
+            }
+        if task_family == "sentence_order":
+            return {
+                "min_final_candidate_score": 0.25,
+                "min_readiness_score": 0.40,
+                "max_total_penalty": 0.85,
+                "review_if_high_readiness_high_penalty": True,
+                "min_complexity_score": 0.45,
+                "min_constraint_intensity_score": 0.35,
+                "max_first_instability_penalty": 0.35,
+                "max_last_instability_penalty": 0.35,
+                "max_weak_constraint_penalty": 0.30,
+            }
+        return {}
+
+    def _resolve_scoring_contract_value(
+        self,
+        *,
+        sources: list[tuple[dict[str, Any] | None, str]],
+        field_names: tuple[str, ...],
+        compatibility: dict[str, Any],
+        compatibility_key: str,
+    ) -> tuple[Any, str]:
+        value, source = self._lookup_contract_value(sources, field_names)
+        if value not in (None, ""):
+            return value, source
+        if compatibility_key in compatibility:
+            return compatibility.get(compatibility_key), "compatibility"
+        return None, "compatibility_disabled"
+
+    def _apply_scoring_threshold_check(
+        self,
+        *,
+        checks: dict[str, Any],
+        errors: list[str],
+        warnings: list[str],
+        check_name: str,
+        actual: float,
+        threshold: float | None,
+        source: str,
+        comparator: str,
+        reason: str,
+        error_message: str,
+        warn_only_on_compatibility: bool = True,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        active = threshold is not None
+        if comparator == "min":
+            passed = actual >= float(threshold or 0.0)
+            payload = {
+                "actual": round(actual, 4),
+                "threshold": round(float(threshold or 0.0), 4) if threshold is not None else None,
+                "reason": reason,
+            }
+        else:
+            passed = actual <= float(threshold or 0.0)
+            payload = {
+                "actual": round(actual, 4),
+                "threshold": round(float(threshold or 0.0), 4) if threshold is not None else None,
+                "reason": reason,
+            }
+        if extra:
+            payload.update(extra)
+        checks[check_name] = self._build_contract_gated_check(
+            active=active,
+            passed=passed if active else True,
+            source=source,
+            **payload,
+        )
+        if not active or passed:
+            return
+        if warn_only_on_compatibility and source == "compatibility":
+            warnings.append(error_message)
+        else:
+            self._append_unique_error(errors, error_message)
+
+    def _apply_scoring_band_check(
+        self,
+        *,
+        checks: dict[str, Any],
+        errors: list[str],
+        warnings: list[str],
+        check_name: str,
+        difficulty_band: str,
+        allowed_bands: list[str],
+        source: str,
+        error_message: str,
+    ) -> None:
+        active = bool(allowed_bands)
+        passed = difficulty_band in allowed_bands if active else True
+        checks[check_name] = self._build_contract_gated_check(
+            active=active,
+            passed=passed if active else True,
+            source=source,
+            difficulty_band=difficulty_band,
+            allowed_range=allowed_bands,
+            reason="difficulty_band_allowed",
+        )
+        if not active or passed:
+            return
+        if source == "compatibility":
+            warnings.append(error_message)
+        else:
+            self._append_unique_error(errors, error_message)
+
     def _resolve_sentence_order_units_for_sequence(
         self,
         *,
@@ -1275,6 +1475,204 @@ class QuestionValidatorService:
             if enforce_option_diversity and fragment_heavy:
                 warnings.append("title_selection options are overly uniform and mostly look like fragment extraction rather than layered title design.")
 
+        validator_contract = context.get("validator_contract") or {}
+        title_selection_contract = validator_contract.get("title_selection") if isinstance(validator_contract, dict) else None
+        material_constraints_contract = validator_contract.get("material_constraints") if isinstance(validator_contract, dict) else None
+        main_idea_contract = (
+            validator_contract.get("main_idea")
+            if isinstance(validator_contract, dict) and isinstance(validator_contract.get("main_idea"), dict)
+            else None
+        )
+        scoring, scoring_source = self._extract_material_scoring(context)
+        task_scoring_available = bool(scoring)
+        final_candidate_score = self._coerce_float(scoring.get("final_candidate_score")) or 0.0
+        readiness_score = self._coerce_float(scoring.get("readiness_score")) or 0.0
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        total_penalty = round(sum(float(value or 0.0) for value in risk_penalties.values()), 4)
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        difficulty_band = str(scoring.get("difficulty_band_hint") or "")
+        checks["main_idea_material_scoring_available"] = {
+            "passed": task_scoring_available,
+            "source": scoring_source,
+            "task_family": scoring.get("task_family"),
+            "recommended": bool(scoring.get("recommended")) if task_scoring_available else None,
+            "needs_review": bool(scoring.get("needs_review")) if task_scoring_available else None,
+        }
+        if not task_scoring_available:
+            warnings.append("material scoring payload is missing, so validator could not enforce main_idea scoring controls.")
+        else:
+            scoring_sources = [
+                (title_selection_contract if isinstance(title_selection_contract, dict) else None, "validator_contract.title_selection"),
+                (main_idea_contract, "validator_contract.main_idea"),
+                (
+                    validator_contract.get("center_understanding")
+                    if isinstance(validator_contract, dict) and isinstance(validator_contract.get("center_understanding"), dict)
+                    else None,
+                    "validator_contract.center_understanding",
+                ),
+                (material_constraints_contract if isinstance(material_constraints_contract, dict) else None, "validator_contract.material_constraints"),
+                (validator_contract if isinstance(validator_contract, dict) else None, "validator_contract"),
+            ]
+            compatibility = self._material_scoring_compatibility_profile(
+                task_family="main_idea",
+                business_subtype=str(business_subtype or ""),
+            )
+            min_final_raw, min_final_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_final_candidate_score",),
+                compatibility=compatibility,
+                compatibility_key="min_final_candidate_score",
+            )
+            min_readiness_raw, min_readiness_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_readiness_score",),
+                compatibility=compatibility,
+                compatibility_key="min_readiness_score",
+            )
+            max_total_penalty_raw, max_total_penalty_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_total_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_total_penalty",
+            )
+            review_signal_raw, review_signal_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("review_if_high_readiness_high_penalty",),
+                compatibility=compatibility,
+                compatibility_key="review_if_high_readiness_high_penalty",
+            )
+            min_reasoning_raw, min_reasoning_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_reasoning_depth_score",),
+                compatibility=compatibility,
+                compatibility_key="min_reasoning_depth_score",
+            )
+            max_ambiguity_raw, max_ambiguity_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_ambiguity_score",),
+                compatibility=compatibility,
+                compatibility_key="max_ambiguity_score",
+            )
+            difficulty_band_allowed_raw, difficulty_band_allowed_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("difficulty_band_allowed",),
+                compatibility=compatibility,
+                compatibility_key="difficulty_band_allowed",
+            )
+            reasoning_depth_score = self._coerce_float(difficulty_vector.get("reasoning_depth_score")) or 0.0
+            ambiguity_score = self._coerce_float(difficulty_vector.get("ambiguity_score")) or 0.0
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="main_idea_final_candidate_score",
+                actual=final_candidate_score,
+                threshold=self._coerce_float(min_final_raw),
+                source=min_final_source,
+                comparator="min",
+                reason="min_final_candidate_score",
+                error_message="main_idea material final_candidate_score is below the accepted floor.",
+                extra={"difficulty_band": difficulty_band, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="main_idea_readiness_score",
+                actual=readiness_score,
+                threshold=self._coerce_float(min_readiness_raw),
+                source=min_readiness_source,
+                comparator="min",
+                reason="min_readiness_score",
+                error_message="main_idea material readiness_score is below the accepted floor.",
+                extra={"difficulty_band": difficulty_band, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="main_idea_total_penalty",
+                actual=total_penalty,
+                threshold=self._coerce_float(max_total_penalty_raw),
+                source=max_total_penalty_source,
+                comparator="max",
+                reason="max_total_penalty",
+                error_message="main_idea material total penalty is higher than the allowed range.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="main_idea_reasoning_depth",
+                actual=reasoning_depth_score,
+                threshold=self._coerce_float(min_reasoning_raw),
+                source=min_reasoning_source,
+                comparator="min",
+                reason="min_reasoning_depth_score",
+                error_message="main_idea material reasoning depth is lower than the target requirement.",
+                extra={"difficulty_band": difficulty_band, "difficulty_vector": difficulty_vector, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="main_idea_ambiguity",
+                actual=ambiguity_score,
+                threshold=self._coerce_float(max_ambiguity_raw),
+                source=max_ambiguity_source,
+                comparator="max",
+                reason="max_ambiguity_score",
+                error_message="main_idea material ambiguity is higher than the accepted range.",
+                extra={"difficulty_band": difficulty_band, "difficulty_vector": difficulty_vector, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_band_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="main_idea_difficulty_band",
+                difficulty_band=difficulty_band,
+                allowed_bands=self._normalize_band_allowed(difficulty_band_allowed_raw),
+                source=difficulty_band_allowed_source,
+                error_message="main_idea material difficulty band is outside the allowed range.",
+            )
+            review_signal_active = bool(
+                review_signal_raw is True
+                or str(review_signal_raw).strip().lower() in {"true", "1", "yes", "on"}
+            )
+            review_penalty_threshold = self._coerce_float(max_total_penalty_raw)
+            if review_penalty_threshold is None:
+                review_penalty_threshold = 0.40
+            review_readiness_threshold = self._coerce_float(min_readiness_raw)
+            if review_readiness_threshold is None:
+                review_readiness_threshold = 0.45
+            review_triggered = bool(
+                review_signal_active
+                and readiness_score >= review_readiness_threshold
+                and total_penalty >= review_penalty_threshold
+            )
+            checks["main_idea_review_like_risk"] = self._build_contract_gated_check(
+                active=review_signal_active,
+                passed=not review_triggered,
+                source=review_signal_source,
+                actual={
+                    "readiness_score": round(readiness_score, 4),
+                    "total_penalty": total_penalty,
+                    "difficulty_band": difficulty_band,
+                },
+                threshold={
+                    "readiness_score": round(review_readiness_threshold, 4),
+                    "total_penalty": round(review_penalty_threshold, 4),
+                },
+                reason=(
+                    "high_risk_but_not_high_difficulty"
+                    if difficulty_band != "hard" and total_penalty >= review_penalty_threshold
+                    else "high_readiness_high_penalty"
+                ),
+            )
+            if review_triggered:
+                warnings.append("main_idea material is structurally usable, but high readiness is paired with elevated penalty risk.")
+
         center_constraints = self._extract_main_idea_constraints(context)
         center_contract = (
             context.get("validator_contract", {}).get("center_understanding")
@@ -1708,6 +2106,248 @@ class QuestionValidatorService:
             if not unique_strength_ok:
                 self._append_unique_error(errors, "ordering_chain_incomplete")
 
+        scoring, scoring_source = self._extract_material_scoring(context)
+        task_scoring_available = bool(scoring)
+        final_candidate_score = self._coerce_float(scoring.get("final_candidate_score")) or 0.0
+        readiness_score = self._coerce_float(scoring.get("readiness_score")) or 0.0
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        total_penalty = round(sum(float(value or 0.0) for value in risk_penalties.values()), 4)
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        difficulty_band = str(scoring.get("difficulty_band_hint") or "")
+        checks["sentence_order_material_scoring_available"] = {
+            "passed": task_scoring_available,
+            "source": scoring_source,
+            "task_family": scoring.get("task_family"),
+            "recommended": bool(scoring.get("recommended")) if task_scoring_available else None,
+            "needs_review": bool(scoring.get("needs_review")) if task_scoring_available else None,
+        }
+        if not task_scoring_available:
+            warnings.append("material scoring payload is missing, so validator could not enforce sentence_order scoring controls.")
+        else:
+            scoring_sources = [
+                (sentence_order_contract if isinstance(sentence_order_contract, dict) else None, "validator_contract.sentence_order"),
+                (structure_contract if isinstance(structure_contract, dict) else None, "validator_contract.structure_constraints"),
+                (thresholds_contract if isinstance(thresholds_contract, dict) else None, "validator_contract.thresholds"),
+                (validator_contract if isinstance(validator_contract, dict) else None, "validator_contract"),
+            ]
+            compatibility = self._material_scoring_compatibility_profile(task_family="sentence_order")
+            min_final_raw, min_final_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_final_candidate_score",),
+                compatibility=compatibility,
+                compatibility_key="min_final_candidate_score",
+            )
+            min_readiness_raw, min_readiness_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_readiness_score",),
+                compatibility=compatibility,
+                compatibility_key="min_readiness_score",
+            )
+            max_total_penalty_raw, max_total_penalty_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_total_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_total_penalty",
+            )
+            review_signal_raw, review_signal_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("review_if_high_readiness_high_penalty",),
+                compatibility=compatibility,
+                compatibility_key="review_if_high_readiness_high_penalty",
+            )
+            min_complexity_raw, min_complexity_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_complexity_score",),
+                compatibility=compatibility,
+                compatibility_key="min_complexity_score",
+            )
+            min_constraint_raw, min_constraint_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_constraint_intensity_score",),
+                compatibility=compatibility,
+                compatibility_key="min_constraint_intensity_score",
+            )
+            max_first_instability_raw, max_first_instability_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_first_instability_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_first_instability_penalty",
+            )
+            max_last_instability_raw, max_last_instability_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_last_instability_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_last_instability_penalty",
+            )
+            max_weak_constraint_raw, max_weak_constraint_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_weak_constraint_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_weak_constraint_penalty",
+            )
+            difficulty_band_allowed_raw, difficulty_band_allowed_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("difficulty_band_allowed",),
+                compatibility=compatibility,
+                compatibility_key="difficulty_band_allowed",
+            )
+            complexity_score = self._coerce_float(difficulty_vector.get("complexity_score")) or 0.0
+            constraint_intensity_score = self._coerce_float(difficulty_vector.get("constraint_intensity_score")) or 0.0
+            first_instability_penalty = self._coerce_float(risk_penalties.get("first_instability_penalty")) or 0.0
+            last_instability_penalty = self._coerce_float(risk_penalties.get("last_instability_penalty")) or 0.0
+            weak_constraint_penalty = self._coerce_float(risk_penalties.get("weak_constraint_penalty")) or 0.0
+
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_final_candidate_score",
+                actual=final_candidate_score,
+                threshold=self._coerce_float(min_final_raw),
+                source=min_final_source,
+                comparator="min",
+                reason="min_final_candidate_score",
+                error_message="sentence_order material final_candidate_score is below the accepted floor.",
+                extra={"difficulty_band": difficulty_band, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_readiness_score",
+                actual=readiness_score,
+                threshold=self._coerce_float(min_readiness_raw),
+                source=min_readiness_source,
+                comparator="min",
+                reason="min_readiness_score",
+                error_message="sentence_order material readiness_score is below the accepted floor.",
+                extra={"difficulty_band": difficulty_band, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_total_penalty",
+                actual=total_penalty,
+                threshold=self._coerce_float(max_total_penalty_raw),
+                source=max_total_penalty_source,
+                comparator="max",
+                reason="max_total_penalty",
+                error_message="sentence_order material total penalty is higher than the allowed range.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_complexity",
+                actual=complexity_score,
+                threshold=self._coerce_float(min_complexity_raw),
+                source=min_complexity_source,
+                comparator="min",
+                reason="min_complexity_score",
+                error_message="sentence_order material complexity is lower than the target requirement.",
+                extra={"difficulty_band": difficulty_band, "difficulty_vector": difficulty_vector, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_constraint_intensity",
+                actual=constraint_intensity_score,
+                threshold=self._coerce_float(min_constraint_raw),
+                source=min_constraint_source,
+                comparator="min",
+                reason="min_constraint_intensity_score",
+                error_message="sentence_order material constraint intensity is lower than the target requirement.",
+                extra={"difficulty_band": difficulty_band, "difficulty_vector": difficulty_vector, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_first_instability",
+                actual=first_instability_penalty,
+                threshold=self._coerce_float(max_first_instability_raw),
+                source=max_first_instability_source,
+                comparator="max",
+                reason="max_first_instability_penalty",
+                error_message="sentence_order material first-instability penalty is too high.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_last_instability",
+                actual=last_instability_penalty,
+                threshold=self._coerce_float(max_last_instability_raw),
+                source=max_last_instability_source,
+                comparator="max",
+                reason="max_last_instability_penalty",
+                error_message="sentence_order material last-instability penalty is too high.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_weak_constraint",
+                actual=weak_constraint_penalty,
+                threshold=self._coerce_float(max_weak_constraint_raw),
+                source=max_weak_constraint_source,
+                comparator="max",
+                reason="max_weak_constraint_penalty",
+                error_message="sentence_order material weak-constraint penalty is too high.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_band_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_order_difficulty_band",
+                difficulty_band=difficulty_band,
+                allowed_bands=self._normalize_band_allowed(difficulty_band_allowed_raw),
+                source=difficulty_band_allowed_source,
+                error_message="sentence_order material difficulty band is outside the allowed range.",
+            )
+            review_signal_active = bool(
+                review_signal_raw is True
+                or str(review_signal_raw).strip().lower() in {"true", "1", "yes", "on"}
+            )
+            review_penalty_threshold = self._coerce_float(max_total_penalty_raw)
+            if review_penalty_threshold is None:
+                review_penalty_threshold = 0.55
+            review_readiness_threshold = self._coerce_float(min_readiness_raw)
+            if review_readiness_threshold is None:
+                review_readiness_threshold = 0.50
+            review_triggered = bool(
+                review_signal_active
+                and readiness_score >= review_readiness_threshold
+                and total_penalty >= review_penalty_threshold
+            )
+            checks["sentence_order_review_like_risk"] = self._build_contract_gated_check(
+                active=review_signal_active,
+                passed=not review_triggered,
+                source=review_signal_source,
+                actual={
+                    "readiness_score": round(readiness_score, 4),
+                    "total_penalty": total_penalty,
+                    "difficulty_band": difficulty_band,
+                },
+                threshold={
+                    "readiness_score": round(review_readiness_threshold, 4),
+                    "total_penalty": round(review_penalty_threshold, 4),
+                },
+                reason=(
+                    "high_risk_but_not_high_difficulty"
+                    if difficulty_band != "hard" and total_penalty >= review_penalty_threshold
+                    else "high_readiness_high_penalty"
+                ),
+            )
+            if review_triggered:
+                warnings.append("sentence_order material is structurally usable, but merge/instability risk is elevated.")
+
         legal_head_required = bool(
             isinstance(sentence_order_contract, dict) and sentence_order_contract.get("require_legal_head")
         )
@@ -1934,6 +2574,230 @@ class QuestionValidatorService:
             errors.append("sentence_fill material does not show an obvious blank marker.")
         if not has_fill_prompt:
             warnings.append("sentence_fill stem does not look like a standard fill-in-the-blank prompt.")
+
+        validator_contract = context.get("validator_contract") or {}
+        sentence_fill_contract = validator_contract.get("sentence_fill") if isinstance(validator_contract, dict) else None
+        structure_contract = validator_contract.get("structure_constraints") if isinstance(validator_contract, dict) else None
+        scoring, scoring_source = self._extract_material_scoring(context)
+        task_scoring_available = bool(scoring)
+        final_candidate_score = self._coerce_float(scoring.get("final_candidate_score")) or 0.0
+        readiness_score = self._coerce_float(scoring.get("readiness_score")) or 0.0
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        total_penalty = round(sum(float(value or 0.0) for value in risk_penalties.values()), 4)
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        difficulty_band = str(scoring.get("difficulty_band_hint") or "")
+        checks["sentence_fill_material_scoring_available"] = {
+            "passed": task_scoring_available,
+            "source": scoring_source,
+            "task_family": scoring.get("task_family"),
+            "recommended": bool(scoring.get("recommended")) if task_scoring_available else None,
+            "needs_review": bool(scoring.get("needs_review")) if task_scoring_available else None,
+        }
+        if not task_scoring_available:
+            warnings.append("material scoring payload is missing, so validator could not enforce sentence_fill scoring controls.")
+        else:
+            scoring_sources = [
+                (sentence_fill_contract if isinstance(sentence_fill_contract, dict) else None, "validator_contract.sentence_fill"),
+                (structure_contract if isinstance(structure_contract, dict) else None, "validator_contract.structure_constraints"),
+                (validator_contract if isinstance(validator_contract, dict) else None, "validator_contract"),
+            ]
+            compatibility = self._material_scoring_compatibility_profile(task_family="sentence_fill")
+            min_final_raw, min_final_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_final_candidate_score",),
+                compatibility=compatibility,
+                compatibility_key="min_final_candidate_score",
+            )
+            min_readiness_raw, min_readiness_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_readiness_score",),
+                compatibility=compatibility,
+                compatibility_key="min_readiness_score",
+            )
+            max_total_penalty_raw, max_total_penalty_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_total_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_total_penalty",
+            )
+            review_signal_raw, review_signal_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("review_if_high_readiness_high_penalty",),
+                compatibility=compatibility,
+                compatibility_key="review_if_high_readiness_high_penalty",
+            )
+            min_reasoning_raw, min_reasoning_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_reasoning_depth_score",),
+                compatibility=compatibility,
+                compatibility_key="min_reasoning_depth_score",
+            )
+            min_constraint_raw, min_constraint_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("min_constraint_intensity_score",),
+                compatibility=compatibility,
+                compatibility_key="min_constraint_intensity_score",
+            )
+            max_role_ambiguity_raw, max_role_ambiguity_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_role_ambiguity_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_role_ambiguity_penalty",
+            )
+            max_standalone_raw, max_standalone_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("max_standalone_penalty",),
+                compatibility=compatibility,
+                compatibility_key="max_standalone_penalty",
+            )
+            difficulty_band_allowed_raw, difficulty_band_allowed_source = self._resolve_scoring_contract_value(
+                sources=scoring_sources,
+                field_names=("difficulty_band_allowed",),
+                compatibility=compatibility,
+                compatibility_key="difficulty_band_allowed",
+            )
+            reasoning_depth_score = self._coerce_float(difficulty_vector.get("reasoning_depth_score")) or 0.0
+            constraint_intensity_score = self._coerce_float(difficulty_vector.get("constraint_intensity_score")) or 0.0
+            role_ambiguity_penalty = self._coerce_float(risk_penalties.get("role_ambiguity_penalty")) or 0.0
+            standalone_penalty = self._coerce_float(risk_penalties.get("standalone_penalty")) or 0.0
+
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_final_candidate_score",
+                actual=final_candidate_score,
+                threshold=self._coerce_float(min_final_raw),
+                source=min_final_source,
+                comparator="min",
+                reason="min_final_candidate_score",
+                error_message="sentence_fill material final_candidate_score is below the accepted floor.",
+                extra={"difficulty_band": difficulty_band, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_readiness_score",
+                actual=readiness_score,
+                threshold=self._coerce_float(min_readiness_raw),
+                source=min_readiness_source,
+                comparator="min",
+                reason="min_readiness_score",
+                error_message="sentence_fill material readiness_score is below the accepted floor.",
+                extra={"difficulty_band": difficulty_band, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_total_penalty",
+                actual=total_penalty,
+                threshold=self._coerce_float(max_total_penalty_raw),
+                source=max_total_penalty_source,
+                comparator="max",
+                reason="max_total_penalty",
+                error_message="sentence_fill material total penalty is higher than the allowed range.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_reasoning_depth",
+                actual=reasoning_depth_score,
+                threshold=self._coerce_float(min_reasoning_raw),
+                source=min_reasoning_source,
+                comparator="min",
+                reason="min_reasoning_depth_score",
+                error_message="sentence_fill material reasoning depth is lower than the target requirement.",
+                extra={"difficulty_band": difficulty_band, "difficulty_vector": difficulty_vector, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_constraint_intensity",
+                actual=constraint_intensity_score,
+                threshold=self._coerce_float(min_constraint_raw),
+                source=min_constraint_source,
+                comparator="min",
+                reason="min_constraint_intensity_score",
+                error_message="sentence_fill material constraint intensity is lower than the target requirement.",
+                extra={"difficulty_band": difficulty_band, "difficulty_vector": difficulty_vector, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_role_ambiguity",
+                actual=role_ambiguity_penalty,
+                threshold=self._coerce_float(max_role_ambiguity_raw),
+                source=max_role_ambiguity_source,
+                comparator="max",
+                reason="max_role_ambiguity_penalty",
+                error_message="sentence_fill material role ambiguity penalty is too high.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_threshold_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_standalone_penalty",
+                actual=standalone_penalty,
+                threshold=self._coerce_float(max_standalone_raw),
+                source=max_standalone_source,
+                comparator="max",
+                reason="max_standalone_penalty",
+                error_message="sentence_fill material standalone penalty is too high.",
+                extra={"difficulty_band": difficulty_band, "risk_penalties": risk_penalties, "scoring_source": scoring_source},
+            )
+            self._apply_scoring_band_check(
+                checks=checks,
+                errors=errors,
+                warnings=warnings,
+                check_name="sentence_fill_difficulty_band",
+                difficulty_band=difficulty_band,
+                allowed_bands=self._normalize_band_allowed(difficulty_band_allowed_raw),
+                source=difficulty_band_allowed_source,
+                error_message="sentence_fill material difficulty band is outside the allowed range.",
+            )
+            review_signal_active = bool(
+                review_signal_raw is True
+                or str(review_signal_raw).strip().lower() in {"true", "1", "yes", "on"}
+            )
+            review_penalty_threshold = self._coerce_float(max_total_penalty_raw)
+            if review_penalty_threshold is None:
+                review_penalty_threshold = 0.55
+            review_readiness_threshold = self._coerce_float(min_readiness_raw)
+            if review_readiness_threshold is None:
+                review_readiness_threshold = 0.45
+            review_triggered = bool(
+                review_signal_active
+                and readiness_score >= review_readiness_threshold
+                and total_penalty >= review_penalty_threshold
+            )
+            checks["sentence_fill_review_like_risk"] = self._build_contract_gated_check(
+                active=review_signal_active,
+                passed=not review_triggered,
+                source=review_signal_source,
+                actual={
+                    "readiness_score": round(readiness_score, 4),
+                    "total_penalty": total_penalty,
+                    "difficulty_band": difficulty_band,
+                },
+                threshold={
+                    "readiness_score": round(review_readiness_threshold, 4),
+                    "total_penalty": round(review_penalty_threshold, 4),
+                },
+                reason=(
+                    "high_risk_but_not_high_difficulty"
+                    if difficulty_band != "hard" and total_penalty >= review_penalty_threshold
+                    else "high_readiness_high_penalty"
+                ),
+            )
+            if review_triggered:
+                warnings.append("sentence_fill material is structurally usable, but penalty risk remains elevated.")
 
         if reference_blank_position:
             aligned = blank_position == reference_blank_position

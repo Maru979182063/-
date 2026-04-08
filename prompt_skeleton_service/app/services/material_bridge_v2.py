@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class MaterialBridgeV2Service:
     SEARCH_TIMEOUT_SECONDS = 8
+    SERVABLE_REVIEW_STATUSES = {"auto_tagged", "review_confirmed"}
 
     def __init__(self, config: MaterialsConfig) -> None:
         self.config = config
@@ -47,6 +48,7 @@ class MaterialBridgeV2Service:
         structure_constraints: dict[str, Any] | None = None,
         enable_anchor_adaptation: bool = True,
         exclude_material_ids: set[str] | None = None,
+        preference_profile: dict[str, Any] | None = None,
         usage_stats_lookup=None,
     ) -> tuple[list[MaterialSelectionResult], list[str]]:
         binding = self._resolve_question_card_binding(
@@ -94,10 +96,11 @@ class MaterialBridgeV2Service:
                     structure_constraints=structure_constraints or {},
                     query_terms=query_terms or [],
                     target_length=target_length,
+                    preference_profile=preference_profile,
                 )
                 for item in items
             ),
-            key=lambda entry: entry["score"],
+            key=lambda entry: entry["sort_key"],
             reverse=True,
         )
         selections: list[MaterialSelectionResult] = []
@@ -117,7 +120,15 @@ class MaterialBridgeV2Service:
                 strict_rejections.append(entry)
                 continue
             used_ids.add(material_id)
-            selections.append(self._to_material_selection(item, entry["reason"]))
+            selections.append(
+                self._to_material_selection(
+                    item,
+                    entry["reason"],
+                    decision_meta=entry.get("decision_meta"),
+                    planner_score=entry.get("score"),
+                    sort_key=entry.get("sort_key"),
+                )
+            )
             if len(selections) >= count:
                 break
 
@@ -130,7 +141,8 @@ class MaterialBridgeV2Service:
                 key=lambda entry: (
                     int(entry["item"].get("usage_count") or 0),
                     self._cooldown_sort_value(entry["item"].get("last_used_at")),
-                    -float(entry["item"].get("quality_score") or 0.0),
+                    -float(entry.get("sort_key", (0.0,))[0]),
+                    -float(entry.get("score") or 0.0),
                 ),
             )
             for entry in fallback_ranked:
@@ -139,7 +151,15 @@ class MaterialBridgeV2Service:
                 if not material_id or material_id in used_ids or material_id in excluded:
                     continue
                 used_ids.add(material_id)
-                selections.append(self._to_material_selection(item, f"{entry['reason']}; fallback_due_to_material_policy"))
+                selections.append(
+                    self._to_material_selection(
+                        item,
+                        f"{entry['reason']}; fallback_due_to_material_policy",
+                        decision_meta=entry.get("decision_meta"),
+                        planner_score=entry.get("score"),
+                        sort_key=entry.get("sort_key"),
+                    )
+                )
                 if len(selections) >= count:
                     break
         if len(selections) < count:
@@ -166,6 +186,7 @@ class MaterialBridgeV2Service:
         article_ids: list[str] | None = None,
         article_limit: int = 24,
         difficulty_target: str = "medium",
+        preference_profile: dict[str, Any] | None = None,
         usage_stats_lookup=None,
     ) -> list[MaterialSelectionResult]:
         binding = self._resolve_question_card_binding(
@@ -212,12 +233,15 @@ class MaterialBridgeV2Service:
                     structure_constraints=structure_constraints or {},
                     query_terms=query_terms or [],
                     target_length=target_length,
+                    preference_profile=preference_profile,
                 )
                 for item in items
             ),
             key=lambda entry: (
                 int(entry["item"].get("usage_count") or 0),
-                -entry["score"],
+                -float(entry["sort_key"][0]),
+                -float(entry["sort_key"][3]),
+                -float(entry["score"]),
             ),
         )
         excluded = exclude_material_ids or set()
@@ -227,7 +251,15 @@ class MaterialBridgeV2Service:
             material_id = str(item.get("candidate_id") or "")
             if not material_id or material_id in excluded:
                 continue
-            selections.append(self._to_material_selection(item, "replacement_candidate"))
+            selections.append(
+                self._to_material_selection(
+                    item,
+                    "replacement_candidate",
+                    decision_meta=entry.get("decision_meta"),
+                    planner_score=entry.get("score"),
+                    sort_key=entry.get("sort_key"),
+                )
+            )
             if len(selections) >= limit:
                 break
         return selections
@@ -390,7 +422,7 @@ class MaterialBridgeV2Service:
                 status_code=502,
                 details={"payload_keys": sorted(data.keys())},
             )
-        return items
+        return self._filter_reviewable_items(items)
 
     def _post_v2_search(self, payload: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -425,11 +457,21 @@ class MaterialBridgeV2Service:
         limit = max(int(payload.get("candidate_limit") or 20) * 12, 120)
 
         sql = """
-            SELECT id, article_id, quality_score, usage_count, last_used_at, v2_business_family_ids, v2_index_payload
+            SELECT material_spans.id,
+                   material_spans.article_id,
+                   material_spans.quality_score,
+                   material_spans.usage_count,
+                   material_spans.last_used_at,
+                   material_spans.v2_business_family_ids,
+                   material_spans.v2_index_payload,
+                   tagging_reviews.status
             FROM material_spans
-            WHERE is_primary = 1
-              AND v2_index_version IS NOT NULL
-            ORDER BY quality_score DESC, updated_at DESC
+            LEFT JOIN tagging_reviews ON tagging_reviews.material_id = material_spans.id
+            WHERE material_spans.is_primary = 1
+              AND material_spans.v2_index_version IS NOT NULL
+              AND material_spans.status = 'promoted'
+              AND material_spans.release_channel = 'stable'
+            ORDER BY material_spans.quality_score DESC, material_spans.updated_at DESC
             LIMIT ?
         """
 
@@ -444,8 +486,10 @@ class MaterialBridgeV2Service:
         matched: list[dict[str, Any]] = []
         relaxed: list[dict[str, Any]] = []
         for row in rows:
-            material_id, article_id, _quality_score, usage_count, last_used_at, family_ids_raw, payload_raw = row
+            material_id, article_id, _quality_score, usage_count, last_used_at, family_ids_raw, payload_raw, review_status = row
             if article_ids and article_id not in article_ids:
+                continue
+            if review_status not in self.SERVABLE_REVIEW_STATUSES:
                 continue
 
             family_ids = self._decode_json_value(family_ids_raw, default=[])
@@ -461,6 +505,7 @@ class MaterialBridgeV2Service:
             cached_item["last_used_at"] = last_used_at
             cached_item["article_id"] = cached_item.get("article_id") or article_id
             cached_item["candidate_id"] = cached_item.get("candidate_id") or material_id
+            cached_item["review_status"] = review_status
 
             haystack = "\n".join(
                 [
@@ -488,6 +533,15 @@ class MaterialBridgeV2Service:
             return relaxed[: max(8, min(int(payload.get("candidate_limit") or 20), 12))]
         return []
 
+    def _filter_reviewable_items(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        filtered: list[dict[str, Any]] = []
+        for item in items:
+            review_status = item.get("review_status")
+            if review_status is not None and review_status not in self.SERVABLE_REVIEW_STATUSES:
+                continue
+            filtered.append(item)
+        return filtered
+
     def _fallback_db_path(self) -> Path:
         root = Path(__file__).resolve().parents[3]
         return root / "passage_service" / "passage_service.db"
@@ -503,6 +557,253 @@ class MaterialBridgeV2Service:
         except Exception:
             return default
 
+    @staticmethod
+    def _extract_candidate_scoring(item: dict[str, Any]) -> dict[str, Any]:
+        scoring = item.get("selected_task_scoring") or (item.get("meta") or {}).get("scoring") or {}
+        return dict(scoring) if isinstance(scoring, dict) else {}
+
+    @staticmethod
+    def _normalize_preference_profile(preference_profile: dict[str, Any] | None) -> dict[str, float]:
+        raw = preference_profile if isinstance(preference_profile, dict) else {}
+        normalized: dict[str, float] = {}
+        for key in (
+            "prefer_higher_reasoning_depth",
+            "prefer_lower_ambiguity",
+            "prefer_higher_constraint_intensity",
+            "penalty_tolerance",
+            "repair_tolerance",
+        ):
+            try:
+                value = float(raw.get(key, 0.0) or 0.0)
+            except (TypeError, ValueError):
+                value = 0.0
+            normalized[key] = round(max(-1.0, min(1.0, value)), 4)
+        return normalized
+
+    @staticmethod
+    def _positive_mapping_snapshot(payload: dict[str, Any], *, limit: int = 3) -> dict[str, float]:
+        if not isinstance(payload, dict):
+            return {}
+        ranked = sorted(
+            (
+                (str(key), round(float(value or 0.0), 4))
+                for key, value in payload.items()
+                if float(value or 0.0) > 0
+            ),
+            key=lambda entry: entry[1],
+            reverse=True,
+        )
+        return {key: value for key, value in ranked[:limit]}
+
+    @staticmethod
+    def _has_active_preference(preference_profile: dict[str, float]) -> bool:
+        return any(abs(float(value or 0.0)) >= 0.05 for value in preference_profile.values())
+
+    def _build_feedback_snapshot(
+        self,
+        *,
+        scoring: dict[str, Any],
+        decision_meta: dict[str, Any],
+        preference_profile: dict[str, float],
+    ) -> dict[str, Any]:
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        scoring_summary = decision_meta.get("scoring_summary") if isinstance(decision_meta.get("scoring_summary"), dict) else {}
+        return {
+            "selection_state": decision_meta.get("selection_state"),
+            "review_like_risk": bool(decision_meta.get("review_like_risk")),
+            "repair_suggested": bool(decision_meta.get("repair_suggested")),
+            "decision_reason": decision_meta.get("decision_reason"),
+            "repair_reason": decision_meta.get("repair_reason"),
+            "final_candidate_score": round(float(scoring.get("final_candidate_score") or scoring_summary.get("final_candidate_score") or 0.0), 4),
+            "readiness_score": round(float(scoring.get("readiness_score") or scoring_summary.get("readiness_score") or 0.0), 4),
+            "total_penalty": round(float(scoring_summary.get("total_penalty") or 0.0), 4),
+            "difficulty_band_hint": scoring.get("difficulty_band_hint") or scoring_summary.get("difficulty_band_hint"),
+            "difficulty_vector": {str(key): round(float(value or 0.0), 4) for key, value in difficulty_vector.items()},
+            "recommended": bool(scoring.get("recommended") if "recommended" in scoring else scoring_summary.get("recommended")),
+            "needs_review": bool(scoring.get("needs_review") if "needs_review" in scoring else scoring_summary.get("needs_review")),
+            "key_penalties": dict(decision_meta.get("key_penalties") or self._positive_mapping_snapshot(risk_penalties, limit=3)),
+            "key_difficulty_dimensions": dict(decision_meta.get("key_difficulty_dimensions") or self._positive_mapping_snapshot(difficulty_vector, limit=3)),
+            "preference_profile": dict(preference_profile),
+        }
+
+    def _build_decision_meta(self, item: dict[str, Any], *, preference_profile: dict[str, Any] | None = None) -> dict[str, Any]:
+        normalized_preference = self._normalize_preference_profile(preference_profile)
+        scoring = self._extract_candidate_scoring(item)
+        if not scoring:
+            return {
+                "selection_state": "hold",
+                "review_like_risk": False,
+                "repair_suggested": False,
+                "decision_reason": "material_scoring_missing",
+                "repair_reason": None,
+                "quality_difficulty_note": None,
+                "scoring_summary": {
+                    "task_family": None,
+                    "final_candidate_score": 0.0,
+                    "readiness_score": 0.0,
+                    "total_penalty": 0.0,
+                    "recommended": False,
+                    "needs_review": False,
+                    "difficulty_band_hint": "",
+                },
+                "key_penalties": {},
+                "key_difficulty_dimensions": {},
+                "preference_profile": normalized_preference,
+                "preference_note": "neutral_preference_profile",
+            }
+
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        total_penalty = round(sum(float(value or 0.0) for value in risk_penalties.values()), 4)
+        final_candidate_score = round(float(scoring.get("final_candidate_score") or 0.0), 4)
+        readiness_score = round(float(scoring.get("readiness_score") or 0.0), 4)
+        recommended = bool(scoring.get("recommended"))
+        needs_review = bool(scoring.get("needs_review"))
+        difficulty_band = str(scoring.get("difficulty_band_hint") or "").strip().lower()
+        difficulty_trace = scoring.get("difficulty_trace") if isinstance(scoring.get("difficulty_trace"), dict) else {}
+        band_decision = difficulty_trace.get("band_decision") if isinstance(difficulty_trace.get("band_decision"), dict) else {}
+        quality_difficulty_note = str(band_decision.get("quality_difficulty_note") or "").strip() or None
+        key_penalties = self._positive_mapping_snapshot(risk_penalties, limit=3)
+        key_difficulty_dimensions = self._positive_mapping_snapshot(difficulty_vector, limit=3)
+        strongest_difficulty = max(key_difficulty_dimensions.values(), default=0.0)
+        penalty_tolerance = normalized_preference.get("penalty_tolerance", 0.0)
+        repair_tolerance = normalized_preference.get("repair_tolerance", 0.0)
+        elevated_penalty_threshold = 0.4 + 0.08 * penalty_tolerance
+        high_penalty_threshold = 0.6 + 0.10 * penalty_tolerance
+        weak_penalty_threshold = 0.45 + 0.08 * penalty_tolerance
+        salvage_readiness_threshold = 0.45 - 0.04 * repair_tolerance
+        high_penalty = total_penalty >= high_penalty_threshold
+        elevated_penalty = total_penalty >= elevated_penalty_threshold
+        low_readiness = readiness_score < 0.4
+        weak_quality = final_candidate_score < 0.3
+        structurally_salvageable = bool(
+            readiness_score >= salvage_readiness_threshold
+            or strongest_difficulty >= 0.62
+            or (difficulty_band in {"medium", "hard"} and final_candidate_score >= 0.3)
+        )
+        clearly_weak = bool(
+            (weak_quality and low_readiness)
+            or (not recommended and readiness_score < 0.35)
+            or (difficulty_band == "easy" and weak_quality and low_readiness)
+            or (not structurally_salvageable and total_penalty >= weak_penalty_threshold)
+        )
+
+        if recommended and not needs_review and final_candidate_score >= 0.5 and total_penalty < 0.45:
+            selection_state = "recommended"
+        elif clearly_weak:
+            selection_state = "weak_candidate"
+        else:
+            selection_state = "hold"
+
+        review_like_risk = bool(
+            needs_review
+            or (readiness_score >= 0.5 and elevated_penalty)
+            or (selection_state == "hold" and total_penalty >= max(0.45, high_penalty_threshold - 0.05))
+        )
+
+        repair_suggested = False
+        repair_reason: str | None = None
+        if selection_state == "hold":
+            repair_readiness_threshold = 0.45 - 0.05 * repair_tolerance
+            repair_penalty_threshold = 0.45 + 0.08 * penalty_tolerance
+            top_penalty = next(iter(key_penalties), None)
+            if readiness_score >= repair_readiness_threshold and total_penalty >= repair_penalty_threshold:
+                repair_suggested = True
+                if top_penalty == "role_ambiguity_penalty":
+                    repair_reason = "role_ambiguity_repairable_risk"
+                else:
+                    repair_reason = "high_readiness_high_penalty"
+            elif strongest_difficulty >= max(0.58, 0.65 - 0.06 * repair_tolerance) and key_penalties:
+                repair_suggested = True
+                if top_penalty == "role_ambiguity_penalty":
+                    repair_reason = "role_ambiguity_repairable_risk"
+                else:
+                    repair_reason = f"structurally_strong_but_{top_penalty}"
+            elif quality_difficulty_note == "hard_but_currently_weak_candidate":
+                repair_suggested = True
+                repair_reason = "hard_but_currently_weak_candidate"
+        elif selection_state == "weak_candidate":
+            if difficulty_band == "hard" and readiness_score >= 0.38 and quality_difficulty_note == "hard_but_currently_weak_candidate":
+                repair_suggested = True
+                repair_reason = "hard_but_currently_weak_candidate"
+
+        if selection_state == "recommended":
+            decision_reason = "recommended_stable_candidate"
+        elif recommended and needs_review:
+            decision_reason = "recommended_candidate_requires_review"
+        elif quality_difficulty_note == "hard_but_currently_weak_candidate":
+            decision_reason = "hard_but_currently_weak_candidate"
+        elif readiness_score >= 0.5 and elevated_penalty:
+            decision_reason = "high_readiness_high_penalty"
+        elif selection_state == "weak_candidate" and difficulty_band != "hard" and total_penalty >= 0.45:
+            decision_reason = "high_risk_but_not_high_difficulty"
+        elif selection_state == "weak_candidate" and difficulty_band == "easy":
+            decision_reason = "easy_but_weak_candidate"
+        elif selection_state == "hold":
+            decision_reason = "borderline_hold_candidate"
+        else:
+            decision_reason = "overall_weak_candidate"
+
+        return {
+            "selection_state": selection_state,
+            "review_like_risk": review_like_risk,
+            "repair_suggested": repair_suggested,
+            "decision_reason": decision_reason,
+            "repair_reason": repair_reason,
+            "quality_difficulty_note": quality_difficulty_note,
+            "scoring_summary": {
+                "task_family": scoring.get("task_family"),
+                "final_candidate_score": final_candidate_score,
+                "readiness_score": readiness_score,
+                "total_penalty": total_penalty,
+                "recommended": recommended,
+                "needs_review": needs_review,
+                "difficulty_band_hint": difficulty_band,
+            },
+            "key_penalties": key_penalties,
+            "key_difficulty_dimensions": key_difficulty_dimensions,
+            "preference_profile": normalized_preference,
+            "preference_note": (
+                "preference_profile_applied"
+                if self._has_active_preference(normalized_preference)
+                else "neutral_preference_profile"
+            ),
+        }
+
+    @staticmethod
+    def _decision_sort_key(*, planner_score: float, decision_meta: dict[str, Any]) -> tuple[float, ...]:
+        scoring_summary = decision_meta.get("scoring_summary") if isinstance(decision_meta, dict) else {}
+        final_candidate_score = float((scoring_summary or {}).get("final_candidate_score") or 0.0)
+        readiness_score = float((scoring_summary or {}).get("readiness_score") or 0.0)
+        total_penalty = float((scoring_summary or {}).get("total_penalty") or 0.0)
+        recommended = bool((scoring_summary or {}).get("recommended"))
+        needs_review = bool((scoring_summary or {}).get("needs_review"))
+        difficulty_band = str((scoring_summary or {}).get("difficulty_band_hint") or "")
+        selection_state = str((decision_meta or {}).get("selection_state") or "hold")
+        repair_suggested = bool((decision_meta or {}).get("repair_suggested"))
+        review_like_risk = bool((decision_meta or {}).get("review_like_risk"))
+        state_priority = {"recommended": 2.0, "hold": 1.0, "weak_candidate": 0.0}.get(selection_state, 0.5)
+        stable_priority = 1.0 if recommended and not needs_review else 0.0
+        repair_priority = 1.0 if repair_suggested else 0.0
+        penalty_headroom = max(0.0, 1.0 - min(total_penalty, 1.0))
+        band_priority = {"hard": 0.2, "medium": 0.1, "easy": 0.0}.get(difficulty_band, 0.0)
+        risk_headroom = 0.0 if review_like_risk else 1.0
+        preference_profile = decision_meta.get("preference_profile") if isinstance(decision_meta.get("preference_profile"), dict) else {}
+        preference_intensity = round(sum(abs(float(value or 0.0)) for value in preference_profile.values()), 4)
+        return (
+            state_priority,
+            stable_priority,
+            repair_priority,
+            final_candidate_score,
+            readiness_score,
+            penalty_headroom,
+            risk_headroom,
+            band_priority,
+            preference_intensity,
+            round(planner_score, 4),
+        )
+
     def _score_candidate(
         self,
         item: dict[str, Any],
@@ -517,6 +818,7 @@ class MaterialBridgeV2Service:
         structure_constraints: dict[str, Any],
         query_terms: list[str],
         target_length: int | None,
+        preference_profile: dict[str, Any] | None,
     ) -> dict[str, Any]:
         score = float(item.get("quality_score") or 0.0)
         reasons = [f"quality_score={score:.2f}"]
@@ -597,10 +899,45 @@ class MaterialBridgeV2Service:
         if target_length and length_fit > 0:
             score += min(0.22, length_fit * 0.22)
             reasons.append(f"length_fit={length_fit:.2f}")
+        scoring = self._extract_candidate_scoring(item)
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        normalized_preference = self._normalize_preference_profile(preference_profile)
+        if self._has_active_preference(normalized_preference):
+            reasoning_depth = float(difficulty_vector.get("reasoning_depth_score") or 0.0)
+            ambiguity = float(difficulty_vector.get("ambiguity_score") or 0.0)
+            constraint_intensity = float(difficulty_vector.get("constraint_intensity_score") or 0.0)
+            total_penalty = min(1.0, sum(float(value or 0.0) for value in risk_penalties.values()))
+            preference_adjustment = 0.0
+            preference_adjustment += 0.12 * normalized_preference["prefer_higher_reasoning_depth"] * (reasoning_depth - 0.5)
+            preference_adjustment += 0.10 * normalized_preference["prefer_higher_constraint_intensity"] * (constraint_intensity - 0.5)
+            preference_adjustment += 0.10 * normalized_preference["prefer_lower_ambiguity"] * (0.5 - ambiguity)
+            preference_adjustment += 0.08 * normalized_preference["penalty_tolerance"] * (total_penalty - 0.5)
+            if preference_adjustment:
+                score += preference_adjustment
+                reasons.append(f"preference_adjustment={preference_adjustment:.4f}")
         top_card = ((item.get("eligible_material_cards") or [{}])[0] or {}).get("card_id")
         if top_card:
             reasons.append(f"top_card={top_card}")
-        return {"item": item, "score": score, "reason": "; ".join(reasons)}
+        decision_meta = self._build_decision_meta(item, preference_profile=normalized_preference)
+        reasons.append(f"preference_note={decision_meta.get('preference_note')}")
+        scoring_summary = decision_meta.get("scoring_summary") or {}
+        reasons.append(
+            "selection_state={state}; final_candidate_score={final_score:.4f}; readiness_score={readiness:.4f}; total_penalty={penalty:.4f}".format(
+                state=decision_meta.get("selection_state"),
+                final_score=float(scoring_summary.get("final_candidate_score") or 0.0),
+                readiness=float(scoring_summary.get("readiness_score") or 0.0),
+                penalty=float(scoring_summary.get("total_penalty") or 0.0),
+            )
+        )
+        reasons.append(f"decision_reason={decision_meta.get('decision_reason')}")
+        return {
+            "item": item,
+            "score": score,
+            "reason": "; ".join(reasons),
+            "decision_meta": decision_meta,
+            "sort_key": self._decision_sort_key(planner_score=score, decision_meta=decision_meta),
+        }
 
     def _structure_alignment_bonus(
         self,
@@ -697,7 +1034,15 @@ class MaterialBridgeV2Service:
 
         return round(bonus, 4)
 
-    def _to_material_selection(self, item: dict[str, Any], selection_reason: str) -> MaterialSelectionResult:
+    def _to_material_selection(
+        self,
+        item: dict[str, Any],
+        selection_reason: str,
+        *,
+        decision_meta: dict[str, Any] | None = None,
+        planner_score: float | None = None,
+        sort_key: tuple[float, ...] | None = None,
+    ) -> MaterialSelectionResult:
         local_profile = item.get("local_profile") or {}
         article_profile = item.get("article_profile") or {}
         question_ready_context = item.get("question_ready_context") or {}
@@ -709,6 +1054,29 @@ class MaterialBridgeV2Service:
         selected_business_card = question_ready_context.get("selected_business_card")
         generation_archetype = question_ready_context.get("generation_archetype")
         prompt_extras = question_ready_context.get("prompt_extras") or {}
+        raw_preference_profile = (
+            (decision_meta.get("preference_profile") if isinstance(decision_meta, dict) else None)
+            or (
+            item.get("preference_profile")
+            or question_ready_context.get("preference_profile")
+            or (item.get("source") or {}).get("preference_profile")
+            )
+        )
+        normalized_preference = self._normalize_preference_profile(raw_preference_profile if isinstance(raw_preference_profile, dict) else None)
+        resolved_decision_meta = (
+            dict(decision_meta)
+            if isinstance(decision_meta, dict)
+            else self._build_decision_meta(item, preference_profile=normalized_preference)
+        )
+        scoring_payload = self._extract_candidate_scoring(item)
+        feedback_snapshot = self._build_feedback_snapshot(
+            scoring=scoring_payload,
+            decision_meta=resolved_decision_meta,
+            preference_profile=normalized_preference,
+        )
+        selection_reason_with_decision = (
+            f"{selection_reason}; selection_state={resolved_decision_meta.get('selection_state')}; decision_reason={resolved_decision_meta.get('decision_reason')}"
+        )
         consumable_text = str(item.get("consumable_text") or item.get("text") or "")
         if isinstance(selected_business_card, str) and selected_business_card.startswith("sentence_fill__"):
             consumable_text = str(prompt_extras.get("blanked_text") or consumable_text)
@@ -739,6 +1107,18 @@ class MaterialBridgeV2Service:
                 "selected_business_card": selected_business_card,
                 "selected_material_card": selected_material_card,
                 "prompt_extras": prompt_extras,
+                "scoring": scoring_payload,
+                "selected_task_scoring": scoring_payload,
+                "task_scoring": dict(item.get("task_scoring") or {}),
+                "decision_meta": resolved_decision_meta,
+                "feedback_snapshot": feedback_snapshot,
+                "preference_profile": normalized_preference,
+                "ranking_meta": {
+                    "planner_score": round(float(planner_score or 0.0), 4),
+                    "sort_key": [round(float(value), 4) for value in (sort_key or ())],
+                    "selection_reason": selection_reason_with_decision,
+                    "preference_note": resolved_decision_meta.get("preference_note"),
+                },
             },
             source_tail=((item.get("source") or {}).get("source_url")),
             primary_label=selected_material_card,
@@ -752,7 +1132,7 @@ class MaterialBridgeV2Service:
             usage_count_before=int(item.get("usage_count") or 0),
             previously_used=bool(int(item.get("usage_count") or 0) > 0),
             last_used_at=item.get("last_used_at"),
-            selection_reason=selection_reason,
+            selection_reason=selection_reason_with_decision,
             anchor_adapted=bool(((item.get("meta") or {}).get("anchor_adaptation") or {}).get("adapted")),
             anchor_adaptation_reason=((item.get("meta") or {}).get("anchor_adaptation") or {}).get("reason"),
             anchor_span=((item.get("meta") or {}).get("anchor_adaptation") or {}),

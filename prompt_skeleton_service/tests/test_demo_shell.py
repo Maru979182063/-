@@ -26,10 +26,16 @@ class DemoShellSmokeTest(TestCase):
         response = self.client.get("/demo")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("本地出题 Demo 壳", response.text)
+        self.assertIn("前端工作台 Demo", response.text)
+        self.assertIn('id="builderScreen"', response.text)
+        self.assertIn('id="loadingScreen"', response.text)
+        self.assertIn('id="resultScreen"', response.text)
+        self.assertIn("/demo-static/app_v2.js", response.text)
+        self.assertIn("/demo-static/app_v2_zh_patch.js", response.text)
 
     def test_demo_static_asset_is_public_even_when_security_enabled(self) -> None:
-        response = self.client.get("/demo-static/app.js")
+        response = self.client.get("/demo-static/app_v2.js")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("QUESTION_FOCUS_OPTIONS", response.text)
+        self.assertIn("buildGeneratePayload", response.text)

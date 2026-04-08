@@ -7,6 +7,7 @@ import re
 from copy import deepcopy
 from difflib import SequenceMatcher
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, TypeAdapter
@@ -167,6 +168,7 @@ class QuestionGenerationService:
             length_tolerance=source_question_analysis.get("length_tolerance", 120),
             structure_constraints=source_question_analysis.get("structure_constraints") or {},
             enable_anchor_adaptation=bool(source_question_analysis),
+            preference_profile=request_snapshot.get("preference_profile"),
             usage_stats_lookup=self.repository.get_material_usage_stats,
         )
         if question_card_binding.get("warning"):
@@ -664,6 +666,7 @@ class QuestionGenerationService:
                 exclude_material_ids=None,
                 limit=24,
                 difficulty_target=request_snapshot.get("difficulty_target", "medium"),
+                preference_profile=request_snapshot.get("preference_profile"),
                 usage_stats_lookup=self.repository.get_material_usage_stats,
             )
             materials = [candidate for candidate in replacement_candidates if candidate.material_id == requested_material_id]
@@ -686,6 +689,7 @@ class QuestionGenerationService:
                 structure_constraints=((request_snapshot.get("source_question_analysis") or {}).get("structure_constraints") or {}),
                 enable_anchor_adaptation=bool(request_snapshot.get("source_question_analysis")),
                 exclude_material_ids=None if requested_material_id else ({previous_material_id} if previous_material_id else None),
+                preference_profile=request_snapshot.get("preference_profile"),
                 usage_stats_lookup=self.repository.get_material_usage_stats,
             )
         if not materials:
@@ -768,6 +772,8 @@ class QuestionGenerationService:
         revised_item["material_usage_count_before"] = edited_material.usage_count_before
         revised_item["material_previously_used"] = edited_material.previously_used
         revised_item["material_last_used_at"] = edited_material.last_used_at
+        revised_item["preference_profile"] = self._preference_profile_from_snapshot(revised_item.get("request_snapshot") or {})
+        revised_item["feedback_snapshot"] = self._feedback_snapshot_from_material(edited_material)
 
         validation_result = self.validator.validate(
             question_type=revised_item["question_type"],
@@ -825,6 +831,12 @@ class QuestionGenerationService:
             parse_error=None,
             validation_result=revised_item["validation_result"],
         )
+        runtime_snapshot = self._attach_feedback_runtime_context(
+            built_item=revised_item,
+            material=edited_material,
+            request_snapshot=revised_item.get("request_snapshot") or {},
+            runtime_snapshot=runtime_snapshot,
+        )
         revised_item["_version_record"] = self._build_version_record(
             item=revised_item,
             source_action="manual_edit",
@@ -868,6 +880,8 @@ class QuestionGenerationService:
         built_item["material_usage_count_before"] = material.usage_count_before
         built_item["material_previously_used"] = material.previously_used
         built_item["material_last_used_at"] = material.last_used_at
+        built_item["preference_profile"] = self._preference_profile_from_snapshot(request_snapshot)
+        built_item["feedback_snapshot"] = self._feedback_snapshot_from_material(material)
         built_item["revision_count"] = revision_count
         template_record = self._resolve_template(
             question_type=build_request.question_type,
@@ -1069,6 +1083,12 @@ class QuestionGenerationService:
             parse_error=parse_error,
             validation_result=built_item["validation_result"],
         )
+        runtime_snapshot = self._attach_feedback_runtime_context(
+            built_item=built_item,
+            material=material,
+            request_snapshot=request_snapshot,
+            runtime_snapshot=runtime_snapshot,
+        )
         built_item["_version_record"] = self._build_version_record(
             item=built_item,
             source_action=source_action,
@@ -1198,6 +1218,10 @@ class QuestionGenerationService:
         merged_extra_constraints = deepcopy(standard_request.get("extra_constraints") or {})
         if request.extra_constraints:
             merged_extra_constraints.update(request.extra_constraints)
+        normalized_preference_profile = self.material_bridge._normalize_preference_profile(
+            (merged_extra_constraints or {}).get("preference_profile")
+        )
+        merged_extra_constraints["preference_profile"] = normalized_preference_profile
         resolved_pattern_id = standard_request.get("pattern_id")
         return {
             "request_id": request_id,
@@ -1214,6 +1238,7 @@ class QuestionGenerationService:
             "fewshot_mode": request.fewshot_mode,
             "type_slots": deepcopy(request.type_slots),
             "extra_constraints": merged_extra_constraints,
+            "preference_profile": normalized_preference_profile,
             "material_policy": request.material_policy.model_dump() if request.material_policy else None,
             "source_question": request.source_question.model_dump() if request.source_question else None,
             "source_question_analysis": deepcopy(source_question_analysis),
@@ -1228,6 +1253,36 @@ class QuestionGenerationService:
                 "selected_special_type": decoded.get("selected_special_type"),
             },
         }
+
+    def _preference_profile_from_snapshot(self, request_snapshot: dict[str, Any]) -> dict[str, float]:
+        extra_constraints = request_snapshot.get("extra_constraints") or {}
+        return self.material_bridge._normalize_preference_profile(
+            request_snapshot.get("preference_profile")
+            or (extra_constraints.get("preference_profile") if isinstance(extra_constraints, dict) else None)
+        )
+
+    @staticmethod
+    def _feedback_snapshot_from_material(material: MaterialSelectionResult) -> dict[str, Any]:
+        source = material.source or {}
+        snapshot = source.get("feedback_snapshot") if isinstance(source.get("feedback_snapshot"), dict) else {}
+        return deepcopy(snapshot)
+
+    def _attach_feedback_runtime_context(
+        self,
+        *,
+        built_item: dict[str, Any],
+        material: MaterialSelectionResult,
+        request_snapshot: dict[str, Any],
+        runtime_snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        updated_snapshot = dict(runtime_snapshot or {})
+        updated_snapshot["feedback_snapshot"] = deepcopy(
+            built_item.get("feedback_snapshot") or self._feedback_snapshot_from_material(material)
+        )
+        updated_snapshot["preference_profile"] = deepcopy(
+            built_item.get("preference_profile") or self._preference_profile_from_snapshot(request_snapshot)
+        )
+        return updated_snapshot
 
     def _resolve_question_card_binding(
         self,
@@ -1438,6 +1493,8 @@ class QuestionGenerationService:
     def _build_manual_material_selection(self, *, item: dict, text: str) -> MaterialSelectionResult:
         current_material = MaterialSelectionResult.model_validate(item["material_selection"])
         source = dict(current_material.source or {})
+        for key in ("scoring", "selected_task_scoring", "task_scoring", "decision_meta", "feedback_snapshot", "ranking_meta"):
+            source.pop(key, None)
         source["manual_material_input"] = True
         source.setdefault("source_name", "manual_input")
         return current_material.model_copy(
@@ -2150,6 +2207,7 @@ class QuestionGenerationService:
             exclude_material_ids={material_selection.get("material_id")} if material_selection.get("material_id") else None,
             limit=limit,
             difficulty_target=item.get("difficulty_target", "medium"),
+            preference_profile=request_snapshot.get("preference_profile"),
             usage_stats_lookup=self.repository.get_material_usage_stats,
         )
         return [

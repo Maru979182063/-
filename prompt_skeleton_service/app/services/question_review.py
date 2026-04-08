@@ -58,6 +58,174 @@ class QuestionReviewService:
         self.repository = repository
         self.generation_service = generation_service
 
+    @staticmethod
+    def _top_positive_values(payload: dict[str, Any], *, limit: int = 3) -> dict[str, float]:
+        if not isinstance(payload, dict):
+            return {}
+        ranked = sorted(
+            (
+                (str(key), round(float(value or 0.0), 4))
+                for key, value in payload.items()
+                if float(value or 0.0) > 0
+            ),
+            key=lambda entry: entry[1],
+            reverse=True,
+        )
+        return {key: value for key, value in ranked[:limit]}
+
+    def _build_material_decision_context(self, item: dict[str, Any]) -> dict[str, Any]:
+        material_source = item.get("material_source") or {}
+        if not isinstance(material_source, dict):
+            return {}
+        feedback_snapshot = material_source.get("feedback_snapshot") if isinstance(material_source.get("feedback_snapshot"), dict) else {}
+        scoring = material_source.get("scoring") if isinstance(material_source.get("scoring"), dict) else {}
+        decision_meta = material_source.get("decision_meta") if isinstance(material_source.get("decision_meta"), dict) else {}
+        ranking_meta = material_source.get("ranking_meta") if isinstance(material_source.get("ranking_meta"), dict) else {}
+        if feedback_snapshot:
+            return {
+                **dict(feedback_snapshot),
+                "task_family": scoring.get("task_family") if isinstance(scoring, dict) else None,
+                "ranking_meta": ranking_meta,
+            }
+        if not scoring and not decision_meta:
+            return {}
+
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        difficulty_trace = scoring.get("difficulty_trace") if isinstance(scoring.get("difficulty_trace"), dict) else {}
+        band_decision = difficulty_trace.get("band_decision") if isinstance(difficulty_trace.get("band_decision"), dict) else {}
+        scoring_summary = decision_meta.get("scoring_summary") if isinstance(decision_meta.get("scoring_summary"), dict) else {}
+        return {
+            "selection_state": decision_meta.get("selection_state"),
+            "review_like_risk": bool(decision_meta.get("review_like_risk")),
+            "repair_suggested": bool(decision_meta.get("repair_suggested")),
+            "decision_reason": decision_meta.get("decision_reason"),
+            "repair_reason": decision_meta.get("repair_reason"),
+            "quality_difficulty_note": decision_meta.get("quality_difficulty_note") or band_decision.get("quality_difficulty_note"),
+            "task_family": scoring.get("task_family") or scoring_summary.get("task_family"),
+            "final_candidate_score": round(float(scoring.get("final_candidate_score") or scoring_summary.get("final_candidate_score") or 0.0), 4),
+            "readiness_score": round(float(scoring.get("readiness_score") or scoring_summary.get("readiness_score") or 0.0), 4),
+            "total_penalty": round(float(scoring_summary.get("total_penalty") or 0.0), 4),
+            "difficulty_band_hint": scoring.get("difficulty_band_hint") or scoring_summary.get("difficulty_band_hint"),
+            "recommended": bool(scoring.get("recommended") if "recommended" in scoring else scoring_summary.get("recommended")),
+            "needs_review": bool(scoring.get("needs_review") if "needs_review" in scoring else scoring_summary.get("needs_review")),
+            "key_penalties": decision_meta.get("key_penalties") or self._top_positive_values(risk_penalties, limit=3),
+            "key_difficulty_dimensions": decision_meta.get("key_difficulty_dimensions") or self._top_positive_values(difficulty_vector, limit=3),
+            "preference_profile": material_source.get("preference_profile") if isinstance(material_source.get("preference_profile"), dict) else {},
+            "ranking_meta": ranking_meta,
+        }
+
+    def _build_feedback_snapshot(self, item: dict[str, Any]) -> dict[str, Any]:
+        material_source = item.get("material_source") or {}
+        if isinstance(material_source, dict):
+            payload = material_source.get("feedback_snapshot")
+            if isinstance(payload, dict) and payload:
+                return dict(payload)
+        return self._build_material_decision_context(item)
+
+    def _build_feedback_outcome(
+        self,
+        *,
+        requested_action: str,
+        effective_action: str,
+        action_result: dict[str, Any],
+    ) -> dict[str, Any]:
+        result_status = str(action_result.get("current_status") or "")
+        review_status = str((action_result.get("statuses") or {}).get("review_status") or "")
+        repair_actions = {"minor_edit", "question_modify", "text_modify", "manual_edit"}
+        repair_path_taken = effective_action in repair_actions
+        accepted_as_is = effective_action in {"approve", "confirm"} and result_status == "approved"
+        revised_then_kept = repair_path_taken and result_status in {"pending_review", "approved", "generated"}
+        discarded = effective_action == "discard" or result_status == "discarded"
+        return {
+            "review_action": effective_action or requested_action,
+            "requested_action": requested_action,
+            "accepted_as_is": accepted_as_is,
+            "revised_then_kept": revised_then_kept,
+            "discarded": discarded,
+            "repair_path_taken": repair_path_taken,
+            "result_status": result_status,
+            "review_status": review_status,
+        }
+
+    def _extract_threshold_failures(self, item: dict[str, Any]) -> list[dict[str, Any]]:
+        validation_result = item.get("validation_result") or {}
+        checks = validation_result.get("checks") or {}
+        if not isinstance(checks, dict):
+            return []
+
+        failures: list[dict[str, Any]] = []
+        for check_name, payload in checks.items():
+            if not isinstance(payload, dict):
+                continue
+            if payload.get("required") is not True:
+                continue
+            if payload.get("passed") is not False:
+                continue
+
+            has_threshold_like_payload = any(
+                key in payload for key in ("threshold", "allowed_range", "actual", "difficulty_band")
+            )
+            if not has_threshold_like_payload:
+                continue
+
+            threshold_name = str(payload.get("reason") or check_name or "").strip()
+            if not threshold_name:
+                continue
+
+            failure = {
+                "check_name": str(check_name),
+                "threshold_name": threshold_name,
+                "source": str(payload.get("source") or "unknown"),
+            }
+            if "actual" in payload:
+                failure["actual"] = payload.get("actual")
+            if "threshold" in payload:
+                failure["threshold"] = payload.get("threshold")
+            if "allowed_range" in payload:
+                failure["allowed_range"] = payload.get("allowed_range")
+            if "difficulty_band" in payload:
+                failure["difficulty_band"] = payload.get("difficulty_band")
+            failures.append(failure)
+        return failures
+
+    def _build_feedback_backtest_unit(
+        self,
+        *,
+        item: dict[str, Any],
+        original_item: dict[str, Any],
+        feedback_snapshot: dict[str, Any],
+        feedback_outcome: dict[str, Any],
+    ) -> dict[str, Any]:
+        material_selection = item.get("material_selection") or {}
+        material_source = item.get("material_source") or {}
+        threshold_failures = self._extract_threshold_failures(original_item)
+        return {
+            "item_id": item.get("item_id"),
+            "question_type": item.get("question_type"),
+            "business_subtype": item.get("business_subtype"),
+            "question_card_id": (item.get("request_snapshot") or {}).get("question_card_id") or material_selection.get("question_card_id"),
+            "material_id": material_selection.get("material_id"),
+            "selection_state": feedback_snapshot.get("selection_state"),
+            "review_like_risk": feedback_snapshot.get("review_like_risk"),
+            "repair_suggested": feedback_snapshot.get("repair_suggested"),
+            "decision_reason": feedback_snapshot.get("decision_reason"),
+            "final_candidate_score": feedback_snapshot.get("final_candidate_score"),
+            "difficulty_band_hint": feedback_snapshot.get("difficulty_band_hint"),
+            "key_penalties": feedback_snapshot.get("key_penalties") or {},
+            "key_difficulty_dimensions": feedback_snapshot.get("key_difficulty_dimensions") or {},
+            "recommended": feedback_snapshot.get("recommended"),
+            "needs_review": feedback_snapshot.get("needs_review"),
+            "preference_profile": feedback_snapshot.get("preference_profile") or material_source.get("preference_profile") or {},
+            "threshold_failures": threshold_failures,
+            "failed_threshold_names": [failure.get("threshold_name") for failure in threshold_failures if failure.get("threshold_name")],
+            "review_action": feedback_outcome.get("review_action"),
+            "accepted_as_is": feedback_outcome.get("accepted_as_is"),
+            "revised_then_kept": feedback_outcome.get("revised_then_kept"),
+            "discarded": feedback_outcome.get("discarded"),
+            "repair_path_taken": feedback_outcome.get("repair_path_taken"),
+        }
+
     def apply_action(self, item_id: str, request: QuestionReviewActionRequest) -> dict:
         item = self.repository.get_item(item_id)
         if item is None:
@@ -108,6 +276,19 @@ class QuestionReviewService:
         statuses = action_result.get("statuses", {})
         to_status = statuses.get("review_status", from_status)
         to_version_no = int(action_result.get("current_version_no", from_version_no))
+        material_decision_context = self._build_material_decision_context(action_result)
+        feedback_snapshot = self._build_feedback_snapshot(action_result)
+        feedback_outcome = self._build_feedback_outcome(
+            requested_action=requested_action,
+            effective_action=diagnostics["effective_action"],
+            action_result=action_result,
+        )
+        feedback_backtest_unit = self._build_feedback_backtest_unit(
+            item=action_result,
+            original_item=original_item,
+            feedback_snapshot=feedback_snapshot,
+            feedback_outcome=feedback_outcome,
+        )
 
         action_id = str(uuid4())
         action_payload = {
@@ -123,6 +304,10 @@ class QuestionReviewService:
             "material_boundary_crossed": diagnostics["material_boundary_crossed"],
             "trust_level": diagnostics["trust_level"],
             "audit_reason": diagnostics["audit_reason"],
+            "material_decision_context": material_decision_context,
+            "feedback_snapshot": feedback_snapshot,
+            "feedback_outcome": feedback_outcome,
+            "feedback_backtest_unit": feedback_backtest_unit,
             "patch": {
                 "instruction": request.instruction,
                 "control_overrides": request.control_overrides,
@@ -137,6 +322,9 @@ class QuestionReviewService:
                 "revision_count": action_result.get("revision_count", item.get("revision_count", 0)),
                 "prior_action_context": prior_action_context,
                 "audit_reason": diagnostics["audit_reason"],
+                "material_decision_context": material_decision_context,
+                "feedback_snapshot": feedback_snapshot,
+                "feedback_outcome": feedback_outcome,
             },
         }
         if approval_context is not None:
@@ -156,6 +344,10 @@ class QuestionReviewService:
                 "trust_level": diagnostics["trust_level"],
                 "prior_action_context": prior_action_context,
                 "audit_reason": diagnostics["audit_reason"],
+                "material_decision_context": material_decision_context,
+                "feedback_snapshot": feedback_snapshot,
+                "feedback_outcome": feedback_outcome,
+                "feedback_backtest_unit": feedback_backtest_unit,
             }
             version_record["runtime_snapshot"] = runtime_snapshot
             self.repository.save_version(version_record)
@@ -398,6 +590,8 @@ class QuestionReviewService:
             "correct_order": generated_question.get("correct_order") or [],
             "material_text": item.get("material_text"),
             "material_source": item.get("material_source") or {},
+            "material_decision_context": self._build_material_decision_context(item),
+            "feedback_snapshot": self._build_feedback_snapshot(item),
             "source_tail": material_selection.get("source_tail"),
             "material_id": material_selection.get("material_id"),
             "material_selection": material_selection,

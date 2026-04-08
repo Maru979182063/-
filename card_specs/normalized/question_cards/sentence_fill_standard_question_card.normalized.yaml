@@ -268,6 +268,18 @@ generation_archetypes:
     - 看是否适合该空位位置
     - 只有同时满足多维约束的选项才成立
 validator_contract:
+  sentence_fill:
+    min_final_candidate_score: 0.2
+    min_readiness_score: 0.35
+    max_total_penalty: 0.9
+    review_if_high_readiness_high_penalty: true
+    min_reasoning_depth_score: 0.6
+    min_constraint_intensity_score: 0.6
+    max_role_ambiguity_penalty: 0.62
+    max_standalone_penalty: 0.5
+    difficulty_band_allowed:
+    - medium
+    - hard
   extension_rules:
   - 正确项必须明确满足空位的段落功能，不得仅靠表面同话题通顺入选。
   - 至少1个错误项与正确项共享对象域，但在位置、功能、承接方向或指代关系上失效。
