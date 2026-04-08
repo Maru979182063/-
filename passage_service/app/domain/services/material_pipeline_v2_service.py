@@ -76,6 +76,10 @@ class MaterialPipelineV2Service(ServiceBase):
         )
         result["article_count"] = len(articles)
         result["article_ids"] = [article.id for article in articles]
+        result = self._annotate_article_fallback_result(
+            base_result=result,
+            business_family_id=business_family_id,
+        )
         return self._apply_external_fallback_if_needed(payload=payload, base_result=result)
 
     def build_formal_material_candidates(
@@ -286,6 +290,18 @@ class MaterialPipelineV2Service(ServiceBase):
             )
         ).all()
         return {material_id: status for material_id, status in rows}
+
+    def _annotate_article_fallback_result(self, *, base_result: dict, business_family_id: str) -> dict:
+        annotated = dict(base_result)
+        warnings = list(annotated.get("warnings") or [])
+        warnings.append(
+            f"reviewed_material_cache_miss:{business_family_id}:falling_back_to_article_pipeline"
+        )
+        annotated["warnings"] = warnings
+        annotated["cache_hit"] = False
+        annotated["result_mode"] = "article_fallback"
+        annotated["governance_status"] = "degraded_unreviewed_source"
+        return annotated
 
     def _minimum_structure_score(self, business_family_id: str, structure_constraints: dict) -> float:
         if not structure_constraints:

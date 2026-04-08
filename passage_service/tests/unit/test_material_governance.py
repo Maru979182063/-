@@ -99,6 +99,25 @@ class MaterialGovernanceUnitTest(TestCase):
 
         service.material_repo.update_status.assert_not_called()
 
+    def test_material_pipeline_v2_search_marks_article_fallback_as_degraded(self) -> None:
+        session = Mock()
+        service = MaterialPipelineV2Service(session)
+        service._search_cached = Mock(return_value=None)
+        service._apply_external_fallback_if_needed = Mock(side_effect=lambda *, payload, base_result: base_result)
+        service.article_repo.list = Mock(return_value=[SimpleNamespace(id="article-1")])
+        service.pipeline.search = Mock(return_value={"items": [{"candidate_id": "article-1:candidate-1"}], "warnings": []})
+
+        result = service.search({"business_family_id": "continuation", "candidate_limit": 5})
+
+        self.assertFalse(result["cache_hit"])
+        self.assertEqual(result["result_mode"], "article_fallback")
+        self.assertEqual(result["governance_status"], "degraded_unreviewed_source")
+        self.assertIn(
+            "reviewed_material_cache_miss:continuation:falling_back_to_article_pipeline",
+            result["warnings"],
+        )
+        self.assertEqual(result["article_ids"], ["article-1"])
+
     def test_expand_material_pool_skips_review_pending_gray_materials(self) -> None:
         session = Mock()
         pending_item = SimpleNamespace(
