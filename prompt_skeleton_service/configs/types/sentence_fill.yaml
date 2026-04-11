@@ -80,12 +80,19 @@ structure_schema:
 legacy_slot_mapping:
   function_type:
     opening_summary: summary
+    summarize_following_text: summary
     middle_explanation: carry_previous
     middle_focus_shift: lead_next
+    bridge_both_sides: bridge
     ending_summary: conclusion
     ending_elevation: conclusion
+    summarize_previous_text: conclusion
     inserted_reference: reference_summary
     comprehensive_match: bridge
+    topic_introduction: topic_intro
+    propose_countermeasure: countermeasure
+  logic_relation:
+    continuation_or_transition: continuation
 
 slot_schema:
   blank_position:

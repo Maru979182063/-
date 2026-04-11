@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Any
 
@@ -69,6 +70,16 @@ class ReadabilityLikeExtractor:
                 best_body_text = candidate_text
         body_text = best_body_text
 
+        embedded = self._extract_embedded_payload(soup, html)
+        if embedded:
+            if embedded.get("title") and (not title or len(title.strip()) <= 2):
+                title = embedded["title"].strip()
+            if embedded.get("published_at") and not published_at:
+                published_at = embedded["published_at"].strip()
+            embedded_body = (embedded.get("raw_text") or "").strip()
+            if len(embedded_body) > len(body_text):
+                body_text = embedded_body
+
         if not published_at:
             for selector in source_config.get("date_selectors", []):
                 node = soup.select_one(selector)
@@ -87,6 +98,75 @@ class ReadabilityLikeExtractor:
             "raw_text": body_text,
             "source_url": url,
         }
+
+    def _extract_embedded_payload(self, soup: BeautifulSoup, raw_html: str) -> dict[str, str]:
+        next_payload = self._extract_from_next_data(soup)
+        if next_payload and next_payload.get("raw_text"):
+            return next_payload
+        json_payload = self._extract_from_json_response(raw_html)
+        if json_payload and json_payload.get("raw_text"):
+            return json_payload
+        return {}
+
+    def _extract_from_next_data(self, soup: BeautifulSoup) -> dict[str, str]:
+        script = soup.find("script", attrs={"id": "__NEXT_DATA__", "type": "application/json"})
+        if script is None:
+            return {}
+        script_text = script.string or script.get_text(strip=True)
+        if not script_text:
+            return {}
+        try:
+            payload = json.loads(script_text)
+        except json.JSONDecodeError:
+            return {}
+
+        page_data = (((payload.get("props") or {}).get("pageProps") or {}).get("data") or {})
+        if not isinstance(page_data, dict):
+            return {}
+
+        content_html = ((page_data.get("textInfo") or {}).get("content") or page_data.get("content") or "").strip()
+        body_text = self._extract_text_from_html_fragment(content_html)
+        if not body_text:
+            body_text = str(page_data.get("summary") or "").strip()
+        return {
+            "title": str(page_data.get("title") or page_data.get("name") or "").strip(),
+            "published_at": str(page_data.get("pubTime") or page_data.get("publishTime") or "").strip(),
+            "raw_text": body_text,
+        }
+
+    def _extract_from_json_response(self, raw_html: str) -> dict[str, str]:
+        stripped = raw_html.strip()
+        if not (stripped.startswith("{") and stripped.endswith("}")):
+            return {}
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            return {}
+
+        model = payload.get("model")
+        if isinstance(model, list):
+            model = model[0] if model else {}
+        if not isinstance(model, dict):
+            return {}
+
+        content_html = ((model.get("textInfo") or {}).get("content") or model.get("content") or "").strip()
+        body_text = self._extract_text_from_html_fragment(content_html)
+        if not body_text:
+            body_text = str(model.get("summary") or "").strip()
+        return {
+            "title": str(model.get("title") or model.get("name") or "").strip(),
+            "published_at": str(model.get("pubTime") or model.get("publishTime") or "").strip(),
+            "raw_text": body_text,
+        }
+
+    def _extract_text_from_html_fragment(self, fragment_html: str) -> str:
+        if not fragment_html:
+            return ""
+        fragment_soup = BeautifulSoup(fragment_html, "html.parser")
+        container = fragment_soup.select_one("article, .article, .article-content, .content, .TRS_Editor, .detail, #main-content, body")
+        if container is None:
+            container = fragment_soup
+        return self._extract_node_text(container)
 
     def _extract_node_text(self, node) -> str:
         paragraphs = [p.get_text(" ", strip=True) for p in node.select("p") if p.get_text(strip=True)]

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from typing import Any
 
+from app.core.exceptions import DomainError
 from app.schemas.question import SourceQuestionPayload
+from app.schemas.runtime import OperationRouteConfig, QuestionRuntimeConfig
+from app.services.llm_gateway import LLMGatewayService
 
 
 _STOPWORDS = {
@@ -83,6 +87,10 @@ _SENTENCE_FILL_CARD_IDS = {
 
 
 class SourceQuestionAnalyzer:
+    def __init__(self, runtime_config: QuestionRuntimeConfig | None = None) -> None:
+        self.runtime_config = runtime_config
+        self.llm_gateway = LLMGatewayService(runtime_config) if runtime_config is not None else None
+
     def infer_request_target(
         self,
         source_question: SourceQuestionPayload | None,
@@ -170,11 +178,18 @@ class SourceQuestionAnalyzer:
         normalized = self._normalize_text(combined_text)
 
         if question_type == "sentence_order":
-            analysis = self._analyze_sentence_order(source_question)
+            rule_analysis = self._analyze_sentence_order(source_question)
         elif question_type == "sentence_fill":
-            analysis = self._analyze_sentence_fill(source_question)
+            rule_analysis = self._analyze_sentence_fill(source_question)
         else:
-            analysis = self._analyze_main_idea(source_question, normalized)
+            rule_analysis = self._analyze_main_idea(source_question, normalized)
+
+        analysis = self._build_effective_analysis(
+            source_question=source_question,
+            question_type=question_type,
+            business_subtype=business_subtype,
+            rule_analysis=rule_analysis,
+        )
 
         target_length = self._derive_target_length(
             passage=source_question.passage,
@@ -197,6 +212,14 @@ class SourceQuestionAnalyzer:
             "content_priority": "secondary",
             "style_summary": self._build_style_summary(source_question, question_type=question_type),
             "structure_constraints": analysis.get("structure_constraints") or {},
+            "analysis_mode": str(analysis.get("analysis_mode") or "rule_fallback"),
+            "analysis_confidence": round(float(analysis.get("analysis_confidence") or 0.0), 4),
+            "analysis_summary": analysis.get("analysis_summary"),
+            "risk_flags": list(analysis.get("risk_flags") or []),
+            "retrieval_business_card_ids": analysis.get("retrieval_business_card_ids") or [],
+            "retrieval_preferred_business_card_ids": analysis.get("retrieval_preferred_business_card_ids") or [],
+            "retrieval_query_terms": analysis.get("retrieval_query_terms") or [],
+            "retrieval_structure_constraints": analysis.get("retrieval_structure_constraints") or {},
         }
 
     def _analyze_main_idea(self, source_question: SourceQuestionPayload, normalized: str) -> dict[str, Any]:
@@ -227,12 +250,397 @@ class SourceQuestionAnalyzer:
             "structure_constraints": {},
         }
 
+    def _build_effective_analysis(
+        self,
+        *,
+        source_question: SourceQuestionPayload,
+        question_type: str,
+        business_subtype: str | None,
+        rule_analysis: dict[str, Any],
+    ) -> dict[str, Any]:
+        llm_analysis = self._llm_analyze(
+            source_question=source_question,
+            question_type=question_type,
+            business_subtype=business_subtype,
+            rule_analysis=rule_analysis,
+        )
+        if llm_analysis is None:
+            analysis = dict(rule_analysis)
+            analysis["analysis_mode"] = "rule_fallback"
+            analysis["analysis_confidence"] = self._rule_confidence(question_type=question_type, rule_analysis=rule_analysis)
+            analysis["analysis_summary"] = None
+            analysis["risk_flags"] = list(self._rule_risk_flags(question_type=question_type, rule_analysis=rule_analysis))
+        else:
+            analysis = self._merge_llm_analysis(
+                question_type=question_type,
+                rule_analysis=rule_analysis,
+                llm_analysis=llm_analysis,
+            )
+
+        retrieval = self._build_retrieval_hints(
+            question_type=question_type,
+            analysis=analysis,
+        )
+        analysis["retrieval_business_card_ids"] = retrieval["business_card_ids"]
+        analysis["retrieval_preferred_business_card_ids"] = retrieval["preferred_business_card_ids"]
+        analysis["retrieval_query_terms"] = retrieval["query_terms"]
+        analysis["retrieval_structure_constraints"] = retrieval["structure_constraints"]
+        return analysis
+
+    def _llm_analyze(
+        self,
+        *,
+        source_question: SourceQuestionPayload,
+        question_type: str,
+        business_subtype: str | None,
+        rule_analysis: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if self.llm_gateway is None:
+            return None
+        try:
+            payload = self.llm_gateway.generate_json(
+                route=self._resolve_llm_route(),
+                system_prompt=self._llm_analyzer_system_prompt(),
+                user_prompt=self._llm_analyzer_user_prompt(
+                    source_question=source_question,
+                    question_type=question_type,
+                    business_subtype=business_subtype,
+                    rule_analysis=rule_analysis,
+                ),
+                schema_name="source_question_analysis",
+                schema=self._llm_analysis_schema(),
+            )
+        except DomainError:
+            return None
+        except Exception:
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _merge_llm_analysis(
+        self,
+        *,
+        question_type: str,
+        rule_analysis: dict[str, Any],
+        llm_analysis: dict[str, Any],
+    ) -> dict[str, Any]:
+        analysis = dict(rule_analysis)
+        llm_cards = self._normalize_llm_business_cards(question_type=question_type, payload=llm_analysis.get("business_card_ids"))
+        llm_structure = self._normalize_llm_structure_constraints(
+            question_type=question_type,
+            payload=llm_analysis.get("structure_constraints"),
+            rule_structure=rule_analysis.get("structure_constraints") or {},
+        )
+        llm_query_terms = self._normalize_llm_query_terms(llm_analysis.get("query_terms"))
+        llm_topic = self._normalize_optional_text(llm_analysis.get("topic"))
+        confidence = self._normalize_confidence(llm_analysis.get("confidence"))
+        summary = self._normalize_optional_text(llm_analysis.get("analysis_summary"))
+        risk_flags = self._merge_risk_flags(
+            question_type=question_type,
+            rule_analysis=rule_analysis,
+            llm_analysis=llm_analysis,
+            confidence=confidence,
+            llm_structure=llm_structure,
+        )
+
+        if llm_topic:
+            analysis["topic"] = llm_topic
+        if llm_query_terms:
+            analysis["query_terms"] = llm_query_terms
+        if llm_cards:
+            analysis["business_card_ids"] = llm_cards
+            analysis["business_card_scores"] = self._default_llm_card_scores(llm_cards, confidence)
+        analysis["structure_constraints"] = llm_structure
+        analysis["analysis_mode"] = "llm_first"
+        analysis["analysis_confidence"] = confidence
+        analysis["analysis_summary"] = summary
+        analysis["risk_flags"] = risk_flags
+        return analysis
+
+    def _build_retrieval_hints(
+        self,
+        *,
+        question_type: str,
+        analysis: dict[str, Any],
+    ) -> dict[str, Any]:
+        confidence = float(analysis.get("analysis_confidence") or 0.0)
+        risk_flags = {str(flag) for flag in (analysis.get("risk_flags") or []) if str(flag).strip()}
+        preferred_cards = [str(card_id) for card_id in (analysis.get("business_card_ids") or []) if str(card_id).strip()]
+        query_terms = [str(term) for term in (analysis.get("query_terms") or []) if str(term).strip()]
+        structure_constraints = dict(analysis.get("structure_constraints") or {})
+
+        retrieval_business_card_ids: list[str] = []
+        retrieval_preferred_business_card_ids = list(preferred_cards)
+        retrieval_query_terms = query_terms[:4]
+        retrieval_structure_constraints = dict(structure_constraints)
+
+        if question_type == "main_idea":
+            if confidence < 0.58 or "weak_reference_signal" in risk_flags:
+                retrieval_preferred_business_card_ids = []
+                retrieval_query_terms = query_terms[:2]
+            retrieval_structure_constraints = {}
+        elif question_type == "sentence_fill":
+            if confidence < 0.64 or {"fill_function_drift", "fill_position_drift"} & risk_flags:
+                retrieval_preferred_business_card_ids = []
+                retrieval_query_terms = query_terms[:2]
+                retrieval_structure_constraints = {
+                    key: value
+                    for key, value in retrieval_structure_constraints.items()
+                    if key in {"blank_position", "unit_type", "preserve_blank_position"}
+                }
+            else:
+                retrieval_structure_constraints = {
+                    key: value
+                    for key, value in retrieval_structure_constraints.items()
+                    if key in {"blank_position", "function_type", "unit_type", "preserve_blank_position"}
+                }
+        elif question_type == "sentence_order":
+            retrieval_query_terms = query_terms[:3]
+            retrieval_structure_constraints = {
+                key: value
+                for key, value in retrieval_structure_constraints.items()
+                if key in {"sortable_unit_count", "preserve_unit_count"}
+            }
+            if confidence >= 0.68 and "order_structure_uncertain" not in risk_flags:
+                for key in (
+                    "logic_modes",
+                    "binding_types",
+                    "opening_rule",
+                    "closing_rule",
+                    "expected_binding_pair_count",
+                    "discourse_progression_pattern",
+                    "temporal_or_action_sequence_presence",
+                    "expected_unique_answer_strength",
+                ):
+                    if key in structure_constraints:
+                        retrieval_structure_constraints[key] = structure_constraints[key]
+            if confidence < 0.60:
+                retrieval_preferred_business_card_ids = []
+        return {
+            "business_card_ids": retrieval_business_card_ids,
+            "preferred_business_card_ids": retrieval_preferred_business_card_ids,
+            "query_terms": retrieval_query_terms,
+            "structure_constraints": retrieval_structure_constraints,
+        }
+
+    def _resolve_llm_route(self) -> OperationRouteConfig:
+        if self.runtime_config and self.runtime_config.llm.routing.source_question_parse is not None:
+            return self.runtime_config.llm.routing.source_question_parse
+        if self.runtime_config is None:
+            raise DomainError("Runtime config is required for LLM analyzer.", status_code=500)
+        return OperationRouteConfig(
+            provider=self.runtime_config.llm.active_provider,
+            model_key="reference_parse",
+        )
+
+    @staticmethod
+    def _llm_analyzer_system_prompt() -> str:
+        return (
+            "You analyze Chinese exam reference questions for downstream material retrieval. "
+            "Reason internally, then output only strict JSON. "
+            "Your job is to identify the most useful retrieval signals for one already-known question family. "
+            "Prefer stable structural judgments over overfitting to local wording. "
+            "If uncertain, lower confidence, add risk_flags, and avoid over-constraining structure."
+        )
+
+    def _llm_analyzer_user_prompt(
+        self,
+        *,
+        source_question: SourceQuestionPayload,
+        question_type: str,
+        business_subtype: str | None,
+        rule_analysis: dict[str, Any],
+    ) -> str:
+        allowed_cards = self._allowed_business_card_ids(question_type)
+        return (
+            f"Known target question_type: {question_type}\n"
+            f"Known business_subtype: {business_subtype or ''}\n"
+            f"Allowed business_card_ids: {json.dumps(allowed_cards, ensure_ascii=False)}\n"
+            "Return retrieval-oriented structure only. Do not invent a different family.\n"
+            "For sentence_order, runtime target is six sortable units; keep sortable_unit_count at 6 when it is a standard sentence ordering item.\n"
+            "For sentence_fill, identify blank_position and function_type conservatively.\n"
+            "For main_idea, identify cards and query terms that best support stable main-idea retrieval, not local details.\n"
+            f"Rule fallback analysis for reference: {json.dumps(rule_analysis, ensure_ascii=False)}\n"
+            f"Passage: {source_question.passage or ''}\n"
+            f"Stem: {source_question.stem or ''}\n"
+            f"Options: {json.dumps(source_question.options or {}, ensure_ascii=False)}\n"
+            f"Answer: {source_question.answer or ''}\n"
+            f"Analysis: {source_question.analysis or ''}\n"
+        )
+
+    @staticmethod
+    def _llm_analysis_schema() -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "topic": {"type": ["string", "null"]},
+                "query_terms": {"type": "array", "items": {"type": "string"}},
+                "business_card_ids": {"type": "array", "items": {"type": "string"}},
+                "structure_constraints": {
+                    "type": "object",
+                    "properties": {
+                        "sortable_unit_count": {"type": ["integer", "null"]},
+                        "logic_modes": {"type": "array", "items": {"type": "string"}},
+                        "binding_types": {"type": "array", "items": {"type": "string"}},
+                        "opening_rule": {"type": ["string", "null"]},
+                        "closing_rule": {"type": ["string", "null"]},
+                        "expected_binding_pair_count": {"type": ["integer", "null"]},
+                        "discourse_progression_pattern": {"type": ["string", "null"]},
+                        "temporal_or_action_sequence_presence": {"type": ["boolean", "null"]},
+                        "expected_unique_answer_strength": {"type": ["number", "null"]},
+                        "blank_position": {"type": ["string", "null"]},
+                        "function_type": {"type": ["string", "null"]},
+                        "unit_type": {"type": ["string", "null"]},
+                        "preserve_unit_count": {"type": ["boolean", "null"]},
+                        "preserve_blank_position": {"type": ["boolean", "null"]},
+                    },
+                },
+                "confidence": {"type": ["number", "null"]},
+                "analysis_summary": {"type": ["string", "null"]},
+                "risk_flags": {"type": "array", "items": {"type": "string"}},
+            },
+        }
+
+    def _allowed_business_card_ids(self, question_type: str) -> list[str]:
+        if question_type == "main_idea":
+            return list(_BUSINESS_CARD_MAP.values())
+        if question_type == "sentence_fill":
+            return list(_SENTENCE_FILL_CARD_IDS.values())
+        if question_type == "sentence_order":
+            return list(_SENTENCE_ORDER_CARD_IDS.values())
+        return []
+
+    def _normalize_llm_business_cards(self, *, question_type: str, payload: Any) -> list[str]:
+        allowed = set(self._allowed_business_card_ids(question_type))
+        cards: list[str] = []
+        for value in payload or []:
+            card_id = str(value or "").strip()
+            if not card_id or card_id not in allowed or card_id in cards:
+                continue
+            cards.append(card_id)
+        return cards[:3]
+
+    def _normalize_llm_structure_constraints(
+        self,
+        *,
+        question_type: str,
+        payload: Any,
+        rule_structure: dict[str, Any],
+    ) -> dict[str, Any]:
+        llm_constraints = dict(payload or {})
+        merged = dict(rule_structure)
+        if question_type == "sentence_order":
+            merged["sortable_unit_count"] = 6
+            merged["preserve_unit_count"] = True
+            for key in (
+                "logic_modes",
+                "binding_types",
+                "opening_rule",
+                "closing_rule",
+                "expected_binding_pair_count",
+                "discourse_progression_pattern",
+                "temporal_or_action_sequence_presence",
+                "expected_unique_answer_strength",
+            ):
+                if key in llm_constraints and llm_constraints.get(key) not in (None, [], ""):
+                    merged[key] = llm_constraints.get(key)
+            return merged
+        if question_type == "sentence_fill":
+            for key in ("blank_position", "function_type", "unit_type"):
+                if llm_constraints.get(key) not in (None, "", []):
+                    merged[key] = str(llm_constraints.get(key)).strip()
+            merged["preserve_blank_position"] = True
+            return merged
+        return merged
+
+    def _normalize_llm_query_terms(self, payload: Any) -> list[str]:
+        terms: list[str] = []
+        for value in payload or []:
+            term = self._normalize_optional_text(value)
+            if not term or not self._is_valid_query_term(term) or term in terms:
+                continue
+            terms.append(term)
+        return terms[:6]
+
+    @staticmethod
+    def _normalize_optional_text(value: Any) -> str | None:
+        text = str(value or "").strip()
+        return text or None
+
+    @staticmethod
+    def _normalize_confidence(value: Any) -> float:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            numeric = 0.55
+        return round(max(0.0, min(1.0, numeric)), 4)
+
+    def _default_llm_card_scores(self, business_card_ids: list[str], confidence: float) -> list[dict[str, Any]]:
+        base = max(0.42, min(0.92, confidence))
+        scores: list[dict[str, Any]] = []
+        for index, card_id in enumerate(business_card_ids):
+            score = max(0.32, round(base - index * 0.08, 4))
+            scores.append({"business_card_id": card_id, "score": score})
+        return scores
+
+    def _rule_confidence(self, *, question_type: str, rule_analysis: dict[str, Any]) -> float:
+        business_card_ids = rule_analysis.get("business_card_ids") or []
+        query_terms = rule_analysis.get("query_terms") or []
+        if question_type == "main_idea":
+            if business_card_ids == [_BUSINESS_CARD_MAP["theme"]] and not query_terms:
+                return 0.42
+            return 0.58
+        if question_type == "sentence_fill":
+            return 0.52 if query_terms else 0.46
+        if question_type == "sentence_order":
+            return 0.60
+        return 0.50
+
+    def _rule_risk_flags(self, *, question_type: str, rule_analysis: dict[str, Any]) -> list[str]:
+        flags: list[str] = []
+        if question_type == "main_idea":
+            if (rule_analysis.get("business_card_ids") or []) == [_BUSINESS_CARD_MAP["theme"]] and not (rule_analysis.get("query_terms") or []):
+                flags.append("weak_reference_signal")
+        if question_type == "sentence_fill":
+            structure_constraints = rule_analysis.get("structure_constraints") or {}
+            if str(structure_constraints.get("blank_position") or "") == "middle" and str(structure_constraints.get("function_type") or "") == "bridge_both_sides":
+                flags.append("fill_function_drift")
+        return flags
+
+    def _merge_risk_flags(
+        self,
+        *,
+        question_type: str,
+        rule_analysis: dict[str, Any],
+        llm_analysis: dict[str, Any],
+        confidence: float,
+        llm_structure: dict[str, Any],
+    ) -> list[str]:
+        flags = {str(flag).strip() for flag in (llm_analysis.get("risk_flags") or []) if str(flag).strip()}
+        if confidence < 0.58:
+            flags.add("weak_reference_signal")
+        rule_structure = rule_analysis.get("structure_constraints") or {}
+        if question_type == "sentence_fill":
+            rule_blank = str(rule_structure.get("blank_position") or "")
+            llm_blank = str(llm_structure.get("blank_position") or "")
+            if rule_blank and llm_blank and rule_blank != llm_blank:
+                flags.add("fill_position_drift")
+            rule_function = str(rule_structure.get("function_type") or "")
+            llm_function = str(llm_structure.get("function_type") or "")
+            if rule_function and llm_function and rule_function != llm_function:
+                flags.add("fill_function_drift")
+        if question_type == "sentence_order" and int(llm_structure.get("sortable_unit_count") or 0) != 6:
+            flags.add("order_structure_uncertain")
+        return sorted(flags)
+
     def _analyze_sentence_order(self, source_question: SourceQuestionPayload) -> dict[str, Any]:
         passage = source_question.passage or ""
         analysis = source_question.analysis or ""
         normalized = self._normalize_text("\n".join([passage, source_question.stem, analysis]))
         units = self._extract_sentence_order_units(passage)
-        unit_count = len(units)
+        unit_count = self._normalize_sentence_order_reference_unit_count(
+            source_question=source_question,
+            extracted_units=units,
+        )
         logic_modes = self._infer_sentence_order_logic_modes(normalized)
         binding_types = self._infer_sentence_order_binding_types(normalized)
         opening_rule = self._infer_sentence_order_opening_rule(units)
@@ -317,6 +725,7 @@ class SourceQuestionAnalyzer:
             ],
             "structure_constraints": {
                 "sortable_unit_count": unit_count,
+                "reference_detected_sortable_unit_count": len(units),
                 "logic_modes": logic_modes,
                 "binding_types": binding_types,
                 "opening_rule": opening_rule,
@@ -346,6 +755,33 @@ class SourceQuestionAnalyzer:
                 "preserve_unit_count": True,
             },
         }
+
+    def _normalize_sentence_order_reference_unit_count(
+        self,
+        *,
+        source_question: SourceQuestionPayload,
+        extracted_units: list[str],
+    ) -> int:
+        option_values = [str(value or "").strip() for value in (source_question.options or {}).values()]
+        explicit_unit_lengths: list[int] = []
+        for value in option_values:
+            circled = re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]", value)
+            if circled:
+                explicit_unit_lengths.append(len(circled))
+                continue
+            digits = re.findall(r"\d+", value)
+            if digits:
+                explicit_unit_lengths.append(len(digits))
+
+        if any(length == 6 for length in explicit_unit_lengths):
+            return 6
+
+        extracted_count = len(extracted_units)
+        if extracted_count > 10:
+            return 6
+        if 4 <= extracted_count <= 8:
+            return 6
+        return extracted_count
 
     def _analyze_sentence_fill(self, source_question: SourceQuestionPayload) -> dict[str, Any]:
         passage = source_question.passage or ""

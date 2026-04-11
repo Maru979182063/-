@@ -43,6 +43,22 @@ pip install -e .
 uvicorn app.main:app --reload
 ```
 
+## LLM 配置
+
+服务现在支持将“材料处理”和“题目生成”拆到两套独立的 LLM key 与链路：
+
+- `GENERATION_LLM_API_KEY`
+- `GENERATION_LLM_BASE_URL`
+- `MATERIAL_LLM_API_KEY`
+- `MATERIAL_LLM_BASE_URL`
+
+当前路由划分如下：
+
+- 生成链路：`generate_question`、`question_generation`、`question_repair`、`source_question_parse`、`review_actions.*`、`evaluation.judge`
+- 材料链路：`material_refinement`
+
+如果两条链路暂时仍想走同一家供应商，也可以把两套环境变量配置成相同值。
+
 ## API
 
 - `GET /api/v1/types`

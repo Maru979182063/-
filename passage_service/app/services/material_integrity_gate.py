@@ -274,7 +274,7 @@ class MaterialIntegrityGate:
             ]
         )
         return self.provider.generate_json(
-            model=self.config.get("models", {}).get("integrity_gate", self.config.get("models", {}).get("universal_tagger", "gpt-4o-mini")),
+            model=self.config.get("models", {}).get("integrity_gate", self.config.get("models", {}).get("universal_tagger", "gpt-5.4-nano")),
             instructions=self.prompt,
             input_payload={
                 "prompt": prompt,

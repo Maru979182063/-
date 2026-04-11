@@ -91,7 +91,7 @@ class LogicalSegmentRefiner:
         )
         try:
             return self.provider.generate_json(
-                model=self.llm_config.get("models", {}).get("logical_segment_refiner", "gpt-4o-mini"),
+            model=self.llm_config.get("models", {}).get("logical_segment_refiner", "gpt-5.4-nano"),
                 instructions=self.prompt,
                 input_payload={
                     "prompt": prompt,

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>用户自带材料制作台</title>
+    <link rel="stylesheet" href="/demo-static/styles.css?v=20260408a" />
+    <style>
+      .forced-shell {
+        min-height: calc(100vh - 48px);
+        padding: 42px 42px 52px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 255, 0.98) 100%);
+        box-shadow: var(--shadow);
+      }
+
+      .forced-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        gap: 24px;
+        margin-bottom: 28px;
+      }
+
+      .forced-hero-card {
+        padding: 26px 28px;
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        background: linear-gradient(135deg, #f4fbff 0%, #ffffff 58%, #fff9ef 100%);
+      }
+
+      .forced-hero-card h1 {
+        margin: 0 0 16px;
+        font-size: 42px;
+        line-height: 1.08;
+      }
+
+      .forced-hero-card p,
+      .forced-side-card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.8;
+      }
+
+      .forced-side-card {
+        padding: 24px 26px;
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        background: #fffdf7;
+      }
+
+      .forced-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .forced-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .forced-chip-blue {
+        background: #e9f6ff;
+        color: #176e9c;
+      }
+
+      .forced-chip-gold {
+        background: #fff4cf;
+        color: #8a6500;
+      }
+
+      .forced-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+        gap: 24px;
+      }
+
+      .forced-panel {
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      .forced-panel h2 {
+        margin: 0 0 16px;
+        font-size: 24px;
+      }
+
+      .forced-subtitle {
+        margin: -4px 0 18px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .forced-form {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .forced-field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .forced-field span {
+        font-size: 14px;
+        font-weight: 700;
+        color: #31425f;
+      }
+
+      .forced-two {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .forced-three {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .forced-textarea {
+        min-height: 270px;
+        resize: vertical;
+        line-height: 1.8;
+      }
+
+      .forced-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .forced-primary {
+        border: none;
+        border-radius: 14px;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, #1e94cb 0%, #1377af 100%);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .forced-secondary {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px 18px;
+        background: #fff;
+        color: var(--text);
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .forced-primary:disabled,
+      .forced-secondary:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+
+      .forced-hint {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .forced-status {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: #f7fbff;
+        line-height: 1.75;
+      }
+
+      .forced-status[hidden] {
+        display: none !important;
+      }
+
+      .forced-status-error {
+        border-color: #efc1c1;
+        background: #fff5f5;
+        color: #8d3f3f;
+      }
+
+      .forced-status-info {
+        border-color: #cfe1f7;
+        background: #f4f9ff;
+        color: #1d618f;
+      }
+
+      .forced-result-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .forced-empty {
+        padding: 28px 24px;
+        border-radius: 20px;
+        border: 1px dashed var(--line);
+        background: #fbfdff;
+        color: var(--muted);
+        line-height: 1.9;
+      }
+
+      .forced-result-card {
+        padding: 22px 22px 18px;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,251,255,0.98) 100%);
+      }
+
+      .forced-result-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 14px;
+      }
+
+      .forced-result-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .forced-badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .forced-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .forced-badge-warn {
+        background: #fff3d6;
+        color: #8c6400;
+      }
+
+      .forced-badge-info {
+        background: #eaf6ff;
+        color: #1f6f9f;
+      }
+
+      .forced-stem {
+        margin: 0 0 14px;
+        font-size: 16px;
+        line-height: 1.8;
+      }
+
+      .forced-options {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      .forced-option {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #fff;
+        border: 1px solid #d9e3f2;
+        line-height: 1.75;
+      }
+
+      .forced-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .forced-meta-box {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #f8fbff;
+        border: 1px solid #e0e8f5;
+      }
+
+      .forced-meta-box strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+      }
+
+      .forced-warning-list {
+        margin: 0;
+        padding-left: 18px;
+        color: #6e7c92;
+        line-height: 1.75;
+      }
+
+      @media (max-width: 1080px) {
+        .forced-hero,
+        .forced-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .forced-three {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .forced-shell {
+          padding: 24px 18px 30px;
+        }
+
+        .forced-two,
+        .forced-meta {
+          grid-template-columns: 1fr;
+        }
+
+        .forced-hero-card h1 {
+          font-size: 32px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-shell">
+      <section class="forced-shell">
+        <div class="forced-hero">
+          <div class="forced-hero-card">
+            <h1>用户自带材料制作台</h1>
+            <p>用户把自己的文段带进来，前端选题型、业务子类和难度，系统直接强制制作，不再走平台材料检索。这条线会完整打标，方便后续自适应时谨慎分析。</p>
+            <div class="forced-chip-row">
+              <span class="forced-chip forced-chip-blue">强制模式</span>
+              <span class="forced-chip forced-chip-gold">全题卡可试</span>
+              <span class="forced-chip forced-chip-gold">结果谨慎使用</span>
+            </div>
+          </div>
+          <aside class="forced-side-card">
+            <p>这页是独立 mock，不会影响你原来的大 demo。它重点展示一件事：用户上传文段以后，系统如何直接出题、如何给结果打 caution 标记，以及失败时也怎样稳定返回。</p>
+          </aside>
+        </div>
+
+        <div class="forced-grid">
+          <section class="forced-panel">
+            <h2>制作参数</h2>
+            <p class="forced-subtitle">材料只要带来就直接做，不做前置适配拦截。为了便于后续分析，系统会自动记下这是一条 <code>forced_user_material</code> 结果。</p>
+
+            <form id="forcedMaterialForm" class="forced-form">
+              <div class="forced-three">
+                <label class="forced-field">
+                  <span>题型</span>
+                  <select id="questionFocus" name="question_focus"></select>
+                </label>
+                <label class="forced-field">
+                  <span>业务子类</span>
+                  <select id="specialType" name="special_type"></select>
+                </label>
+                <label class="forced-field">
+                  <span>难度</span>
+                  <select id="difficultyLevel" name="difficulty_level">
+                    <option value="easy">easy</option>
+                    <option value="medium" selected>medium</option>
+                    <option value="hard">hard</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="forced-two">
+                <label class="forced-field">
+                  <span>标题</span>
+                  <input id="materialTitle" type="text" placeholder="可选，用于记录材料标题" />
+                </label>
+                <label class="forced-field">
+                  <span>主题</span>
+                  <input id="materialTopic" type="text" placeholder="可选，如：就业、城市治理、传统文化" />
+                </label>
+              </div>
+
+              <div class="forced-two">
+                <label class="forced-field">
+                  <span>文体方向</span>
+                  <select id="documentGenre">
+                    <option value="">未指定</option>
+                    <option value="policy">政策文</option>
+                    <option value="commentary">评论文</option>
+                    <option value="science">科普文</option>
+                    <option value="news">新闻报道</option>
+                    <option value="essay">议论文</option>
+                  </select>
+                </label>
+                <label class="forced-field">
+                  <span>来源标记</span>
+                  <input id="sourceLabel" type="text" placeholder="如：用户上传 / 项目定稿 / 内部样文" />
+                </label>
+              </div>
+
+              <label class="forced-field">
+                <span>用户材料</span>
+                <textarea id="materialText" class="forced-textarea" placeholder="把用户自带的文段直接贴进来"></textarea>
+              </label>
+
+              <div class="forced-actions">
+                <button id="generateButton" class="forced-primary" type="submit">直接制作</button>
+                <button id="fillSampleButton" class="forced-secondary" type="button">填入示例材料</button>
+                <button id="previewResultButton" class="forced-secondary" type="button">看样例结果</button>
+              </div>
+              <div class="forced-hint">这条模式会把校验和评测结果保留下来，但不会因为材料不适配就提前拦截。</div>
+            </form>
+
+            <div id="formStatus" class="forced-status forced-status-info" hidden></div>
+          </section>
+
+          <section class="forced-panel">
+            <h2>制作结果</h2>
+            <p class="forced-subtitle">这里展示的是返回到前端的一手结果态，包括强制生成标记、状态、题干和选项。</p>
+            <div id="resultStack" class="forced-result-stack">
+              <div class="forced-empty">还没有开始制作。你可以先点“填入示例材料”，再试一轮强制出题。</div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <script src="/demo-static/user_material_demo.js?v=20260408a"></script>
+  </body>
+</html>

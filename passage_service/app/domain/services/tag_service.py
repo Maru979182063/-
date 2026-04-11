@@ -3,6 +3,7 @@ from app.core.enums import ArticleStatus, CandidateSpanStatus, MaterialStatus, R
 from app.domain.models.plugin_contracts import RunContext
 from app.domain.services._common import ServiceBase
 from app.domain.services.pool_service import PoolService
+from app.domain.services.material_v2_index_service import MaterialV2IndexService
 from app.domain.services.review_service import ReviewService
 from app.domain.services.sync_service import SyncService
 from app.infra.plugins.loader import load_plugins
@@ -61,7 +62,6 @@ class TagService(ServiceBase):
         source_info = governance.build_source_info(article)
         source_payload = source_info.model_dump()
         source_tail = governance.build_source_tail(source_info)
-        self.material_repo.demote_existing_for_article(article_id)
 
         candidates = self.candidate_repo.list_new(article_id)
         spans: list[SpanRecord] = []
@@ -159,11 +159,35 @@ class TagService(ServiceBase):
 
             subtype_candidates: list[dict] = []
             family_profiles: dict = {}
+            ranked_top_candidates = sorted(
+                [(family_name, family_scores.family_scores.get(family_name, 0.0)) for family_name in top_candidates],
+                key=lambda item: item[1],
+                reverse=True,
+            )
+            primary_score = float(family_scores.family_scores.get(family_scores.primary_family or "", 0.0))
+            second_score = float(ranked_top_candidates[1][1]) if len(ranked_top_candidates) > 1 else 0.0
+            primary_second_gap = round(primary_score - second_score, 4) if ranked_top_candidates else 1.0
             for family_name in top_candidates:
                 tagger = family_taggers.get(family_name)
                 if tagger is None:
                     continue
-                family_subtypes, family_profile = tagger.score(span, universal_profile)
+                family_score = float(family_scores.family_scores.get(family_name, 0.0))
+                family_rank = next((index for index, (name, _) in enumerate(ranked_top_candidates) if name == family_name), 99)
+                runtime_context = {
+                    "family": family_name,
+                    "family_rank": family_rank,
+                    "family_score": round(family_score, 4),
+                    "primary_family": family_scores.primary_family,
+                    "primary_score": round(primary_score, 4),
+                    "score_gap_from_primary": round(max(primary_score - family_score, 0.0), 4),
+                    "primary_second_gap": primary_second_gap,
+                    "top_candidates": top_candidates,
+                }
+                tagger.set_runtime_context(runtime_context)
+                try:
+                    family_subtypes, family_profile = tagger.score(span, universal_profile)
+                finally:
+                    tagger.clear_runtime_context()
                 subtype_candidates.extend([item.model_dump() for item in family_subtypes])
                 family_profiles[family_name] = family_profile
 
@@ -333,11 +357,14 @@ class TagService(ServiceBase):
             )
             created_material_ids.append(material.id)
 
+        self._replace_existing_primary_materials(article_id=article_id, created_material_ids=created_material_ids)
         self.article_repo.update_status(article_id, ArticleStatus.TAGGED.value)
+        v2_precompute_result = self._precompute_v2_index_for_article(article_id=article_id, created_material_ids=created_material_ids)
         return {
             "article_id": article_id,
             "created_material_ids": created_material_ids,
             "rejected_candidates": rejected_candidates,
+            "v2_precompute": v2_precompute_result,
             "summary": {
                 "created_count": len(created_material_ids),
                 "rejected_count": len(rejected_candidates),
@@ -357,6 +384,34 @@ class TagService(ServiceBase):
         for family_name, tagger in zip(family_names, tagger_instances, strict=False):
             family_taggers[family_name] = tagger
         return family_taggers
+
+    def _replace_existing_primary_materials(self, *, article_id: str, created_material_ids: list[str]) -> dict:
+        if not created_material_ids:
+            self.audit_repo.log(
+                "article",
+                article_id,
+                "primary_replace_skipped",
+                {
+                    "reason": "no_created_materials",
+                    "created_material_count": 0,
+                },
+            )
+            return {"triggered": False, "demoted_count": 0}
+        demoted_count = self.material_repo.demote_existing_for_article(
+            article_id,
+            exclude_material_ids=created_material_ids,
+        )
+        self.audit_repo.log(
+            "article",
+            article_id,
+            "primary_replace",
+            {
+                "triggered": True,
+                "created_material_count": len(created_material_ids),
+                "demoted_count": int(demoted_count or 0),
+            },
+        )
+        return {"triggered": True, "demoted_count": int(demoted_count or 0)}
 
     def _reject_candidate(
         self,
@@ -380,6 +435,35 @@ class TagService(ServiceBase):
                 "integrity": integrity or {},
             },
         )
+
+    def _precompute_v2_index_for_article(self, *, article_id: str, created_material_ids: list[str]) -> dict:
+        if not created_material_ids:
+            return {
+                "triggered": False,
+                "reason": "no_created_materials",
+                "updated_count": 0,
+                "skipped_count": 0,
+                "families": {},
+            }
+        result = MaterialV2IndexService(self.session).precompute(
+            {
+                "article_ids": [article_id],
+                "primary_only": True,
+            }
+        )
+        self.audit_repo.log(
+            "article",
+            article_id,
+            "v2_precompute",
+            {
+                "triggered": True,
+                **result,
+            },
+        )
+        return {
+            "triggered": True,
+            **result,
+        }
 
     def _hold_candidate(
         self,

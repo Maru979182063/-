@@ -147,6 +147,19 @@
         gap: 12px;
       }
 
+      .replacement-preview-box {
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: #fbfdff;
+      }
+
+      .replacement-preview-meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
       .compact-pre {
         margin: 0;
         white-space: pre-wrap;
@@ -164,8 +177,61 @@
         line-height: 1.8;
       }
 
+      .user-material-card {
+        padding: 24px 26px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255, 250, 238, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+      }
+
+      .user-material-card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-start;
+      }
+
+      .user-material-card-head h2 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+
+      .user-material-card-head p {
+        margin: 0;
+        max-width: 760px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .user-material-panel {
+        margin-top: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .user-material-panel[hidden] {
+        display: none !important;
+      }
+
+      .user-material-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .user-material-inline-note {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
       @media (max-width: 900px) {
         .signal-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .replacement-preview-meta {
           grid-template-columns: 1fr;
         }
       }
@@ -183,7 +249,7 @@
 
           <form id="generateForm" class="builder-form">
             <div class="builder-note">
-              构建区本轮只发送后端真实消费字段：题型、业务子类、数量、难度、文本方向、材料结构、可选参考母题、可选材料偏好。
+              构建区本轮只发送后端真实消费字段：题型、业务子类、数量、难度、文本方向，以及可选参考母题或用户自带材料。
             </div>
 
             <div class="builder-grid">
@@ -206,21 +272,6 @@
                 <span>文本方向</span>
                 <select id="textDirection" name="text_direction"></select>
               </label>
-
-              <label class="field">
-                <span>材料结构</span>
-                <select id="materialStructure" name="material_structure"></select>
-              </label>
-
-              <label class="field">
-                <span>材料偏好</span>
-                <input
-                  id="preferredGenres"
-                  name="preferred_document_genres"
-                  type="text"
-                  placeholder="可选，逗号分隔，如：政策文, 科普文"
-                />
-              </label>
             </div>
 
             <div class="count-card">
@@ -237,6 +288,37 @@
                 <span>5</span>
               </div>
             </div>
+
+            <section class="user-material-card">
+              <div class="user-material-card-head">
+                <div>
+                  <h2>自己上传材料</h2>
+                  <p>
+                    不想走平台自动选材时，可以直接把用户文段贴进来。系统会带着当前页面已选参数直接制作，
+                    并把结果标成需要谨慎分析的特殊样本。
+                  </p>
+                </div>
+                <button id="userMaterialToggleBtn" type="button" class="secondary-btn">自己上传材料</button>
+              </div>
+
+              <div id="userMaterialPanel" class="user-material-panel" hidden>
+                <label class="reference-field reference-field-full">
+                  <span>用户材料全文</span>
+                  <textarea
+                    id="userMaterialText"
+                    rows="6"
+                    placeholder="把用户自己带来的文段直接贴到这里。提交后会带着当前参数一起调用原来的生成接口。"
+                  ></textarea>
+                </label>
+                <div class="user-material-actions">
+                  <button id="userMaterialCancelBtn" type="button" class="secondary-btn">取消</button>
+                  <button id="userMaterialSubmitBtn" type="button" class="primary-btn">提交</button>
+                </div>
+                <div class="user-material-inline-note">
+                  取消会直接清空这段材料并收起文本框；提交时如果缺少必要参数，会先弹窗提醒你补齐。
+                </div>
+              </div>
+            </section>
 
             <section class="reference-card">
               <div class="reference-card-head">
@@ -367,6 +449,6 @@
       </section>
     </div>
 
-    <script src="/demo-static/app_v2.js?v=20260408a"></script>
+    <script src="/demo-static/app_v2.js?v=20260410a"></script>
   </body>
 </html>

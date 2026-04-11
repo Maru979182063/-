@@ -9,7 +9,7 @@ runtime_binding:
 display_name: 语句填空标准题卡
 description: 基于空位位置与上下文逻辑，为文段选择最合适的填入句。该卡消费中间结构材料卡，而不直接绑定单一主族。
 structure_schema:
-  position:
+  blank_position:
     type: enum
     values:
       - opening
@@ -46,12 +46,19 @@ uniqueness_source:
 legacy_slot_mapping:
   function_type:
     opening_summary: summary
+    summarize_following_text: summary
     middle_explanation: carry_previous
     middle_focus_shift: lead_next
+    bridge_both_sides: bridge
     ending_summary: conclusion
     ending_elevation: conclusion
+    summarize_previous_text: conclusion
     inserted_reference: reference_summary
     comprehensive_match: bridge
+    topic_introduction: topic_intro
+    propose_countermeasure: countermeasure
+  logic_relation:
+    continuation_or_transition: continuation
 upstream_contract:
   required_candidate_types:
   - closed_span

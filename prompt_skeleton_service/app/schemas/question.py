@@ -28,6 +28,16 @@ class SourceQuestionPayload(BaseModel):
     analysis: str | None = None
 
 
+class UserMaterialPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    title: str | None = None
+    topic: str | None = None
+    document_genre: str | None = None
+    source_label: str | None = None
+
+
 class SourceQuestionDetectRequest(BaseModel):
     source_question: SourceQuestionPayload
 
@@ -54,6 +64,7 @@ class QuestionGenerateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     question_card_id: str | None = None
+    generation_mode: Literal["standard", "forced_user_material"] = "standard"
     question_focus: str = Field(validation_alias=AliasChoices("question_focus", "\u95ee\u9898\u8003\u70b9"))
     difficulty_level: str = Field(validation_alias=AliasChoices("difficulty_level", "\u96be\u5ea6\u7ea7\u522b"))
     text_direction: str | None = Field(
@@ -74,6 +85,7 @@ class QuestionGenerateRequest(BaseModel):
     extra_constraints: dict[str, Any] | None = None
     material_policy: MaterialPolicy | None = None
     source_question: SourceQuestionPayload | None = None
+    user_material: UserMaterialPayload | None = None
 
     @field_validator("question_focus", mode="before")
     @classmethod
@@ -106,6 +118,12 @@ class QuestionGenerateRequest(BaseModel):
             special_question_types=self.special_question_types,
             count=self.count,
         )
+
+    @model_validator(mode="after")
+    def normalize_generation_mode(self) -> "QuestionGenerateRequest":
+        if self.user_material is not None and self.generation_mode == "standard":
+            self.generation_mode = "forced_user_material"
+        return self
 
 
 class MaterialSelectionResult(BaseModel):
@@ -338,6 +356,49 @@ class QuestionReviewActionResponse(BaseModel):
     action_id: str
     action: str
     item: QuestionGenerationItem
+
+
+class QuestionDownloadRequest(BaseModel):
+    operator: str | None = None
+    channel: str | None = None
+    export_format: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class QuestionUsageEventLog(BaseModel):
+    event_id: str
+    item_id: str
+    event_type: str
+    operator: str | None = None
+    created_at: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class QuestionDownloadResponse(BaseModel):
+    event: QuestionUsageEventLog
+    item: QuestionGenerationItem
+
+
+class SourceQuestionAssetSummary(BaseModel):
+    asset_id: str
+    source_type: str
+    source_hash: str
+    question_card_id: str | None = None
+    question_type: str | None = None
+    business_subtype: str | None = None
+    pattern_id: str | None = None
+    difficulty_target: str | None = None
+    topic: str | None = None
+    usage_count: int = 0
+    created_at: str
+    updated_at: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SourceQuestionAssetListResponse(BaseModel):
+    count: int
+    items: list[SourceQuestionAssetSummary] = Field(default_factory=list)
 
 
 class QuestionControlValue(BaseModel):

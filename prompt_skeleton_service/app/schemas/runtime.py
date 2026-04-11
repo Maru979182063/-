@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 class ModelRoutingConfig(BaseModel):
     default_generation: str
+    question_generation: str | None = None
+    question_repair: str | None = None
     minor_edit: str
     question_modify: str
     text_modify: str

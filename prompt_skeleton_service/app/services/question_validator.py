@@ -4,6 +4,7 @@ import re
 from typing import Any, Callable
 
 from app.schemas.item import GeneratedQuestion, ValidationResult
+from app.services.sentence_fill_protocol import normalize_sentence_fill_function_type
 
 
 ValidatorFn = Callable[[GeneratedQuestion, dict[str, Any]], tuple[list[str], list[str], dict[str, Any]]]
@@ -493,20 +494,7 @@ class QuestionValidatorService:
         return ""
 
     def _normalize_sentence_fill_function_type(self, value: Any) -> str:
-        raw = str(value or "").strip()
-        if not raw:
-            return ""
-        alias_map = {
-            "bridge_both_sides": "bridge",
-            "opening_summary": "summary",
-            "middle_explanation": "carry_previous",
-            "middle_focus_shift": "lead_next",
-            "ending_summary": "conclusion",
-            "ending_elevation": "conclusion",
-            "inserted_reference": "reference_summary",
-            "comprehensive_match": "bridge",
-        }
-        return alias_map.get(raw, raw)
+        return normalize_sentence_fill_function_type(value)
 
     def _extract_sentence_fill_constraints(self, context: dict[str, Any]) -> dict[str, Any]:
         validator_contract = context.get("validator_contract") or {}
@@ -2533,7 +2521,7 @@ class QuestionValidatorService:
             if runtime_function_type
             else ("validator_contract" if contract_function_type else "compatibility_disabled")
         )
-        if function_type == "bridge_both_sides":
+        if function_type == "bridge":
             analysis_has_bridge = any(token in generated_question.analysis for token in ("承上启下", "承前启后", "前文", "后文"))
             checks["sentence_fill_bridge_reasoning"] = {
                 "passed": analysis_has_bridge,

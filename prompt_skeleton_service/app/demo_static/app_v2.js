@@ -55,30 +55,53 @@ const SPECIAL_TYPE_OPTIONS = {
   center_understanding: [{ value: "", label: "中心理解默认" }],
 };
 
-const TEXT_DIRECTION_OPTIONS = [
-  { value: "", label: "不指定" },
-  { value: "概括归纳", label: "概括归纳" },
-  { value: "主旨判断", label: "主旨判断" },
-  { value: "标题统摄", label: "标题统摄" },
-  { value: "结构推进", label: "结构推进" },
-  { value: "因果辨析", label: "因果辨析" },
-  { value: "转折判断", label: "转折判断" },
-  { value: "对策归纳", label: "对策归纳" },
-];
-
-const MATERIAL_STRUCTURE_OPTIONS = [
-  { value: "", label: "不指定" },
-  { value: "整段统合", label: "整段统合" },
-  { value: "局部概括", label: "局部概括" },
-  { value: "因果链条", label: "因果链条" },
-  { value: "转折推进", label: "转折推进" },
-  { value: "问题-对策", label: "问题-对策" },
-  { value: "总分", label: "总分" },
-  { value: "分总", label: "分总" },
-  { value: "并列展开", label: "并列展开" },
-  { value: "时间推进", label: "时间推进" },
-  { value: "步骤推进", label: "步骤推进" },
-];
+const TEXT_DIRECTION_OPTIONS_BY_FOCUS = {
+  default: [
+    { value: "", label: "不指定" },
+    { value: "评论文", label: "评论文" },
+    { value: "政策文", label: "政策文" },
+    { value: "说明文", label: "说明文" },
+    { value: "纪实文", label: "纪实文" },
+    { value: "科普文", label: "科普文" },
+    { value: "新闻述评", label: "新闻述评" },
+  ],
+  main_idea: [
+    { value: "", label: "不指定" },
+    { value: "评论文", label: "评论文" },
+    { value: "政策文", label: "政策文" },
+    { value: "说明文", label: "说明文" },
+    { value: "新闻述评", label: "新闻述评" },
+    { value: "纪实文", label: "纪实文" },
+  ],
+  center_understanding: [
+    { value: "", label: "不指定" },
+    { value: "评论文", label: "评论文" },
+    { value: "政策文", label: "政策文" },
+    { value: "说明文", label: "说明文" },
+    { value: "纪实文", label: "纪实文" },
+  ],
+  continuation: [
+    { value: "", label: "不指定" },
+    { value: "记叙文", label: "记叙文" },
+    { value: "散文", label: "散文" },
+    { value: "故事文", label: "故事文" },
+    { value: "人物纪实", label: "人物纪实" },
+  ],
+  sentence_order: [
+    { value: "", label: "不指定" },
+    { value: "评论文", label: "评论文" },
+    { value: "说明文", label: "说明文" },
+    { value: "议论文", label: "议论文" },
+    { value: "政策文", label: "政策文" },
+  ],
+  sentence_fill: [
+    { value: "", label: "不指定" },
+    { value: "评论文", label: "评论文" },
+    { value: "说明文", label: "说明文" },
+    { value: "科普文", label: "科普文" },
+    { value: "政策文", label: "政策文" },
+  ],
+};
 
 const DIFFICULTY_OPTIONS = [
   { value: "easy", label: "简单" },
@@ -205,6 +228,7 @@ const state = {
   items: [],
   controlsByItem: {},
   replacementsByItem: {},
+  selectedReplacementByItem: {},
   loadingStep: "collect",
 };
 
@@ -246,6 +270,57 @@ function safeFloat(value) {
 function formatScore(value) {
   const numeric = safeFloat(value);
   return numeric == null ? "-" : numeric.toFixed(4);
+}
+
+function isMissingScoringFeedback(feedback) {
+  return Boolean(feedback && feedback.decision_reason === "material_scoring_missing");
+}
+
+function cleanDisplayText(value, options = {}) {
+  const replaceBlankToken = options.replaceBlankToken !== false;
+  let text = String(value == null ? "" : value);
+  if (!text.trim()) return "";
+
+  text = text.replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ");
+  if (replaceBlankToken) {
+    text = text.replace(/\[BLANK\]/g, "____");
+  }
+  text = text.replace(/[ \t]+\n/g, "\n");
+  text = text.replace(/\n{3,}/g, "\n\n");
+  text = text.replace(/[ \t]{2,}/g, " ");
+  text = text.replace(/\s+([，。！？；：、）】》])/g, "$1");
+  text = text.replace(/([（【《“‘])\s+/g, "$1");
+
+  let previous = "";
+  while (previous !== text) {
+    previous = text;
+    text = text.replace(/([\u4e00-\u9fff])\s+([\u4e00-\u9fff])/g, "$1$2");
+  }
+
+  return text.trim();
+}
+
+function extractPatternFromBusinessCard(cardId) {
+  const raw = String(cardId || "").trim();
+  if (!raw || !raw.includes("__")) return null;
+  const parts = raw.split("__").filter(Boolean);
+  if (parts.length < 2) return null;
+  return parts[1] || null;
+}
+
+function resolveDisplayedSubtype(item) {
+  const materialSource = getMaterialSource(item);
+  const promptLabel = String(materialSource?.prompt_extras?.business_feature_card_label || "").trim();
+  if (promptLabel) {
+    return promptLabel.replace(/^语句填空-/, "").replace(/^接语选择-/, "").replace(/^语句排序-/, "").trim();
+  }
+
+  const businessCardPattern = extractPatternFromBusinessCard(materialSource?.selected_business_card);
+  if (businessCardPattern) {
+    return businessCardPattern;
+  }
+
+  return item.business_subtype || item.pattern_id || item.selected_pattern || "未提供";
 }
 
 function truthyBoolean(value) {
@@ -423,34 +498,127 @@ function inferQuestionFocus(sourceQuestion) {
   return "center_understanding";
 }
 
-function collectPreferredGenres() {
-  const raw = $("preferredGenres").value.trim();
-  if (!raw) return [];
-  return raw
-    .replace(/，/g, ",")
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
+function getTextDirectionOptions() {
+  const questionFocus = $("questionFocus")?.value || "";
+  return TEXT_DIRECTION_OPTIONS_BY_FOCUS[questionFocus] || TEXT_DIRECTION_OPTIONS_BY_FOCUS.default;
 }
 
-function buildGeneratePayload() {
+function renderTextDirectionOptions() {
+  const select = $("textDirection");
+  if (!select) return;
+  const currentValue = select.value || "";
+  const options = getTextDirectionOptions();
+  populateSelect(select, options);
+  const allowed = new Set(options.map((option) => option.value));
+  select.value = allowed.has(currentValue) ? currentValue : "";
+}
+
+function collectUserMaterialPayload() {
+  const text = $("userMaterialText")?.value?.trim() || "";
+  if (!text) return null;
+  return { text };
+}
+
+function buildGeneratePayload(options = {}) {
+  const includeUserMaterial = Boolean(options.includeUserMaterial);
   const sourceQuestion = collectSourceQuestionPayload();
-  const preferredGenres = collectPreferredGenres();
+  const userMaterial = includeUserMaterial ? collectUserMaterialPayload() : null;
   const questionFocus = $("questionFocus").value || (sourceQuestion ? inferQuestionFocus(sourceQuestion) : "");
   const specialType = $("specialType").value || "";
   const payload = {
     question_focus: questionFocus,
     difficulty_level: $("difficultyLevel").value || "medium",
     text_direction: $("textDirection").value || null,
-    material_structure: $("materialStructure").value || null,
     special_question_types: specialType ? [specialType] : [],
     count: Number($("count").value || 1),
     source_question: sourceQuestion,
   };
-  if (preferredGenres.length) {
-    payload.material_policy = { preferred_document_genres: preferredGenres };
+  if (userMaterial) {
+    payload.generation_mode = "forced_user_material";
+    payload.user_material = userMaterial;
   }
   return payload;
+}
+
+function validateGeneratePayload(payload, options = {}) {
+  const requireUserMaterial = Boolean(options.requireUserMaterial);
+  const useAlert = Boolean(options.useAlert);
+  if (!payload.question_focus) {
+    if (useAlert) alert("请先配置题型参数，再提交生成。");
+    return false;
+  }
+  if (!payload.difficulty_level) {
+    if (useAlert) alert("请先配置难度参数，再提交生成。");
+    return false;
+  }
+  if (requireUserMaterial && !(payload.user_material && payload.user_material.text)) {
+    if (useAlert) alert("请先粘贴用户材料，再提交。");
+    return false;
+  }
+  return true;
+}
+
+async function executeGenerate(payload) {
+  setBanner("builderError", "");
+  setBanner("loadingError", "");
+
+  setLoadingState("collect", "整理请求参数", "构建区只提交后端真实消费字段。");
+  switchScreen("loading");
+
+  try {
+    setLoadingState("request", "调用生成接口", "正在请求 /api/v1/questions/generate ...");
+    const response = await apiFetch("/api/v1/questions/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    state.batchId = response.batch_id || null;
+    state.items = Array.isArray(response.items) ? response.items : [];
+    state.controlsByItem = {};
+    state.replacementsByItem = {};
+
+    setLoadingState("render", "切换到结果页", "生成成功，正在渲染结果卡。");
+    renderResults();
+    switchScreen("result");
+
+    void Promise.all(
+      state.items.map(async (item) => {
+        if (!item?.item_id) return;
+        try {
+          await loadControlsForItem(item.item_id);
+        } catch (_error) {
+          // Controls load failure should not break the result screen.
+        }
+      }),
+    );
+  } catch (error) {
+    setBanner("loadingError", error.message);
+    switchScreen("builder");
+    setBanner("builderError", `生成失败：${error.message}`);
+  }
+}
+
+function setUserMaterialPanelOpen(open, options = {}) {
+  const panel = $("userMaterialPanel");
+  const textarea = $("userMaterialText");
+  const toggleBtn = $("userMaterialToggleBtn");
+  if (!panel || !textarea || !toggleBtn) return;
+
+  panel.hidden = !open;
+  toggleBtn.textContent = open ? "收起材料框" : "自己上传材料";
+  if (open) {
+    textarea.focus();
+  } else if (options.clear) {
+    textarea.value = "";
+  }
+}
+
+async function submitUserMaterialGeneration() {
+  const payload = buildGeneratePayload({ includeUserMaterial: true });
+  if (!validateGeneratePayload(payload, { requireUserMaterial: true, useAlert: true })) {
+    return;
+  }
+  await executeGenerate(payload);
 }
 
 async function autoDetectSourceQuestion() {
@@ -497,49 +665,12 @@ async function autoDetectSourceQuestion() {
 
 async function generateQuestions(event) {
   event.preventDefault();
-  setBanner("builderError", "");
-  setBanner("loadingError", "");
-
   const payload = buildGeneratePayload();
-  if (!payload.question_focus) {
+  if (!validateGeneratePayload(payload)) {
     setBanner("builderError", "请先选择题型，或先提供参考母题让系统自动识别。");
     return;
   }
-
-    setLoadingState("collect", "整理请求参数", "构建区只提交后端真实消费字段。");
-  switchScreen("loading");
-
-  try {
-    setLoadingState("request", "调用生成接口", "正在请求 /api/v1/questions/generate ...");
-    const response = await apiFetch("/api/v1/questions/generate", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-
-    state.batchId = response.batch_id || null;
-    state.items = Array.isArray(response.items) ? response.items : [];
-    state.controlsByItem = {};
-    state.replacementsByItem = {};
-
-    setLoadingState("render", "切换到结果页", "生成成功，正在渲染结果卡。");
-    renderResults();
-    switchScreen("result");
-
-    void Promise.all(
-      state.items.map(async (item) => {
-        if (!item?.item_id) return;
-        try {
-          await loadControlsForItem(item.item_id);
-        } catch (_error) {
-          // Controls load failure should not break the result screen.
-        }
-      }),
-    );
-  } catch (error) {
-    setBanner("loadingError", error.message);
-    switchScreen("builder");
-    setBanner("builderError", `生成失败：${error.message}`);
-  }
+  await executeGenerate(payload);
 }
 
 function renderOptions(options) {
@@ -552,7 +683,7 @@ function renderOptions(options) {
       ([key, value]) => `
         <div class="option-item">
           <span class="option-key">${escapeHtml(key)}</span>
-          <span>${escapeHtml(value)}</span>
+          <span>${escapeHtml(cleanDisplayText(value))}</span>
         </div>
       `,
     )
@@ -701,6 +832,11 @@ function renderSignalSummary(feedback) {
       <span class="signal-chip signal-chip-neutral">${escapeHtml(fieldLabel("repair_suggested"))}：${escapeHtml(
         repairSuggested,
       )}</span>
+      ${
+        isMissingScoringFeedback(feedback)
+          ? '<span class="signal-chip signal-chip-neutral">材料评分：暂未回填</span>'
+          : ""
+      }
     </div>
   `;
 }
@@ -712,6 +848,37 @@ function renderMetricCards(feedback) {
         <div class="mini-card"><strong>${escapeHtml(fieldLabel("selection_state"))}</strong><div>未提供</div></div>
         <div class="mini-card"><strong>${escapeHtml(fieldLabel("difficulty_band_hint"))}</strong><div>未提供</div></div>
         <div class="mini-card"><strong>${escapeHtml(fieldLabel("final_candidate_score"))}</strong><div>-</div></div>
+      </div>
+    `;
+  }
+
+  if (isMissingScoringFeedback(feedback)) {
+    return `
+      <div class="signal-grid">
+        <div class="mini-card">
+          <strong>${escapeHtml(fieldLabel("selection_state"))}</strong>
+          <div>${escapeHtml(humanize(feedback.selection_state || "未提供"))}</div>
+        </div>
+        <div class="mini-card">
+          <strong>${escapeHtml(fieldLabel("difficulty_band_hint"))}</strong>
+          <div>待判定</div>
+        </div>
+        <div class="mini-card">
+          <strong>${escapeHtml(fieldLabel("final_candidate_score"))}</strong>
+          <div>未回填</div>
+        </div>
+        <div class="mini-card">
+          <strong>${escapeHtml(fieldLabel("readiness_score"))}</strong>
+          <div>未回填</div>
+        </div>
+        <div class="mini-card">
+          <strong>${escapeHtml(fieldLabel("total_penalty"))}</strong>
+          <div>未回填</div>
+        </div>
+        <div class="mini-card">
+          <strong>${escapeHtml(fieldLabel("quality_note"))}</strong>
+          <div>材料评分缺失，当前仅展示题面结果</div>
+        </div>
       </div>
     `;
   }
@@ -758,6 +925,14 @@ function renderExplainList(feedback, item) {
   const validationWarnings = getValidationMessages(item, "warnings");
 
   const items = [];
+  if (isMissingScoringFeedback(feedback)) {
+    items.push(`
+      <li>
+        <strong>评分状态</strong><br />
+        当前材料尚未回填题卡 scoring，页面不再把占位值显示成 0 分；这张卡的题面可继续参考，但分值信息暂不能当成真实结论。
+      </li>
+    `);
+  }
   if (feedback?.decision_reason) {
     items.push(`
       <li>
@@ -835,7 +1010,96 @@ function renderExplainList(feedback, item) {
   return `<ul class="explain-list">${items.join("")}</ul>`;
 }
 
-function renderQuestionModifySection(itemId) {
+const REVIEW_TUNING_FIELDS = [
+  {
+    key: "review_distractor_strategy",
+    label: "错误选项方式",
+    help: "指定错误项偏差方向，便于按不满意的错法重做。",
+    options: [
+      ["", "不调整"],
+      ["partial_scope", "以偏概全"],
+      ["detail_trap", "细节设陷"],
+      ["concept_swap", "偷换概念"],
+      ["stronger_conclusion", "结论过强"],
+      ["causal_reversal", "因果倒置"],
+    ],
+  },
+  {
+    key: "review_distractor_intensity",
+    label: "错误项强度",
+    help: "控制干扰项迷惑性，越强越接近正确项。",
+    options: [
+      ["", "不调整"],
+      ["mild", "偏弱"],
+      ["medium", "中等"],
+      ["strong", "偏强"],
+    ],
+  },
+  {
+    key: "review_difficulty_target",
+    label: "目标难度",
+    help: "按审核预期把题目整体往简单、中等或困难调整。",
+    options: [
+      ["", "不调整"],
+      ["easy", "简单"],
+      ["medium", "中等"],
+      ["hard", "困难"],
+    ],
+  },
+  {
+    key: "review_adjustment_scope",
+    label: "调整范围",
+    help: "只改错误项，或连题干一起调整。",
+    options: [
+      ["", "不调整"],
+      ["distractors_only", "仅错误项"],
+      ["stem_and_distractors", "题干和错误项"],
+      ["full_question", "全题重塑"],
+    ],
+  },
+  {
+    key: "review_keep_correct_answer_fixed",
+    label: "固定正确答案",
+    help: "优先保持当前正确项不动，只调整其余部分。",
+    options: [
+      ["", "不指定"],
+      ["true", "固定"],
+      ["false", "允许调整"],
+    ],
+  },
+];
+
+function renderReviewTuningControls(item) {
+  const itemId = item.item_id;
+  const defaults = item?.request_snapshot?.extra_constraints || {};
+  const fields = REVIEW_TUNING_FIELDS.map((field) => {
+    const rawValue = defaults[field.key];
+    const selectedValue = rawValue == null ? "" : String(rawValue);
+    const options = field.options
+      .map(([value, label]) => {
+        const selected = value === selectedValue ? " selected" : "";
+        return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
+      })
+      .join("");
+    return `
+      <label class="field-compact">
+        <span>${escapeHtml(field.label)}</span>
+        <select class="review-tune-input" data-item-id="${itemId}" data-extra-key="${escapeHtml(field.key)}">
+          ${options}
+        </select>
+        <small class="field-help">${escapeHtml(field.help)}</small>
+      </label>
+    `;
+  }).join("");
+
+  return `
+    <div class="inline-feedback">审核调优：只影响“按参数重做”这次生成，不改材料来源。</div>
+    <div class="builder-stack">${fields}</div>
+  `;
+}
+
+function renderQuestionModifySection(item) {
+  const itemId = item.item_id;
   const panel = state.controlsByItem[itemId];
   if (!panel || !Array.isArray(panel.controls)) {
     return '<div class="inline-feedback">参数重做控件加载中...</div>';
@@ -879,22 +1143,84 @@ function renderQuestionModifySection(itemId) {
   return `<div class="builder-stack">${fields}</div>`;
 }
 
+function renderQuestionModifyPanel(item) {
+  const itemId = item.item_id;
+  const panel = state.controlsByItem[itemId];
+  let dynamicSection = '<div class="inline-feedback">参数重做控件加载中...</div>';
+
+  if (panel && Array.isArray(panel.controls)) {
+    const editableControls = panel.controls.filter((control) => !control.read_only && control.mapped_action === "question_modify");
+    if (editableControls.length) {
+      dynamicSection = renderQuestionModifySection(item);
+    } else {
+      dynamicSection = '<div class="inline-feedback">当前题目没有开放的后端参数控件，仍可使用下方审核调优。</div>';
+    }
+  }
+
+  return `${dynamicSection}${renderReviewTuningControls(item)}`;
+}
+
 function renderReplacementOptions(itemId) {
   const replacements = state.replacementsByItem[itemId];
+  const selectedMaterialId = state.selectedReplacementByItem[itemId] || "";
   if (!replacements || !Array.isArray(replacements.items) || !replacements.items.length) {
     return '<option value="">先点击“加载备选材料”</option>';
   }
 
   return [
-    '<option value="">请选择备选材料</option>',
+    `<option value=""${selectedMaterialId ? "" : " selected"}>请选择备选材料</option>`,
     ...replacements.items.map((entry) => {
       const label = [entry.article_title, entry.source_name, entry.document_genre]
         .map((part) => String(part || "").trim())
         .filter(Boolean)
         .join(" / ");
-      return `<option value="${escapeHtml(entry.material_id)}">${escapeHtml(label || entry.material_id)}</option>`;
+      const materialId = String(entry.material_id || "").trim();
+      const selected = materialId && materialId === selectedMaterialId ? " selected" : "";
+      return `<option value="${escapeHtml(materialId)}"${selected}>${escapeHtml(label || entry.material_id)}</option>`;
     }),
   ].join("");
+}
+
+function getReplacementEntry(itemId, materialId) {
+  const replacements = state.replacementsByItem[itemId];
+  if (!replacements || !Array.isArray(replacements.items) || !materialId) return null;
+  return (
+    replacements.items.find((entry) => String(entry.material_id || "").trim() === String(materialId || "").trim()) || null
+  );
+}
+
+function renderReplacementPreview(itemId) {
+  const materialId = state.selectedReplacementByItem[itemId] || "";
+  const entry = getReplacementEntry(itemId, materialId);
+  if (!entry) {
+    return `
+      <div class="replacement-preview-box empty-state">
+        选择一条备选材料后，会在这里预览即将替换进去的材料内容。
+      </div>
+    `;
+  }
+
+  const previewText = String(entry.material_text || entry.text_preview || "").trim();
+  return `
+    <div class="replacement-preview-box">
+      <div class="replacement-preview-meta">
+        <div class="mini-card">
+          <strong>备选标题</strong>
+          <div>${escapeHtml(entry.article_title || "未提供")}</div>
+        </div>
+        <div class="mini-card">
+          <strong>来源</strong>
+          <div>${escapeHtml(entry.source_name || "未提供")}</div>
+        </div>
+        <div class="mini-card">
+          <strong>文体</strong>
+          <div>${escapeHtml(entry.document_genre || "未提供")}</div>
+        </div>
+      </div>
+      <div class="inline-feedback">备选材料预览</div>
+      <pre class="compact-pre">${escapeHtml(previewText || "未提供")}</pre>
+    </div>
+  `;
 }
 
 function buildQuestionCard(item, index) {
@@ -905,8 +1231,11 @@ function buildQuestionCard(item, index) {
   const currentStatus = item.current_status || "generated";
   const approved = currentStatus === "approved";
   const discarded = currentStatus === "discarded";
-  const materialText = item.material_text || material.text || "";
-  const originalMaterial = material.original_text || material.text || "";
+  const materialText = cleanDisplayText(item.material_text || material.text || "");
+  const originalMaterial = cleanDisplayText(material.original_text || material.text || "", { replaceBlankToken: false });
+  const stemText = cleanDisplayText(generated.stem || item.stem_text || "");
+  const analysisText = cleanDisplayText(generated.analysis || "");
+  const displaySubtype = resolveDisplayedSubtype(item);
 
   const card = document.createElement("section");
   card.className = "question-card";
@@ -919,8 +1248,11 @@ function buildQuestionCard(item, index) {
           <div class="question-meta">
             <span class="chip status ${statusChipClass(currentStatus)}">${escapeHtml(humanize(currentStatus))}</span>
             <span class="chip">${escapeHtml(humanize(item.question_type))}</span>
-            <span class="chip">${escapeHtml(humanize(item.business_subtype || item.pattern_id || "未提供"))}</span>
+            <span class="chip">${escapeHtml(humanize(displaySubtype || "未提供"))}</span>
             <span class="chip">${escapeHtml(humanize(item.difficulty_target || "medium"))}</span>
+            ${item.forced_generation ? '<span class="chip">用户自带材料</span>' : ""}
+            ${item.material_source_type ? `<span class="chip">${escapeHtml(humanize(item.material_source_type))}</span>` : ""}
+            ${materialSource.caution_tag ? `<span class="chip status status-warn">${escapeHtml(humanize(materialSource.caution_tag))}</span>` : ""}
           </div>
         </div>
       </div>
@@ -929,10 +1261,10 @@ function buildQuestionCard(item, index) {
         <div class="passage-label">题目主内容</div>
         <div class="passage-preview">${escapeHtml(materialText || "暂无材料文本")}</div>
         <div class="passage-label" style="margin-top: 18px;">题干</div>
-        <div class="question-stem">${escapeHtml(generated.stem || item.stem_text || "暂无题干")}</div>
+        <div class="question-stem">${escapeHtml(stemText || "暂无题干")}</div>
         <div class="option-list">${renderOptions(generated.options || {})}</div>
         <div class="answer-row"><strong>答案：</strong>${escapeHtml(generated.answer || "未提供")}</div>
-        <div class="analysis-row"><strong>解析：</strong>${escapeHtml(generated.analysis || "未提供")}</div>
+        <div class="analysis-row"><strong>解析：</strong>${escapeHtml(analysisText || "未提供")}</div>
       </div>
 
       <div class="system-box" style="margin-top: 16px;">
@@ -977,7 +1309,7 @@ function buildQuestionCard(item, index) {
       <details class="result-collapse" style="margin-top: 16px;">
         <summary>参数重做</summary>
         <div class="collapse-body support-box">
-          ${renderQuestionModifySection(item.item_id)}
+          ${renderQuestionModifyPanel(item)}
           <div class="action-row">
             <button type="button" class="secondary-btn" data-action="question-modify" data-item-id="${item.item_id}" ${
               discarded ? "disabled" : ""
@@ -1001,6 +1333,7 @@ function buildQuestionCard(item, index) {
               discarded ? "disabled" : ""
             }>使用备选材料重做</button>
           </div>
+          <div class="replacement-preview-slot">${renderReplacementPreview(item.item_id)}</div>
           <label class="field-compact">
             <span>自贴材料</span>
             <textarea class="custom-material-input" data-item-id="${item.item_id}" rows="4" ${
@@ -1028,32 +1361,32 @@ function buildQuestionCard(item, index) {
             <span>题干</span>
             <textarea class="manual-stem" data-item-id="${item.item_id}" rows="2" ${
               discarded ? "disabled" : ""
-            }>${escapeHtml(generated.stem || item.stem_text || "")}</textarea>
+            }>${escapeHtml(stemText)}</textarea>
           </label>
           <div class="builder-grid">
             <label class="field-compact">
               <span>选项 A</span>
               <textarea class="manual-option" data-item-id="${item.item_id}" data-option="A" rows="2" ${
                 discarded ? "disabled" : ""
-              }>${escapeHtml(generated.options?.A || "")}</textarea>
+              }>${escapeHtml(cleanDisplayText(generated.options?.A || ""))}</textarea>
             </label>
             <label class="field-compact">
               <span>选项 B</span>
               <textarea class="manual-option" data-item-id="${item.item_id}" data-option="B" rows="2" ${
                 discarded ? "disabled" : ""
-              }>${escapeHtml(generated.options?.B || "")}</textarea>
+              }>${escapeHtml(cleanDisplayText(generated.options?.B || ""))}</textarea>
             </label>
             <label class="field-compact">
               <span>选项 C</span>
               <textarea class="manual-option" data-item-id="${item.item_id}" data-option="C" rows="2" ${
                 discarded ? "disabled" : ""
-              }>${escapeHtml(generated.options?.C || "")}</textarea>
+              }>${escapeHtml(cleanDisplayText(generated.options?.C || ""))}</textarea>
             </label>
             <label class="field-compact">
               <span>选项 D</span>
               <textarea class="manual-option" data-item-id="${item.item_id}" data-option="D" rows="2" ${
                 discarded ? "disabled" : ""
-              }>${escapeHtml(generated.options?.D || "")}</textarea>
+              }>${escapeHtml(cleanDisplayText(generated.options?.D || ""))}</textarea>
             </label>
           </div>
           <div class="builder-grid">
@@ -1070,7 +1403,7 @@ function buildQuestionCard(item, index) {
               <span>解析</span>
               <textarea class="manual-analysis" data-item-id="${item.item_id}" rows="4" ${
                 discarded ? "disabled" : ""
-              }>${escapeHtml(generated.analysis || "")}</textarea>
+              }>${escapeHtml(analysisText)}</textarea>
             </label>
           </div>
           <div class="action-row">
@@ -1173,6 +1506,16 @@ function collectQuestionModifyOverrides(itemId) {
     if (!key || !value) return;
     overrides[key] = value;
   });
+  const extraConstraints = {};
+  card.querySelectorAll(`.review-tune-input[data-item-id="${itemId}"]`).forEach((node) => {
+    const key = node.dataset.extraKey;
+    const rawValue = String(node.value || "").trim();
+    if (!key || !rawValue) return;
+    extraConstraints[key] = key === "review_keep_correct_answer_fixed" ? rawValue === "true" : rawValue;
+  });
+  if (Object.keys(extraConstraints).length) {
+    overrides.extra_constraints = extraConstraints;
+  }
   return overrides;
 }
 
@@ -1189,7 +1532,23 @@ async function loadControlsForItem(itemId) {
 async function loadReplacementMaterials(itemId) {
   const payload = await apiFetch(`/api/v1/questions/${itemId}/replacement-materials?limit=8`);
   state.replacementsByItem[itemId] = payload;
+  const currentSelection = state.selectedReplacementByItem[itemId] || "";
+  if (currentSelection && !getReplacementEntry(itemId, currentSelection)) {
+    state.selectedReplacementByItem[itemId] = "";
+  }
   renderResults();
+}
+
+function updateReplacementPreviewFromSelection(selectNode) {
+  if (!selectNode) return;
+  const itemId = selectNode.dataset.itemId;
+  if (!itemId) return;
+  state.selectedReplacementByItem[itemId] = String(selectNode.value || "").trim();
+  const card = getCard(itemId);
+  const previewNode = card?.querySelector(".replacement-preview-slot");
+  if (previewNode) {
+    previewNode.innerHTML = renderReplacementPreview(itemId);
+  }
 }
 
 async function handleResultAction(event) {
@@ -1351,12 +1710,25 @@ function initPage() {
   populateSelect($("questionFocus"), QUESTION_FOCUS_OPTIONS);
   populateSelect($("specialType"), SPECIAL_TYPE_OPTIONS[""]);
   populateSelect($("difficultyLevel"), DIFFICULTY_OPTIONS);
-  populateSelect($("textDirection"), TEXT_DIRECTION_OPTIONS);
-  populateSelect($("materialStructure"), MATERIAL_STRUCTURE_OPTIONS);
+  renderTextDirectionOptions();
 
   $("count").addEventListener("input", syncCountValue);
-  $("questionFocus").addEventListener("change", renderSpecialTypeOptions);
+  $("questionFocus").addEventListener("change", () => {
+    renderSpecialTypeOptions();
+    renderTextDirectionOptions();
+  });
   $("generateForm").addEventListener("submit", generateQuestions);
+  $("userMaterialToggleBtn")?.addEventListener("click", () => {
+    setUserMaterialPanelOpen(Boolean($("userMaterialPanel")?.hidden));
+  });
+  $("userMaterialCancelBtn")?.addEventListener("click", () => {
+    setUserMaterialPanelOpen(false, { clear: true });
+  });
+  $("userMaterialSubmitBtn")?.addEventListener("click", () => {
+    submitUserMaterialGeneration().catch((error) => {
+      setBanner("builderError", `用户材料生成失败：${error.message}`);
+    });
+  });
   $("sourceQuestionDetectBtn").addEventListener("click", () => {
     autoDetectSourceQuestion().catch((error) => {
       setBanner("builderError", `自动拆题失败：${error.message}`);
@@ -1366,6 +1738,11 @@ function initPage() {
     handleResultAction(event).catch((error) => {
       showToast(error.message || "操作失败", "info");
     });
+  });
+  $("resultList").addEventListener("change", (event) => {
+    const selectNode = event.target.closest(".replacement-select");
+    if (!selectNode) return;
+    updateReplacementPreviewFromSelection(selectNode);
   });
   $("backToBuilderBtn").addEventListener("click", () => switchScreen("builder"));
   $("cancelLoadingBtn").addEventListener("click", () => switchScreen("builder"));

@@ -4,6 +4,7 @@ from collections import Counter
 
 from app.domain.services._common import ServiceBase
 from app.rules.family_config import get_family_names
+from app.services.main_card_family_landing_resolver import MainCardFamilyLandingResolver
 from app.services.material_pipeline_v2 import MaterialPipelineV2
 
 
@@ -11,6 +12,7 @@ class MaterialV2IndexService(ServiceBase):
     def __init__(self, session) -> None:
         super().__init__(session)
         self.pipeline = MaterialPipelineV2()
+        self.main_card_family_landing = MainCardFamilyLandingResolver(provider=self.pipeline.provider, llm_config=self.pipeline.llm_config)
         family_names = get_family_names()
         self.family_to_v2 = {}
         if len(family_names) >= 1:
@@ -45,14 +47,10 @@ class MaterialV2IndexService(ServiceBase):
             if article is None:
                 skipped += 1
                 continue
-            families = self._resolve_v2_families(material)
+            families = self._resolve_v2_families(material=material, article=article)
             payload_by_family: dict[str, dict] = {}
             for family in families:
-                cached_item = self.pipeline.build_cached_item_from_material(
-                    material=material,
-                    article=article,
-                    business_family_id=family,
-                )
+                cached_item = self._build_cached_item(material=material, article=article, family=family)
                 if cached_item:
                     payload_by_family[family] = cached_item
                     family_counter[family] += 1
@@ -74,7 +72,41 @@ class MaterialV2IndexService(ServiceBase):
             "families": dict(family_counter),
         }
 
-    def _resolve_v2_families(self, material) -> list[str]:
+    def _build_cached_item(self, *, material, article, family: str) -> dict | None:
+        return self.pipeline.build_cached_item_from_material(
+            material=material,
+            article=article,
+            business_family_id=family,
+            enable_fill_formalization_bridge=(family == "sentence_fill"),
+            enable_sentence_order_weak_formal_bridge=(family == "sentence_order"),
+            enable_sentence_order_weak_formal_gate=(family == "sentence_order"),
+            enable_sentence_order_weak_formal_closing_gate=(family == "sentence_order"),
+            enable_sentence_order_strong_formal_demote=(family == "sentence_order"),
+        )
+
+    def _resolve_v2_families(self, *, material, article) -> list[str]:
+        mechanical_families = self._resolve_mechanical_v2_families(material)
+        resolved = self.main_card_family_landing.resolve(
+            material=material,
+            article=article,
+            mechanical_v2_families=mechanical_families,
+        )
+        if not resolved:
+            return mechanical_families
+        consensus = dict(resolved.get("consensus") or {})
+        llm_runtime_families = set(resolved.get("runtime_families") or [])
+        non_main_mechanical = {
+            family
+            for family in mechanical_families
+            if family not in {"title_selection", "sentence_fill", "sentence_order"}
+        }
+        if not llm_runtime_families:
+            if str(consensus.get("status") or "") in {"error", "insufficient_votes"}:
+                return mechanical_families
+            return sorted(non_main_mechanical)
+        return sorted(non_main_mechanical.union(llm_runtime_families))
+
+    def _resolve_mechanical_v2_families(self, material) -> list[str]:
         families: set[str] = set()
         primary_family = getattr(material, "primary_family", None)
         if primary_family and primary_family in self.family_to_v2:

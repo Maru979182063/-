@@ -13,6 +13,8 @@ from app.schemas.span import SpanRecord, SpanVersionSet
 from app.services.card_registry_v2 import CardRegistryV2
 from app.services.document_genre_classifier import DocumentGenreClassifier
 from app.services.llm_runtime import get_llm_provider, read_prompt_file
+from app.services.main_card_dual_judge import MainCardDualJudge
+from app.services.main_card_signal_resolver import MainCardSignalResolver
 from app.services.universal_tagger import UniversalTagger
 
 
@@ -49,6 +51,7 @@ ACTION_MEASURE_MARKERS = ("通过", "采取", "推动", "完善", "优化", "健
 class MaterialPipelineV2:
     INDEX_VERSION = "v2.index.20260402b"
     SENTENCE_ORDER_FIXED_UNIT_COUNT = 6
+    SENTENCE_ORDER_WEAK_LAST_SCORE = 0.40
     TASK_SCORING_THRESHOLDS = {
         "main_idea": {
             "recommended": 0.50,
@@ -79,6 +82,8 @@ class MaterialPipelineV2:
         self.universal_tagger = UniversalTagger()
         self.llm_config = config_bundle.llm
         self.provider = get_llm_provider()
+        self.main_card_dual_judge = MainCardDualJudge(provider=self.provider, llm_config=self.llm_config)
+        self.main_card_signal_resolver = MainCardSignalResolver(provider=self.provider, llm_config=self.llm_config)
         self.candidate_planner_prompt = read_prompt_file("candidate_planner_v2_prompt.md")
 
     def build_formal_material_candidates(
@@ -156,6 +161,11 @@ class MaterialPipelineV2:
         business_card_ids: list[str] | None = None,
         preferred_business_card_ids: list[str] | None = None,
         query_terms: list[str] | None = None,
+        topic: str | None = None,
+        text_direction: str | None = None,
+        document_genre: str | None = None,
+        material_structure_label: str | None = None,
+        structure_constraints: dict[str, Any] | None = None,
         candidate_limit: int = 20,
         min_card_score: float = 0.55,
         min_business_card_score: float = 0.45,
@@ -173,6 +183,7 @@ class MaterialPipelineV2:
             runtime_question_type=runtime_binding.get("question_type"),
             runtime_business_subtype=runtime_binding.get("business_subtype"),
         )
+        normalized_structure_constraints = dict(structure_constraints or {})
         requested_business_card_ids = set(business_card_ids or [])
         preferred_business_card_set = set(preferred_business_card_ids or [])
         normalized_query_terms = [term.strip() for term in (query_terms or []) if str(term).strip()]
@@ -181,6 +192,7 @@ class MaterialPipelineV2:
         )
         items: list[dict[str, Any]] = []
         warnings: list[str] = []
+        gate_rejected_count = 0
         for article in articles:
             article_context = self._build_article_context(article)
             if not article_context["text"]:
@@ -211,7 +223,23 @@ class MaterialPipelineV2:
                     target_length=target_length,
                     length_tolerance=length_tolerance,
                 )
-                card_hits = self._score_material_cards(material_cards=material_cards, signal_profile=signal_profile, candidate=resolved_candidate, min_card_score=min_card_score)
+                if not self._matches_search_front_filters(
+                    candidate_text=resolved_candidate["text"],
+                    article_context=article_context,
+                    signal_profile=signal_profile,
+                    topic=topic,
+                    text_direction=text_direction,
+                    document_genre=document_genre,
+                    material_structure_label=material_structure_label,
+                ):
+                    continue
+                card_hits = self._score_material_cards(
+                    material_cards=material_cards,
+                    signal_profile=signal_profile,
+                    candidate=resolved_candidate,
+                    business_family_id=business_family_id,
+                    min_card_score=min_card_score,
+                )
                 if not card_hits:
                     continue
                 business_card_hits = self._score_business_cards(
@@ -225,6 +253,16 @@ class MaterialPipelineV2:
                 if requested_business_card_ids and not business_card_hits:
                     continue
                 if business_family_id == "sentence_fill" and not business_card_hits:
+                    continue
+                structure_match_score = self._runtime_structure_match_score(
+                    business_family_id=business_family_id,
+                    business_feature_profile=business_feature_profile,
+                    structure_constraints=normalized_structure_constraints,
+                )
+                if (
+                    normalized_structure_constraints
+                    and structure_match_score < self._minimum_structure_score(business_family_id, normalized_structure_constraints)
+                ):
                     continue
                 top_hit = card_hits[0]
                 top_business_hit = self._select_primary_business_card(business_card_hits, neutral_signal_profile)
@@ -252,63 +290,75 @@ class MaterialPipelineV2:
                     candidate=resolved_candidate,
                     presentation=presentation,
                 )
-                items.append(
-                    {
-                        "candidate_id": resolved_candidate["candidate_id"],
-                        "article_id": article_context["article_id"],
-                        "article_title": article_context["title"],
-                        "candidate_type": resolved_candidate["candidate_type"],
-                        "material_card_id": top_hit["card_id"],
+                item = {
+                    "candidate_id": resolved_candidate["candidate_id"],
+                    "article_id": article_context["article_id"],
+                    "article_title": article_context["title"],
+                    "candidate_type": resolved_candidate["candidate_type"],
+                    "material_card_id": top_hit["card_id"],
+                    "selected_business_card": top_business_hit["business_card_id"] if top_business_hit else None,
+                    "text": resolved_candidate["text"],
+                    "original_text": candidate["text"],
+                    "meta": resolved_candidate.get("meta", {}),
+                    "consumable_text": consumable_text,
+                    "presentation": presentation,
+                    "source": article_context["source"],
+                    "article_profile": article_context["article_profile"],
+                    "neutral_signal_profile": neutral_signal_profile,
+                    "task_scoring": neutral_signal_profile.get("task_scoring", {}),
+                    "selected_task_scoring": (neutral_signal_profile.get("task_scoring", {}) or {}).get(self._task_family_scoring_key(business_family_id) or "", {}),
+                    "business_feature_profile": business_feature_profile,
+                    "retrieval_match_profile": retrieval_match_profile,
+                    "local_profile": local_profile,
+                    "family_affinity_topk": family_affinity,
+                    "eligible_material_cards": card_hits,
+                    "material_card_recommendations": [item["card_id"] for item in card_hits],
+                    "eligible_business_cards": business_card_hits,
+                    "business_card_recommendations": [item["business_card_id"] for item in business_card_hits],
+                    "preferred_question_cards": [question_card["card_id"]],
+                    "question_ready_context": {
+                        "question_card_id": question_card["card_id"],
+                        "runtime_binding": runtime_binding,
+                        "selected_material_card": top_hit["card_id"],
                         "selected_business_card": top_business_hit["business_card_id"] if top_business_hit else None,
-                        "text": resolved_candidate["text"],
-                        "original_text": candidate["text"],
-                        "meta": resolved_candidate.get("meta", {}),
-                        "consumable_text": consumable_text,
-                        "presentation": presentation,
-                        "source": article_context["source"],
-                        "article_profile": article_context["article_profile"],
-                        "neutral_signal_profile": neutral_signal_profile,
-                        "task_scoring": neutral_signal_profile.get("task_scoring", {}),
-                        "selected_task_scoring": (neutral_signal_profile.get("task_scoring", {}) or {}).get(self._task_family_scoring_key(business_family_id) or "", {}),
-                        "business_feature_profile": business_feature_profile,
-                        "retrieval_match_profile": retrieval_match_profile,
-                        "local_profile": local_profile,
-                        "family_affinity_topk": family_affinity,
-                        "eligible_material_cards": card_hits,
-                        "material_card_recommendations": [item["card_id"] for item in card_hits],
-                        "eligible_business_cards": business_card_hits,
-                        "business_card_recommendations": [item["business_card_id"] for item in business_card_hits],
-                        "preferred_question_cards": [question_card["card_id"]],
-                        "question_ready_context": {
-                            "question_card_id": question_card["card_id"],
-                            "runtime_binding": runtime_binding,
-                            "selected_material_card": top_hit["card_id"],
-                            "selected_business_card": top_business_hit["business_card_id"] if top_business_hit else None,
-                            "generation_archetype": top_hit["generation_archetype"],
-                            "resolved_slots": self._resolve_slots(question_card, top_hit["card_id"], top_business_hit),
-                            "pattern_candidates": list((top_business_hit or {}).get("pattern_candidates") or []),
-                            "prompt_extras": self._build_prompt_extras(top_business_hit),
-                            "validator_contract": question_card.get("validator_contract", {}),
-                        },
-                        "quality_flags": candidate.get("quality_flags", []),
-                        "quality_score": round(
-                            self._score_candidate_quality(
-                                business_family_id=business_family_id,
-                                signal_profile=signal_profile,
-                                top_card_score=top_hit["score"],
-                                top_business_score=top_business_hit["score"] if top_business_hit else 0.0,
-                                retrieval_match_score=float(retrieval_match_profile.get("match_score") or 0.0),
-                                length_fit_score=float(retrieval_match_profile.get("length_fit_score") or 0.0),
-                                candidate=resolved_candidate,
-                                article_context=article_context,
-                            ),
-                            4,
+                        "generation_archetype": top_hit["generation_archetype"],
+                        "resolved_slots": self._resolve_slots(question_card, top_hit["card_id"], top_business_hit),
+                        "pattern_candidates": list((top_business_hit or {}).get("pattern_candidates") or []),
+                        "prompt_extras": self._build_prompt_extras(top_business_hit),
+                        "validator_contract": question_card.get("validator_contract", {}),
+                    },
+                    "quality_flags": candidate.get("quality_flags", []),
+                    "quality_score": round(
+                        self._score_candidate_quality(
+                            business_family_id=business_family_id,
+                            signal_profile=signal_profile,
+                            top_card_score=top_hit["score"],
+                            top_business_score=top_business_hit["score"] if top_business_hit else 0.0,
+                            retrieval_match_score=float(retrieval_match_profile.get("match_score") or 0.0),
+                            length_fit_score=float(retrieval_match_profile.get("length_fit_score") or 0.0),
+                            candidate=resolved_candidate,
+                            article_context=article_context,
                         ),
-                    }
+                        4,
+                    ),
+                }
+                gate_passed, _ = self._passes_runtime_material_gate(
+                    item=item,
+                    business_family_id=business_family_id,
+                    question_card=question_card,
+                    min_card_score=min_card_score,
+                    min_business_card_score=min_business_card_score,
+                    require_business_card=business_family_id == "sentence_fill",
                 )
+                if not gate_passed:
+                    gate_rejected_count += 1
+                    continue
+                items.append(item)
         ranked = self._select_diverse_items(items, candidate_limit)
         if not ranked:
             warnings.append("No v2 candidates met the current card score threshold.")
+        elif gate_rejected_count:
+            warnings.append(f"Filtered out {gate_rejected_count} candidates that failed the question-card material contract.")
         return {
             "question_card": {"card_id": question_card["card_id"], "business_family_id": question_card["business_family_id"], "business_subtype_id": question_card["business_subtype_id"], "runtime_binding": runtime_binding},
             "available_business_cards": [
@@ -324,18 +374,189 @@ class MaterialPipelineV2:
             "warnings": warnings,
         }
 
+    @staticmethod
+    def _matches_search_front_filters(
+        *,
+        candidate_text: str,
+        article_context: dict[str, Any],
+        signal_profile: dict[str, Any],
+        topic: str | None,
+        text_direction: str | None,
+        document_genre: str | None,
+        material_structure_label: str | None,
+    ) -> bool:
+        article_profile = article_context.get("article_profile") or {}
+        requested_genre = str(document_genre or "").strip()
+        if requested_genre and str(article_profile.get("document_genre") or "").strip() != requested_genre:
+            return False
+        requested_structure = str(material_structure_label or "").strip()
+        candidate_structure = str(signal_profile.get("material_structure_label") or article_profile.get("discourse_shape") or "").strip()
+        if requested_structure and candidate_structure != requested_structure:
+            return False
+        haystack = "\n".join(
+            [
+                str(candidate_text or ""),
+                str(article_context.get("title") or ""),
+                str(article_profile.get("core_object") or ""),
+                str(signal_profile.get("core_object") or ""),
+            ]
+        )
+        requested_topic = str(topic or "").strip()
+        if requested_topic and requested_topic not in haystack:
+            return False
+        requested_direction = str(text_direction or "").strip()
+        if requested_direction and requested_direction not in haystack:
+            return False
+        return True
+
+    @staticmethod
+    def _minimum_structure_score(business_family_id: str, structure_constraints: dict[str, Any]) -> float:
+        if not structure_constraints:
+            return 0.0
+        if business_family_id == "sentence_fill":
+            return 0.32 if structure_constraints.get("preserve_blank_position") else 0.20
+        if business_family_id == "sentence_order":
+            return 0.20 if structure_constraints.get("preserve_unit_count") else 0.15
+        return 0.0
+
+    @staticmethod
+    def _runtime_structure_match_score(
+        *,
+        business_family_id: str,
+        business_feature_profile: dict[str, Any],
+        structure_constraints: dict[str, Any],
+    ) -> float:
+        if not structure_constraints:
+            return 0.0
+        if business_family_id == "sentence_fill":
+            profile = business_feature_profile.get("sentence_fill_profile") or {}
+            score = 0.0
+            expected_position = str(structure_constraints.get("blank_position") or "")
+            expected_function = str(structure_constraints.get("function_type") or "")
+            if expected_position:
+                actual_position = str(profile.get("blank_position") or "")
+                if actual_position == expected_position:
+                    score += 0.62
+                elif structure_constraints.get("preserve_blank_position"):
+                    score += 0.08
+            if expected_function:
+                actual_function = self._canonical_sentence_fill_function_type(
+                    profile.get("function_type"),
+                    blank_position=str(profile.get("blank_position") or ""),
+                )
+                expected_function = self._canonical_sentence_fill_function_type(
+                    expected_function,
+                    blank_position=expected_position,
+                )
+                if actual_function == expected_function:
+                    score += 0.30
+            return round(min(1.0, score), 4)
+        if business_family_id == "sentence_order":
+            profile = business_feature_profile.get("sentence_order_profile") or {}
+            score = 0.0
+            expected_unit_count = int(structure_constraints.get("sortable_unit_count") or 0)
+            if expected_unit_count > 0:
+                actual_unit_count = int(profile.get("unit_count") or 0)
+                if actual_unit_count == expected_unit_count:
+                    score += 0.60
+                elif abs(actual_unit_count - expected_unit_count) == 1:
+                    score += 0.24
+                elif structure_constraints.get("preserve_unit_count"):
+                    score += 0.10 if 4 <= actual_unit_count <= 8 else -0.04
+            expected_logic_modes = set(structure_constraints.get("logic_modes") or [])
+            if expected_logic_modes:
+                actual_logic_modes = set(profile.get("logic_modes") or [])
+                shared = len(expected_logic_modes.intersection(actual_logic_modes))
+                if shared:
+                    score += min(0.24, shared * 0.08)
+            expected_binding_types = set(structure_constraints.get("binding_types") or [])
+            if expected_binding_types:
+                actual_binding_types = set(profile.get("binding_rules") or [])
+                shared = len(expected_binding_types.intersection(actual_binding_types))
+                if shared:
+                    score += min(0.16, shared * 0.08)
+            expected_binding_pair_count = int(structure_constraints.get("expected_binding_pair_count") or 0)
+            if expected_binding_pair_count > 0:
+                actual_binding_pair_count = float(profile.get("binding_pair_count") or 0.0)
+                if actual_binding_pair_count >= expected_binding_pair_count:
+                    score += 0.10
+                elif actual_binding_pair_count + 1 >= expected_binding_pair_count:
+                    score += 0.05
+                else:
+                    score -= 0.06
+            expected_progression = str(structure_constraints.get("discourse_progression_pattern") or "")
+            if expected_progression:
+                actual_modes = set(profile.get("logic_modes") or [])
+                if expected_progression == "timeline_or_action_sequence":
+                    if actual_modes.intersection({"timeline_sequence", "action_sequence"}):
+                        score += 0.08
+                elif expected_progression in actual_modes:
+                    score += 0.08
+            if structure_constraints.get("temporal_or_action_sequence_presence"):
+                temporal_strength = max(
+                    float(profile.get("temporal_order_strength") or 0.0),
+                    float(profile.get("action_sequence_irreversibility") or 0.0),
+                )
+                score += min(0.08, temporal_strength * 0.08)
+            expected_unique_answer_strength = float(structure_constraints.get("expected_unique_answer_strength") or 0.0)
+            if expected_unique_answer_strength > 0:
+                actual_strength = (
+                    0.30 * float(profile.get("unique_opener_score") or 0.0)
+                    + 0.22 * min(1.0, float(profile.get("binding_pair_count") or 0.0) / 3)
+                    + 0.24 * float(profile.get("local_binding_strength") or 0.0)
+                    + 0.24 * float(profile.get("sequence_integrity") or 0.0)
+                )
+                if actual_strength >= expected_unique_answer_strength:
+                    score += 0.10
+                elif actual_strength + 0.08 >= expected_unique_answer_strength:
+                    score += 0.05
+                else:
+                    score -= 0.06
+            return round(max(0.0, min(1.0, score)), 4)
+        return 0.0
+
+    @staticmethod
+    def _canonical_sentence_fill_function_type(function_type: Any, *, blank_position: str = "") -> str:
+        raw = str(function_type or "").strip()
+        position = str(blank_position or "").strip()
+        if not raw:
+            return ""
+        mapping = {
+            "summarize_following_text": "opening_summary",
+            "topic_introduction": "opening_summary",
+            "summarize_previous_text": "ending_summary",
+            "propose_countermeasure": "ending_summary",
+            "countermeasure": "ending_summary",
+            "carry_previous": "middle_explanation",
+            "lead_next": "middle_focus_shift",
+            "bridge_both_sides": "bridge",
+            "reference_summary": "inserted_reference",
+        }
+        if raw in {"summary", "conclusion"}:
+            if position == "opening":
+                return "opening_summary"
+            if position == "ending":
+                return "ending_summary"
+        return mapping.get(raw, raw)
+
     def build_cached_item_from_material(
         self,
         *,
         material: Any,
         article: Any,
         business_family_id: str,
+        question_card_id: str | None = None,
+        enable_fill_formalization_bridge: bool = False,
+        enable_sentence_order_weak_formal_bridge: bool = False,
+        enable_sentence_order_weak_formal_gate: bool = True,
+        enable_sentence_order_weak_formal_closing_gate: bool = False,
+        enable_sentence_order_strong_formal_demote: bool = False,
     ) -> dict[str, Any] | None:
         text = str(getattr(material, "text", "") or "").strip()
         if not text:
             return None
         article_context = self._build_material_context(material=material, article=article)
-        question_card = self.registry.get_default_question_card(business_family_id)
+        question_card = self.registry.get_question_card(question_card_id) if question_card_id else self.registry.get_default_question_card(business_family_id)
         runtime_binding = question_card.get("runtime_binding", {})
         signal_layer = self.registry.get_signal_layer(business_family_id)
         material_cards = self.registry.get_material_cards(business_family_id)
@@ -368,6 +589,21 @@ class MaterialPipelineV2:
             },
             "quality_flags": list(getattr(material, "quality_flags", []) or []),
         }
+        source_candidate = deepcopy(candidate)
+        if business_family_id == "sentence_fill" and enable_fill_formalization_bridge:
+            bridged_candidate = self._bridge_fill_candidate_to_functional_slot_unit(
+                article_context=article_context,
+                candidate=candidate,
+            )
+            if bridged_candidate is not None:
+                candidate = bridged_candidate
+        if business_family_id == "sentence_order" and enable_sentence_order_weak_formal_bridge:
+            bridged_candidate = self._bridge_sentence_order_candidate_to_formal_group(
+                article_context=article_context,
+                candidate=candidate,
+            )
+            if bridged_candidate is not None:
+                candidate = bridged_candidate
         if candidate["candidate_type"] == "functional_slot_unit":
             candidate["meta"].update(
                 self._hydrate_functional_slot_meta(
@@ -375,13 +611,68 @@ class MaterialPipelineV2:
                     candidate=candidate,
                 )
             )
-        neutral_signal_profile = self._build_neutral_signal_profile(article_context=article_context, candidate=candidate)
-        signal_profile = self._project_signal_profile(signal_layer=signal_layer, neutral_signal_profile=neutral_signal_profile)
-        business_feature_profile = self._build_business_feature_profile(
+        neutral_signal_profile, business_feature_profile, llm_signal_resolution = self._resolve_main_card_profiles(
             article_context=article_context,
             candidate=candidate,
-            neutral_signal_profile=neutral_signal_profile,
+            business_family_id=business_family_id,
+            signal_layer=signal_layer,
         )
+        signal_profile = self._project_signal_profile(signal_layer=signal_layer, neutral_signal_profile=neutral_signal_profile)
+        if (
+            business_family_id == "sentence_order"
+            and enable_sentence_order_strong_formal_demote
+            and candidate.get("candidate_type") == "ordered_unit_group"
+        ):
+            demoted_candidate = self._maybe_demote_sentence_order_strong_formal_candidate(
+                candidate=candidate,
+                signal_profile=signal_profile,
+            )
+            if demoted_candidate is not candidate:
+                candidate = demoted_candidate
+                neutral_signal_profile, business_feature_profile, llm_signal_resolution = self._resolve_main_card_profiles(
+                    article_context=article_context,
+                    candidate=candidate,
+                    business_family_id=business_family_id,
+                    signal_layer=signal_layer,
+                )
+                signal_profile = self._project_signal_profile(signal_layer=signal_layer, neutral_signal_profile=neutral_signal_profile)
+        weak_order_business_profile = None
+        if (
+            business_family_id == "sentence_order"
+            and candidate.get("candidate_type") == "weak_formal_order_group"
+            and enable_sentence_order_weak_formal_bridge
+            and enable_sentence_order_weak_formal_gate
+            and enable_sentence_order_weak_formal_closing_gate
+        ):
+            weak_order_business_profile = (
+                self._build_business_feature_profile(
+                    article_context=article_context,
+                    candidate=candidate,
+                    neutral_signal_profile=neutral_signal_profile,
+                ).get("sentence_order_profile")
+                or {}
+            )
+        if (
+            business_family_id == "sentence_order"
+            and candidate.get("candidate_type") == "weak_formal_order_group"
+            and enable_sentence_order_weak_formal_bridge
+            and enable_sentence_order_weak_formal_gate
+            and not self._passes_weak_formal_order_runtime_gate(
+                signal_profile=signal_profile,
+                neutral_signal_profile=neutral_signal_profile,
+                order_business_profile=weak_order_business_profile,
+                candidate=candidate,
+                enable_closing_gate=enable_sentence_order_weak_formal_closing_gate,
+            )
+        ):
+            candidate = deepcopy(source_candidate)
+            neutral_signal_profile, business_feature_profile, llm_signal_resolution = self._resolve_main_card_profiles(
+                article_context=article_context,
+                candidate=candidate,
+                business_family_id=business_family_id,
+                signal_layer=signal_layer,
+            )
+            signal_profile = self._project_signal_profile(signal_layer=signal_layer, neutral_signal_profile=neutral_signal_profile)
         retrieval_match_profile = self._build_retrieval_match_profile(
             article_context=article_context,
             candidate=candidate,
@@ -393,6 +684,7 @@ class MaterialPipelineV2:
             material_cards=material_cards,
             signal_profile=signal_profile,
             candidate=candidate,
+            business_family_id=business_family_id,
             min_card_score=0.30,
         )
         if not card_hits:
@@ -413,7 +705,25 @@ class MaterialPipelineV2:
         )
         top_hit = card_hits[0]
         top_business_hit = self._select_primary_business_card(business_card_hits, neutral_signal_profile)
-        if business_family_id == "sentence_fill" and top_business_hit is None:
+        llm_material_card_options = None
+        llm_business_card_options = None
+        if self._use_llm_card_catalog_for_family(business_family_id):
+            llm_material_card_options = self._build_llm_material_card_catalog(
+                material_cards=material_cards,
+                candidate=candidate,
+                business_family_id=business_family_id,
+            )
+            llm_business_card_options = self._build_llm_business_card_catalog(
+                business_cards=business_cards,
+                business_feature_profile=business_feature_profile,
+            )
+            top_hit = self._maybe_promote_legacy_top_hit_from_llm_catalog(
+                top_hit=top_hit,
+                llm_material_card_options=llm_material_card_options,
+            )
+            if top_business_hit is None and llm_business_card_options:
+                top_business_hit = deepcopy(llm_business_card_options[0])
+        if business_family_id == "sentence_fill" and top_business_hit is None and not self._use_llm_card_catalog_for_family(business_family_id):
             return None
         family_affinity = self._family_affinity_topk(neutral_signal_profile)
         local_profile = dict(signal_profile)
@@ -439,7 +749,7 @@ class MaterialPipelineV2:
             candidate=candidate,
             presentation=presentation,
         )
-        return {
+        item = {
             "candidate_id": candidate["candidate_id"],
             "article_id": article_context["article_id"],
             "article_title": article_context["title"],
@@ -493,6 +803,281 @@ class MaterialPipelineV2:
             "_cached_business_family_id": business_family_id,
             "_cached_index_version": self.INDEX_VERSION,
         }
+        if llm_signal_resolution:
+            item["llm_signal_resolution"] = llm_signal_resolution
+            item["question_ready_context"]["llm_signal_resolution"] = {
+                "mode": llm_signal_resolution.get("mode"),
+                "consensus_status": ((llm_signal_resolution.get("consensus") or {}).get("status")),
+            }
+            item["local_profile"]["llm_signal_resolution"] = {
+                "enabled": True,
+                "consensus_status": ((llm_signal_resolution.get("consensus") or {}).get("status")),
+            }
+        item = self._attach_main_card_dual_judge_adjudication(
+            item=item,
+            business_family_id=business_family_id,
+            question_card=question_card,
+            material_cards=material_cards,
+            business_cards=business_cards,
+            signal_profile=signal_profile,
+            neutral_signal_profile=neutral_signal_profile,
+            business_feature_profile=business_feature_profile,
+            llm_material_card_options=llm_material_card_options,
+            llm_business_card_options=llm_business_card_options,
+        )
+        if self._llm_adjudication_requires_reject(item=item, business_family_id=business_family_id):
+            return None
+        gate_passed, _ = self._passes_runtime_material_gate(
+            item=item,
+            business_family_id=business_family_id,
+            question_card=question_card,
+            min_card_score=0.0,
+            min_business_card_score=0.0,
+            require_business_card=False,
+        )
+        if not gate_passed:
+            return None
+        return item
+
+    def _resolve_main_card_profiles(
+        self,
+        *,
+        article_context: dict[str, Any],
+        candidate: dict[str, Any],
+        business_family_id: str,
+        signal_layer: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any] | None]:
+        neutral_signal_profile = self._build_neutral_signal_profile(article_context=article_context, candidate=candidate)
+        business_feature_profile = self._build_business_feature_profile(
+            article_context=article_context,
+            candidate=candidate,
+            neutral_signal_profile=neutral_signal_profile,
+        )
+        resolver = getattr(self, "main_card_signal_resolver", None)
+        if resolver is None or not resolver.is_enabled_for_family(business_family_id):
+            return neutral_signal_profile, business_feature_profile, None
+        resolution = resolver.resolve(
+            business_family_id=business_family_id,
+            article_context=article_context,
+            candidate=candidate,
+            neutral_signal_profile=neutral_signal_profile,
+            business_feature_profile=business_feature_profile,
+        )
+        if not resolver.consensus_allows_override(resolution):
+            return neutral_signal_profile, business_feature_profile, resolution
+        consensus = dict((resolution or {}).get("consensus") or {})
+        merged_neutral = dict(neutral_signal_profile)
+        merged_neutral["mechanical_signal_profile"] = dict(neutral_signal_profile)
+        merged_neutral.update(dict(consensus.get("neutral_signal_overrides") or {}))
+        merged_business = self._merge_business_feature_profile_overrides(
+            base_profile=business_feature_profile,
+            overrides=dict(consensus.get("business_feature_profile_overrides") or {}),
+        )
+        projected_signal_profile = self._project_signal_profile(signal_layer=signal_layer, neutral_signal_profile=merged_neutral)
+        if business_family_id == "center_understanding":
+            merged_business["feature_type"] = str(merged_business.get("feature_type") or projected_signal_profile.get("feature_type") or business_feature_profile.get("feature_type") or "")
+        return merged_neutral, merged_business, resolution
+
+    def _merge_business_feature_profile_overrides(
+        self,
+        *,
+        base_profile: dict[str, Any],
+        overrides: dict[str, Any],
+    ) -> dict[str, Any]:
+        merged = deepcopy(base_profile)
+        for key, value in (overrides or {}).items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                nested = dict(merged.get(key) or {})
+                nested.update(value)
+                merged[key] = nested
+                continue
+            if value is not None:
+                merged[key] = value
+        return merged
+
+    def _attach_main_card_dual_judge_adjudication(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+        question_card: dict[str, Any],
+        material_cards: list[dict[str, Any]],
+        business_cards: list[dict[str, Any]],
+        signal_profile: dict[str, Any],
+        neutral_signal_profile: dict[str, Any],
+        business_feature_profile: dict[str, Any],
+        llm_material_card_options: list[dict[str, Any]] | None = None,
+        llm_business_card_options: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        if not self.main_card_dual_judge.is_enabled_for_family(business_family_id):
+            return item
+        updated = deepcopy(item)
+        if llm_material_card_options is None:
+            llm_material_card_options = self._score_material_cards(
+                material_cards=material_cards,
+                signal_profile=signal_profile,
+                candidate=updated,
+                business_family_id=business_family_id,
+                min_card_score=0.0,
+                apply_runtime_gate=False,
+            )
+        if llm_business_card_options is None:
+            llm_business_card_options = self._score_business_cards(
+                business_cards=business_cards,
+                business_feature_profile=business_feature_profile,
+                neutral_signal_profile=neutral_signal_profile,
+                requested_business_card_ids=set(),
+                preferred_business_card_ids=set(),
+                min_business_card_score=0.0,
+            )
+        updated["llm_candidate_material_cards"] = llm_material_card_options
+        updated["llm_candidate_business_cards"] = llm_business_card_options
+        adjudication = self.main_card_dual_judge.adjudicate(
+            business_family_id=business_family_id,
+            item=updated,
+            question_card=question_card,
+        )
+        if adjudication is None:
+            return updated
+        updated["llm_adjudication"] = adjudication
+        question_ready_context = dict(updated.get("question_ready_context") or {})
+        question_ready_context["llm_adjudication"] = {
+            "mode": adjudication.get("mode"),
+            "consensus": adjudication.get("consensus"),
+        }
+        if self.main_card_dual_judge.is_enforce_mode():
+            updated = self._apply_llm_adjudication_selection(updated)
+            question_ready_context = dict(updated.get("question_ready_context") or {})
+            question_ready_context["llm_adjudication"] = {
+                "mode": adjudication.get("mode"),
+                "consensus": adjudication.get("consensus"),
+            }
+        updated["question_ready_context"] = question_ready_context
+        local_profile = dict(updated.get("local_profile") or {})
+        local_profile["llm_adjudication"] = {
+            "enabled": True,
+            "mode": adjudication.get("mode"),
+            "consensus_status": ((adjudication.get("consensus") or {}).get("status")),
+        }
+        updated["local_profile"] = local_profile
+        return updated
+
+    def _apply_llm_adjudication_selection(self, item: dict[str, Any]) -> dict[str, Any]:
+        adjudication = dict(item.get("llm_adjudication") or {})
+        if not self.main_card_dual_judge.consensus_allows_accept(adjudication):
+            return item
+        consensus = dict(adjudication.get("consensus") or {})
+        selected_material_card = consensus.get("selected_material_card")
+        selected_business_card = consensus.get("selected_business_card")
+        updated = deepcopy(item)
+
+        material_cards = list(updated.get("llm_candidate_material_cards") or [])
+        if selected_material_card:
+            chosen_material = next((entry for entry in material_cards if entry.get("card_id") == selected_material_card), None)
+            if chosen_material is not None:
+                reordered = [chosen_material] + [entry for entry in material_cards if entry.get("card_id") != selected_material_card]
+                updated["eligible_material_cards"] = reordered
+                updated["material_card_recommendations"] = [entry.get("card_id") for entry in reordered]
+                updated["material_card_id"] = selected_material_card
+                question_ready_context = dict(updated.get("question_ready_context") or {})
+                question_ready_context["selected_material_card"] = selected_material_card
+                question_ready_context["generation_archetype"] = chosen_material.get("generation_archetype")
+                updated["question_ready_context"] = question_ready_context
+
+        business_cards = list(updated.get("llm_candidate_business_cards") or [])
+        if selected_business_card:
+            chosen_business = next((entry for entry in business_cards if entry.get("business_card_id") == selected_business_card), None)
+            if chosen_business is not None:
+                reordered = [chosen_business] + [entry for entry in business_cards if entry.get("business_card_id") != selected_business_card]
+                updated["eligible_business_cards"] = reordered
+                updated["business_card_recommendations"] = [entry.get("business_card_id") for entry in reordered]
+                updated["selected_business_card"] = selected_business_card
+                question_ready_context = dict(updated.get("question_ready_context") or {})
+                question_ready_context["selected_business_card"] = selected_business_card
+                material_card_id = str(updated.get("material_card_id") or question_ready_context.get("selected_material_card") or "")
+                question_card_id = str(question_ready_context.get("question_card_id") or "")
+                if question_card_id:
+                    question_card = self.registry.get_question_card(question_card_id)
+                    question_ready_context["resolved_slots"] = self._resolve_slots(question_card, material_card_id, chosen_business)
+                question_ready_context["pattern_candidates"] = list((chosen_business.get("pattern_candidates") or []))
+                question_ready_context["prompt_extras"] = self._build_prompt_extras(chosen_business)
+                updated["question_ready_context"] = question_ready_context
+        return updated
+
+    def _use_llm_card_catalog_for_family(self, business_family_id: str) -> bool:
+        use_full_catalog = getattr(self.main_card_dual_judge, "use_full_card_catalog", None)
+        enabled = bool(use_full_catalog()) if callable(use_full_catalog) else False
+        return business_family_id in {"center_understanding", "sentence_fill", "sentence_order"} and enabled
+
+    def _build_llm_material_card_catalog(
+        self,
+        *,
+        material_cards: list[dict[str, Any]],
+        candidate: dict[str, Any],
+        business_family_id: str,
+    ) -> list[dict[str, Any]]:
+        options: list[dict[str, Any]] = []
+        candidate_contract_types = self._candidate_contract_types(candidate, business_family_id=business_family_id)
+        for card in material_cards:
+            contract = card.get("candidate_contract", {}) or {}
+            allowed_types = set(contract.get("allowed_candidate_types") or [])
+            if allowed_types and not (candidate_contract_types & allowed_types):
+                continue
+            options.append(
+                {
+                    "card_id": card.get("card_id"),
+                    "display_name": card.get("display_name"),
+                    "score": 0.0,
+                    "generation_archetype": card.get("default_generation_archetype"),
+                    "selection_core": card.get("selection_core"),
+                    "reason": "llm_full_catalog",
+                }
+            )
+        return options
+
+    def _build_llm_business_card_catalog(
+        self,
+        *,
+        business_cards: list[dict[str, Any]],
+        business_feature_profile: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        options: list[dict[str, Any]] = []
+        for card in business_cards:
+            meta = card.get("card_meta") or {}
+            effective_slot_projection = self._resolve_business_slot_projection(card, business_feature_profile)
+            options.append(
+                {
+                    "business_card_id": meta.get("business_card_id"),
+                    "display_name": meta.get("display_name"),
+                    "score": 0.0,
+                    "reason": "llm_full_catalog",
+                    "slot_projection": effective_slot_projection,
+                    "pattern_candidates": list(effective_slot_projection.get("pattern_candidates") or []),
+                    "feature_signature": card.get("feature_signature") or {},
+                }
+                )
+        return options
+
+    def _maybe_promote_legacy_top_hit_from_llm_catalog(
+        self,
+        *,
+        top_hit: dict[str, Any],
+        llm_material_card_options: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        if not str(top_hit.get("card_id") or "").startswith("legacy."):
+            return top_hit
+        options = list(llm_material_card_options or [])
+        if len(options) == 1:
+            return deepcopy(options[0])
+        return top_hit
+
+    def _llm_adjudication_requires_reject(self, *, item: dict[str, Any], business_family_id: str) -> bool:
+        if business_family_id not in {"center_understanding", "sentence_fill", "sentence_order"}:
+            return False
+        if not self.main_card_dual_judge.is_enforce_mode():
+            return False
+        adjudication = dict(item.get("llm_adjudication") or {})
+        return not self.main_card_dual_judge.consensus_allows_accept(adjudication)
 
     def refresh_cached_item(
         self,
@@ -742,6 +1327,14 @@ class MaterialPipelineV2:
                 parts.append(f"group_size={group_size}")
             if grouped_count:
                 parts.append(f"grouped_units={grouped_count}")
+        if candidate.get("candidate_type") == "weak_formal_order_group":
+            group_size = int(meta.get("group_size") or 0)
+            weak_reason = str(meta.get("weak_formal_reason") or "").strip()
+            if group_size:
+                parts.append(f"group_size={group_size}")
+            parts.append("ordering_tier=weak_formal")
+            if weak_reason:
+                parts.append(f"weak_reason={weak_reason}")
         return "+".join(parts)
 
     def _hydrate_functional_slot_meta(
@@ -1246,6 +1839,244 @@ class MaterialPipelineV2:
             return False, "ordering_links_too_sparse", pairwise_constraints, first_candidate_indices, last_candidate_indices
         return True, "ordered_unit_group_ready", pairwise_constraints, first_candidate_indices, last_candidate_indices
 
+    def _ordered_unit_group_weak_formal_worthwhile(
+        self,
+        units: list[str],
+    ) -> tuple[bool, str, list[dict[str, Any]], list[int], list[int], float]:
+        if len(units) != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+            return False, "group_size_not_six", [], [], [], 0.0
+
+        first_scores = [self._ordered_first_eligibility(unit, index=index) for index, unit in enumerate(units)]
+        last_scores = [self._ordered_last_eligibility(unit, index=index, total=len(units)) for index, unit in enumerate(units)]
+        first_candidate_indices = [index for index, score in enumerate(first_scores) if score >= 0.50]
+        last_candidate_indices = [index for index, score in enumerate(last_scores) if score >= 0.54]
+        pairwise_constraints = self._ordered_pairwise_constraints(units)
+        local_bindings = [item for item in pairwise_constraints if item.get("kind") == "local_binding"]
+        weak_last_score = float(last_scores[-1] if last_scores else 0.0)
+
+        if 0 not in first_candidate_indices:
+            return False, "first_unit_unstable", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+        if len(first_candidate_indices) >= 4:
+            return False, "too_many_first_like_units", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+        if len(last_candidate_indices) >= 4:
+            return False, "too_many_last_like_units", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+        if len(pairwise_constraints) < 1:
+            return False, "ordering_constraints_too_weak", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+        if len(local_bindings) == 0 and sum(1 for item in pairwise_constraints if item.get("kind") == "precedence") < 1:
+            return False, "ordering_links_too_sparse", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+        if (len(units) - 1) in last_candidate_indices:
+            return True, "ordered_unit_group_ready", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+        if weak_last_score < self.SENTENCE_ORDER_WEAK_LAST_SCORE:
+            return False, "last_unit_too_weak_even_for_weak_formal", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+        return True, "weak_tail_accept", pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score
+
+    def _passes_weak_formal_order_runtime_gate(
+        self,
+        *,
+        signal_profile: dict[str, Any],
+        neutral_signal_profile: dict[str, Any] | None = None,
+        order_business_profile: dict[str, Any] | None = None,
+        candidate: dict[str, Any],
+        enable_closing_gate: bool = False,
+    ) -> bool:
+        if str(candidate.get("candidate_type") or "") != "weak_formal_order_group":
+            return True
+        if self._sentence_order_unit_count(candidate["text"], candidate["candidate_type"]) != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+            return False
+        order_scoring = self._build_sentence_order_scoring(signal_profile=signal_profile, candidate=candidate)
+        structure_scores = dict(order_scoring.get("structure_scores") or {})
+        first_eligibility_score = float(structure_scores.get("first_eligibility_score") or 0.0)
+        pairwise_constraint_score = float(structure_scores.get("pairwise_constraint_score") or 0.0)
+        local_binding_score = float(structure_scores.get("local_binding_score") or 0.0)
+        final_candidate_score = float(order_scoring.get("final_candidate_score") or 0.0)
+        passes_base_gate = bool(
+            first_eligibility_score >= 0.70
+            and pairwise_constraint_score >= 0.52
+            and local_binding_score >= 0.70
+            and final_candidate_score >= 0.22
+        )
+        if not passes_base_gate:
+            return False
+        if not enable_closing_gate:
+            return True
+
+        meta = dict(candidate.get("meta") or {})
+        weak_formal_reason = str(
+            meta.get("weak_formal_reason")
+            or ((meta.get("ordering_reason_trace") or {}).get("ordering_reason"))
+            or ""
+        )
+        closing_rule = str(
+            (order_business_profile or {}).get("closing_rule")
+            or (neutral_signal_profile or {}).get("closing_rule")
+            or signal_profile.get("closing_rule")
+            or "none"
+        )
+        if weak_formal_reason == "weak_tail_accept" and closing_rule == "none":
+            return False
+        return True
+
+    def _maybe_demote_sentence_order_strong_formal_candidate(
+        self,
+        *,
+        candidate: dict[str, Any],
+        signal_profile: dict[str, Any],
+    ) -> dict[str, Any]:
+        if str(candidate.get("candidate_type") or "") != "ordered_unit_group":
+            return candidate
+        order_scoring = self._build_sentence_order_scoring(signal_profile=signal_profile, candidate=candidate)
+        structure_scores = dict(order_scoring.get("structure_scores") or {})
+        pairwise_constraint_score = float(structure_scores.get("pairwise_constraint_score") or 0.0)
+        exchange_risk = float(signal_profile.get("exchange_risk") or 0.0)
+        multi_path_risk = float(signal_profile.get("multi_path_risk") or 0.0)
+        function_overlap_score = float(signal_profile.get("function_overlap_score") or 0.0)
+        if pairwise_constraint_score >= 0.58:
+            return candidate
+        if not (
+            exchange_risk > 0.42
+            or multi_path_risk > 0.44
+            or function_overlap_score > 0.50
+        ):
+            return candidate
+        meta = dict(candidate.get("meta") or {})
+        trace = dict(meta.get("ordering_reason_trace") or {})
+        trace["strong_formal_demoted"] = True
+        trace["strong_formal_demotion_reason"] = "pairwise_residual_demoted_to_weak_formal"
+        trace["pairwise_constraint_score"] = round(pairwise_constraint_score, 4)
+        trace["exchange_risk"] = round(exchange_risk, 4)
+        trace["multi_path_risk"] = round(multi_path_risk, 4)
+        trace["function_overlap_score"] = round(function_overlap_score, 4)
+        meta["ordering_tier"] = "weak_formal"
+        meta["weak_formal_reason"] = "strong_formal_pairwise_demoted"
+        meta["strong_formal_demotion"] = {
+            "reason": "pairwise_residual_demoted_to_weak_formal",
+            "pairwise_constraint_score": round(pairwise_constraint_score, 4),
+            "exchange_risk": round(exchange_risk, 4),
+            "multi_path_risk": round(multi_path_risk, 4),
+            "function_overlap_score": round(function_overlap_score, 4),
+        }
+        meta["ordering_reason_trace"] = trace
+        return {
+            **candidate,
+            "candidate_type": "weak_formal_order_group",
+            "meta": meta,
+        }
+
+    def _build_sentence_order_group_candidate(
+        self,
+        *,
+        article_context: dict[str, Any],
+        source_candidate: dict[str, Any],
+        candidate_type: str,
+        ordered_units: list[str],
+        pairwise_constraints: list[dict[str, Any]],
+        first_candidate_indices: list[int],
+        last_candidate_indices: list[int],
+        ordering_reason: str,
+        planner_source: str,
+        weak_last_score: float | None = None,
+        unit_forms: list[str] | None = None,
+        normalization_reason: str | None = None,
+        normalization_local_bindings: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        body = "\n".join(unit.strip() for unit in ordered_units if unit.strip()).strip()
+        sentence_range = list((source_candidate.get("meta") or {}).get("sentence_range") or [0, max(len(ordered_units) - 1, 0)])
+        paragraph_range = list((source_candidate.get("meta") or {}).get("paragraph_range") or [0, 0])
+        unit_forms = list(unit_forms or ["single_sentence_unit"] * len(ordered_units))
+        grouped_unit_count = sum(1 for form in unit_forms if form == "grouped_unit")
+        local_bindings = list(normalization_local_bindings or [])
+        local_bindings.extend(item for item in pairwise_constraints if item.get("kind") == "local_binding")
+        meta = {
+            **dict(source_candidate.get("meta") or {}),
+            "paragraph_range": paragraph_range,
+            "sentence_range": sentence_range,
+            "planner_source": planner_source,
+            "planner_priority": 0.71 if candidate_type == "ordered_unit_group" else 0.63,
+            "planner_reason": f"{candidate_type}:{ordering_reason}",
+            "unit_type": candidate_type,
+            "group_size": self.SENTENCE_ORDER_FIXED_UNIT_COUNT,
+            "ordered_units": ordered_units,
+            "unit_forms": unit_forms,
+            "grouped_unit_count": grouped_unit_count,
+            "default_order": list(range(self.SENTENCE_ORDER_FIXED_UNIT_COUNT)),
+            "first_candidate_indices": first_candidate_indices,
+            "last_candidate_indices": last_candidate_indices,
+            "pairwise_constraints": pairwise_constraints,
+            "local_bindings": local_bindings,
+            "source_candidate_type": str(source_candidate.get("candidate_type") or ""),
+            "ordering_tier": "strong_formal" if candidate_type == "ordered_unit_group" else "weak_formal",
+            "ordering_reason_trace": {
+                "ordering_reason": ordering_reason,
+                "source_candidate_type": str(source_candidate.get("candidate_type") or ""),
+            },
+        }
+        if normalization_reason:
+            meta["normalization_reason"] = normalization_reason
+            meta["ordering_reason_trace"]["normalization_reason"] = normalization_reason
+        if weak_last_score is not None:
+            meta["weak_formal_reason"] = ordering_reason
+            meta["weak_last_score"] = round(float(weak_last_score), 4)
+        return {
+            "candidate_id": str(source_candidate.get("candidate_id") or ""),
+            "candidate_type": candidate_type,
+            "text": body,
+            "meta": meta,
+            "quality_flags": list(source_candidate.get("quality_flags") or []),
+        }
+
+    def _bridge_sentence_order_candidate_to_formal_group(
+        self,
+        *,
+        article_context: dict[str, Any],
+        candidate: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        source_type = str(candidate.get("candidate_type") or "")
+        if source_type not in {"sentence_block_group", "sentence_group", "paragraph_window"}:
+            return None
+
+        raw_units = self._sentence_order_units(str(candidate.get("text") or ""), source_type)
+        normalized = self._normalize_ordered_units_to_six(raw_units)
+        if normalized is None:
+            return None
+        units, unit_forms, normalization_local_bindings, normalization_reason = normalized
+
+        worthwhile, ordering_reason, pairwise_constraints, first_candidate_indices, last_candidate_indices = self._ordered_unit_group_worthwhile(units)
+        if worthwhile:
+            return self._build_sentence_order_group_candidate(
+                article_context=article_context,
+                source_candidate=candidate,
+                candidate_type="ordered_unit_group",
+                ordered_units=units,
+                pairwise_constraints=pairwise_constraints,
+                first_candidate_indices=first_candidate_indices,
+                last_candidate_indices=last_candidate_indices,
+                ordering_reason=ordering_reason,
+                planner_source="rule_sentence_order_material_bridge",
+                unit_forms=unit_forms,
+                normalization_reason=normalization_reason,
+                normalization_local_bindings=normalization_local_bindings,
+            )
+
+        weak_ok, weak_reason, pairwise_constraints, first_candidate_indices, last_candidate_indices, weak_last_score = self._ordered_unit_group_weak_formal_worthwhile(units)
+        if not weak_ok or weak_reason != "weak_tail_accept":
+            return None
+
+        return self._build_sentence_order_group_candidate(
+            article_context=article_context,
+            source_candidate=candidate,
+            candidate_type="weak_formal_order_group",
+            ordered_units=units,
+            pairwise_constraints=pairwise_constraints,
+            first_candidate_indices=first_candidate_indices,
+            last_candidate_indices=last_candidate_indices,
+            ordering_reason=weak_reason,
+            planner_source="rule_sentence_order_material_bridge",
+            weak_last_score=weak_last_score,
+            unit_forms=unit_forms,
+            normalization_reason=normalization_reason,
+            normalization_local_bindings=normalization_local_bindings,
+        )
+
     def _ordered_first_eligibility(self, unit: str, *, index: int) -> float:
         text = unit.strip()
         score = 0.42
@@ -1490,6 +2321,295 @@ class MaterialPipelineV2:
 
         return candidates
 
+    def _fill_formalization_bridge_source_types(self) -> set[str]:
+        return {
+            "sentence_group",
+            "multi_paragraph_unit",
+            "paragraph_window",
+            "sentence_block_group",
+        }
+
+    def _fill_bridge_action_name(self, *, slot_role: str, slot_function: str) -> str:
+        if slot_role == "opening":
+            return "extract_opening_slot_sentence"
+        if slot_role == "middle" and slot_function in {"carry_previous"}:
+            return "extract_middle_carry_sentence_with_context"
+        if slot_role == "middle":
+            return "extract_middle_bridge_sentence_with_context"
+        if slot_role == "ending":
+            return "extract_ending_slot_sentence"
+        return "extract_fill_slot_sentence"
+
+    def _fill_bridge_slot_priority(
+        self,
+        *,
+        slot_role: str,
+        slot_function: str,
+        slot_text: str,
+        context_before: str,
+        context_after: str,
+    ) -> float:
+        base = {
+            ("opening", "summary"): 0.90,
+            ("ending", "ending_summary"): 0.86,
+            ("ending", "countermeasure"): 0.72,
+            ("middle", "bridge_both_sides"): 0.68,
+            ("middle", "carry_previous"): 0.64,
+            ("middle", "lead_next"): 0.60,
+            ("opening", "topic_intro"): 0.58,
+        }.get((slot_role, slot_function), 0.70)
+        marker_bonus = 0.0
+        if slot_role == "opening" and any(marker in slot_text for marker in ("当前", "如今", "近年来", "面对", "在此背景下")):
+            marker_bonus += 0.04
+        if slot_role == "middle" and (slot_text.startswith(CONTEXTUAL_OPENINGS) or slot_text.startswith(ORDER_PRONOUN_MARKERS)):
+            marker_bonus += 0.05
+        if slot_role == "ending" and any(marker in slot_text for marker in SUMMARY_MARKERS + CONCLUSION_MARKERS + COUNTERMEASURE_MARKERS):
+            marker_bonus += 0.05
+        context_bonus = 0.0
+        if context_before:
+            context_bonus += 0.03
+        if context_after:
+            context_bonus += 0.03
+        length_penalty = 0.0
+        if len(slot_text) > 130:
+            length_penalty += 0.06
+        if len(slot_text) < 10:
+            length_penalty += 0.08
+        return round(max(0.0, min(1.0, base + marker_bonus + context_bonus - length_penalty)), 4)
+
+    def _bridge_fill_candidate_to_functional_slot_unit(
+        self,
+        *,
+        article_context: dict[str, Any],
+        candidate: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        source_type = str(candidate.get("candidate_type") or "")
+        if source_type == "functional_slot_unit":
+            return candidate
+        if source_type not in self._fill_formalization_bridge_source_types():
+            return None
+
+        source_text = str(candidate.get("text") or "").strip()
+        sentences = [sentence.strip() for sentence in self.sentence_splitter.split(source_text) if sentence.strip()]
+        if len(sentences) < 2:
+            return None
+
+        proposals: list[dict[str, Any]] = []
+        total_sentences = len(sentences)
+        for sentence_index, sentence in enumerate(sentences):
+            slot_role = "middle"
+            if sentence_index == 0:
+                slot_role = "opening"
+            elif sentence_index == total_sentences - 1:
+                slot_role = "ending"
+
+            context_before = sentences[sentence_index - 1] if sentence_index > 0 else ""
+            context_after = sentences[sentence_index + 1] if sentence_index + 1 < total_sentences else ""
+            slot_context_text = "".join(
+                sentences[max(0, sentence_index - 1) : min(total_sentences, sentence_index + 2)]
+            )
+            slot_function = ""
+            prechecked_blank_value_reason = ""
+            if slot_role == "middle":
+                precheck = self._middle_blank_value_precheck(
+                    slot_text=sentence,
+                    context_before=context_before,
+                    context_after=context_after,
+                    slot_context_text=slot_context_text,
+                )
+                if not bool(precheck.get("ok")):
+                    continue
+                slot_function = str(precheck.get("slot_function") or "")
+                prechecked_blank_value_reason = str(precheck.get("reason") or "")
+            else:
+                slot_function = self._infer_functional_slot_function(
+                    slot_role=slot_role,
+                    slot_text=sentence,
+                    context_text=slot_context_text,
+                    context_before=context_before,
+                    context_after=context_after,
+                )
+            if not slot_function:
+                continue
+            if slot_role == "opening" and slot_function not in {"summary", "topic_intro"}:
+                continue
+            if slot_role == "middle" and slot_function not in {"carry_previous", "lead_next", "bridge_both_sides"}:
+                continue
+            if slot_role == "ending" and slot_function not in {"ending_summary", "countermeasure"}:
+                continue
+
+            slot_window = self._functional_slot_sentence_window(
+                slot_role=slot_role,
+                slot_function=slot_function,
+                local_sentences=sentences,
+                slot_sentence_local_index=sentence_index,
+            )
+            if slot_window is None:
+                continue
+            local_start, local_end = slot_window
+            if local_start < 0 or local_end >= total_sentences or local_end < local_start:
+                continue
+            slot_text = "".join(sentences[local_start : local_end + 1]).strip()
+            if not slot_text:
+                continue
+            slot_sentence_count = local_end - local_start + 1
+            if slot_sentence_count > 2:
+                continue
+            if slot_sentence_count == 1 and len(slot_text) > 160:
+                continue
+            if slot_sentence_count == 2 and len(slot_text) > 240:
+                continue
+
+            context_before = sentences[local_start - 1] if local_start > 0 else ""
+            context_after = sentences[local_end + 1] if local_end + 1 < total_sentences else ""
+            slot_context_text = "".join(part for part in [context_before, slot_text, context_after] if part)
+
+            if slot_role == "middle":
+                precheck = self._middle_blank_value_precheck(
+                    slot_text=slot_text,
+                    context_before=context_before,
+                    context_after=context_after,
+                    slot_context_text=slot_context_text,
+                )
+                if not bool(precheck.get("ok")):
+                    continue
+                slot_function = str(precheck.get("slot_function") or "")
+                blank_value_reason = str(precheck.get("reason") or prechecked_blank_value_reason or "")
+                if not slot_function:
+                    continue
+            else:
+                blank_value_ok, blank_value_reason = self._functional_slot_has_blank_value(
+                    slot_role=slot_role,
+                    slot_function=slot_function,
+                    slot_text=slot_text,
+                    context_before=context_before,
+                    context_after=context_after,
+                    slot_context_text=slot_context_text,
+                )
+                if not blank_value_ok:
+                    continue
+
+            if slot_role == "opening":
+                if slot_function == "summary":
+                    if self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS) < 0.16 or not context_after.strip():
+                        continue
+                else:
+                    opening_ok, _ = self._fill_topic_intro_gate(
+                        slot_text=slot_text,
+                        context_after=context_after,
+                        summary_signal=self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS),
+                    )
+                    if not opening_ok:
+                        continue
+            if slot_role == "middle" and slot_function == "bridge_both_sides":
+                middle_trace = self._classify_middle_functional_slot(
+                    slot_text=slot_text,
+                    context_before=context_before,
+                    context_after=context_after,
+                    slot_context_text=slot_context_text,
+                )
+                if min(
+                    float(middle_trace.get("backward_score") or 0.0),
+                    float(middle_trace.get("forward_score") or 0.0),
+                ) < 0.44:
+                    continue
+            if slot_role == "middle" and slot_function == "carry_previous":
+                middle_trace = self._classify_middle_functional_slot(
+                    slot_text=slot_text,
+                    context_before=context_before,
+                    context_after=context_after,
+                    slot_context_text=slot_context_text,
+                )
+                if float(middle_trace.get("backward_score") or 0.0) < 0.54:
+                    continue
+            if slot_role == "ending" and slot_function == "ending_summary":
+                if self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS) < 0.16 or not context_before.strip():
+                    continue
+            if slot_role == "ending" and slot_function == "countermeasure":
+                countermeasure_ok, _ = self._fill_countermeasure_gate(
+                    slot_text=slot_text,
+                    context_before=context_before,
+                    countermeasure_signal=self._marker_strength(slot_text, COUNTERMEASURE_MARKERS + ACTION_MEASURE_MARKERS + VALUE_MARKERS),
+                    summary_signal=self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS),
+                )
+                if not countermeasure_ok:
+                    continue
+
+            bridge_action = self._fill_bridge_action_name(slot_role=slot_role, slot_function=slot_function)
+            proposals.append(
+                {
+                    "slot_role": slot_role,
+                    "slot_function": slot_function,
+                    "slot_text": slot_text,
+                    "local_start": local_start,
+                    "local_end": local_end,
+                    "context_before": context_before,
+                    "context_after": context_after,
+                    "blank_value_reason": blank_value_reason,
+                    "bridge_action": bridge_action,
+                    "priority": self._fill_bridge_slot_priority(
+                        slot_role=slot_role,
+                        slot_function=slot_function,
+                        slot_text=slot_text,
+                        context_before=context_before,
+                        context_after=context_after,
+                    ),
+                }
+            )
+
+        if not proposals:
+            return None
+        proposals.sort(key=lambda item: item["priority"], reverse=True)
+        best = proposals[0]
+
+        source_meta = dict(candidate.get("meta") or {})
+        paragraph_range = list(source_meta.get("paragraph_range") or [0, max(0, source_text.count("\n\n"))])
+        slot_sentence_range = [int(best["local_start"]), int(best["local_end"])]
+        slot_context_sentence_range = [max(0, slot_sentence_range[0] - 1), min(total_sentences - 1, slot_sentence_range[1] + 1)]
+        bridged_meta = dict(source_meta)
+        bridged_meta.update(
+            {
+                "unit_type": "functional_slot_unit",
+                "slot_role": best["slot_role"],
+                "slot_function": best["slot_function"],
+                "slot_sentence_range": slot_sentence_range,
+                "slot_context_sentence_range": slot_context_sentence_range,
+                "slot_context_paragraph_range": paragraph_range,
+                "sentence_range": slot_sentence_range,
+                "blank_value_ready": True,
+                "blank_value_reason": best["blank_value_reason"],
+                "slot_bridge_action": best["bridge_action"],
+                "slot_bridge_priority": float(best["priority"]),
+                "slot_source_candidate_type": source_type,
+                "slot_source_candidate_id": str(candidate.get("candidate_id") or ""),
+                "slot_source_span_id": str(source_meta.get("candidate_span_id") or ""),
+                "slot_sentence_text": best["slot_text"],
+                "left_context_text": best["context_before"],
+                "right_context_text": best["context_after"],
+                "slot_context_range": {
+                    "sentence": slot_context_sentence_range,
+                    "paragraph": paragraph_range,
+                },
+                "planner_source": "fill_formalization_bridge_prototype",
+                "planner_reason": f"fill_bridge:{best['bridge_action']}:{best['slot_role']}:{best['slot_function']}",
+                "planner_priority": round(min(0.95, 0.70 + 0.25 * float(best["priority"])), 4),
+            }
+        )
+        bridged_quality_flags = list(candidate.get("quality_flags") or [])
+        if "fill_formalization_bridge" not in bridged_quality_flags:
+            bridged_quality_flags.append("fill_formalization_bridge")
+
+        bridged_candidate_id = str(candidate.get("candidate_id") or "")
+        if bridged_candidate_id and not bridged_candidate_id.endswith(":fill_bridge"):
+            bridged_candidate_id = f"{bridged_candidate_id}:fill_bridge"
+        return {
+            "candidate_id": bridged_candidate_id or f"fill_bridge:{article_context.get('article_id') or ''}",
+            "candidate_type": "functional_slot_unit",
+            "text": str(best["slot_text"] or "").strip(),
+            "meta": bridged_meta,
+            "quality_flags": bridged_quality_flags,
+        }
+
     def _functional_slot_sentence_window(
         self,
         *,
@@ -1500,16 +2620,353 @@ class MaterialPipelineV2:
     ) -> tuple[int, int] | None:
         if not local_sentences:
             return None
-        start = slot_sentence_local_index
-        end = slot_sentence_local_index
-        slot_text = local_sentences[slot_sentence_local_index].strip()
-        if slot_role == "middle":
-            short_slot = len(slot_text) < 42
-            if slot_function == "carry_previous" and short_slot and slot_sentence_local_index > 0:
-                start = slot_sentence_local_index - 1
-            elif slot_function in {"lead_next", "bridge_both_sides"} and short_slot and slot_sentence_local_index + 1 < len(local_sentences):
-                end = slot_sentence_local_index + 1
-        return (start, end)
+        _ = slot_role
+        _ = slot_function
+        return (slot_sentence_local_index, slot_sentence_local_index)
+
+    def _fill_slot_is_decorative_weak(self, slot_text: str) -> bool:
+        weak_patterns = (
+            "值得关注",
+            "不容忽视",
+            "意义重大",
+            "具有重要意义",
+            "这很重要",
+            "可见其重要性",
+        )
+        if any(token in slot_text for token in weak_patterns):
+            return True
+        stripped = re.sub(r"[，。；、,;!?！？\s]", "", slot_text)
+        return len(stripped) <= 14 and not any(token in slot_text for token in ("因此", "由此", "应当", "应该", "需要"))
+
+    def _fill_topic_intro_gate(
+        self,
+        *,
+        slot_text: str,
+        context_after: str,
+        summary_signal: float,
+    ) -> tuple[bool, str]:
+        intro_markers = ("当前", "如今", "近年来", "在此背景下", "面对", "随着", "放眼", "当下")
+        problem_markers = ("问题", "挑战", "困境", "矛盾", "痛点", "关键", "核心", "如何", "为何", "亟需", "必须")
+        question_markers = ("如何", "为何", "怎么办", "关键在于", "这意味着", "这说明")
+        has_intro_marker = any(marker in slot_text for marker in intro_markers)
+        has_problem_marker = any(marker in slot_text for marker in problem_markers)
+        has_question_marker = any(marker in slot_text for marker in question_markers)
+        data_heavy = bool(re.search(r"\d|[%％]", slot_text))
+        digit_density = len(re.findall(r"\d|[%％]", slot_text)) / max(1, len(re.sub(r"\s+", "", slot_text)))
+        comma_count = slot_text.count("，") + slot_text.count(",")
+        forward_dependency = self._forward_link_strength("\n\n".join(part for part in [slot_text, context_after] if part))
+        anchor_strength = self._core_object_anchor_strength(slot_text)
+        if not context_after.strip():
+            return False, "opening_topic_intro_missing_right_context"
+        if len(slot_text) >= 150 and not has_problem_marker and not has_question_marker:
+            return False, "opening_topic_intro_detail_heavy"
+        if data_heavy and digit_density >= 0.12 and comma_count >= 4 and not (has_intro_marker or has_problem_marker or has_question_marker) and anchor_strength < 0.34:
+            return False, "opening_topic_intro_data_opening"
+        if comma_count >= 6 and not (has_problem_marker or has_question_marker) and summary_signal < 0.24:
+            return False, "opening_topic_intro_list_like"
+        if forward_dependency < 0.40 and not (has_problem_marker or has_question_marker):
+            return False, "opening_topic_intro_forward_link_weak"
+        if not (has_intro_marker or has_problem_marker or has_question_marker or anchor_strength >= 0.28 or summary_signal >= 0.20):
+            return False, "opening_topic_intro_anchor_weak"
+        return True, "opening_topic_intro_anchor"
+
+    def _fill_countermeasure_gate(
+        self,
+        *,
+        slot_text: str,
+        context_before: str,
+        countermeasure_signal: float,
+        summary_signal: float,
+    ) -> tuple[bool, str]:
+        modal_markers = ("应当", "应该", "要", "需要", "必须", "建议")
+        policy_markers = ("会议", "报告", "规划", "意见", "提出", "强调", "部署", "要求", "指出")
+        problem_markers = ("问题", "挑战", "困境", "矛盾", "痛点", "风险", "压力")
+        action_hits = sum(1 for marker in ACTION_MEASURE_MARKERS if marker in slot_text)
+        modal_hits = sum(1 for marker in modal_markers if marker in slot_text)
+        policy_hits = sum(1 for marker in policy_markers if marker in slot_text)
+        problem_context = any(marker in context_before for marker in problem_markers)
+        backward_dependency = self._backward_link_strength("\n\n".join(part for part in [context_before, slot_text] if part))
+        if summary_signal >= 0.32 and action_hits == 0:
+            return False, "ending_countermeasure_summary_like"
+        if modal_hits > 0 and action_hits == 0 and not problem_context:
+            return False, "ending_countermeasure_modal_without_action"
+        if policy_hits >= 3 and action_hits == 0 and not problem_context:
+            return False, "ending_countermeasure_policy_statement"
+        if countermeasure_signal < 0.16 and action_hits == 0 and not problem_context:
+            return False, "ending_countermeasure_signal_weak"
+        if backward_dependency < 0.40:
+            return False, "ending_countermeasure_backward_link_weak"
+        if action_hits == 0 and not problem_context and countermeasure_signal < 0.24:
+            return False, "ending_countermeasure_missing_action_target"
+        return True, "ending_countermeasure_anchor"
+
+    def _resolve_opening_slot_function(
+        self,
+        *,
+        slot_text: str,
+        context_after: str,
+    ) -> tuple[str, str]:
+        summary_signal = self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS)
+        anchor_strength = self._core_object_anchor_strength(slot_text)
+        forward_dependency = self._forward_link_strength(
+            "\n\n".join(part for part in [slot_text, context_after] if part)
+        )
+        intro_markers = ("当前", "如今", "近年来", "在此背景下", "面对", "随着", "放眼", "当下")
+        problem_markers = ("问题", "挑战", "困境", "矛盾", "痛点", "如何", "为何", "怎么办", "亟需")
+        question_markers = ("如何", "为何", "怎么办")
+        has_intro_marker = any(marker in slot_text for marker in intro_markers)
+        has_problem_marker = any(marker in slot_text for marker in problem_markers)
+        has_question_marker = any(marker in slot_text for marker in question_markers)
+        has_question_punctuation = slot_text.rstrip().endswith(("？", "?"))
+        data_heavy = bool(re.search(r"\d|[%％]", slot_text))
+        comma_count = slot_text.count("，") + slot_text.count(",")
+
+        if (
+            context_after.strip()
+            and summary_signal >= 0.16
+            and forward_dependency >= 0.42
+            and comma_count <= 4
+            and not (data_heavy and comma_count >= 3)
+        ):
+            return "summary", "opening_summary_reclassified"
+
+        topic_intro_ok, topic_intro_reason = self._fill_topic_intro_gate(
+            slot_text=slot_text,
+            context_after=context_after,
+            summary_signal=summary_signal,
+        )
+        if not topic_intro_ok:
+            return "", topic_intro_reason
+        if not (has_problem_marker or has_question_marker or has_question_punctuation):
+            return "", "opening_topic_intro_macro_background"
+        if forward_dependency < 0.48:
+            return "", "opening_topic_intro_forward_gap_not_clear"
+        if comma_count >= 4 or data_heavy:
+            return "", "opening_topic_intro_surface_only"
+        if has_intro_marker and not (has_problem_marker or has_question_marker or has_question_punctuation) and anchor_strength < 0.34:
+            return "", "opening_topic_intro_background_only"
+        return "topic_intro", topic_intro_reason
+
+    def _resolve_ending_slot_function(
+        self,
+        *,
+        slot_text: str,
+        context_before: str,
+    ) -> tuple[str, str]:
+        summary_signal = self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS)
+        countermeasure_strength = self._marker_strength(
+            slot_text, COUNTERMEASURE_MARKERS + ACTION_MEASURE_MARKERS + VALUE_MARKERS
+        )
+        modal_markers = ("应当", "应该", "要", "需要", "必须", "建议")
+        policy_markers = ("会议", "报告", "规划", "意见", "提出", "强调", "部署", "要求", "指出")
+        value_markers = ("重要", "关键", "意义", "必须", "亟需", "值得")
+        action_hits = sum(1 for marker in ACTION_MEASURE_MARKERS if marker in slot_text)
+        modal_hits = sum(1 for marker in modal_markers if marker in slot_text)
+        policy_hits = sum(1 for marker in policy_markers if marker in slot_text)
+        value_hits = sum(1 for marker in value_markers if marker in slot_text)
+        problem_context = any(
+            marker in context_before for marker in ("问题", "挑战", "困境", "矛盾", "痛点", "风险", "压力")
+        )
+        backward_dependency = self._backward_link_strength(
+            "\n\n".join(part for part in [context_before, slot_text] if part)
+        )
+
+        summary_marked = bool(
+            summary_signal >= 0.16
+            or any(marker in slot_text for marker in ("总之", "可见", "由此", "这启示我们", "这说明"))
+        )
+        summary_like_tail = bool(context_before.strip()) and (
+            summary_marked or (backward_dependency >= 0.40 and (policy_hits >= 1 or value_hits >= 1))
+        )
+        if summary_marked and bool(context_before.strip()) and (
+            action_hits == 0 or policy_hits >= 2 or value_hits >= 2
+        ):
+            return "ending_summary", "ending_summary_reclassified"
+        if modal_hits > 0 and action_hits == 0:
+            if summary_like_tail:
+                return "ending_summary", "ending_summary_modal_reclassified"
+            return "", "ending_countermeasure_modal_without_action"
+        if policy_hits >= 2 and action_hits <= 1:
+            if summary_like_tail:
+                return "ending_summary", "ending_summary_policy_reclassified"
+            return "", "ending_countermeasure_policy_statement"
+        if value_hits >= 2 and action_hits == 0:
+            if summary_like_tail:
+                return "ending_summary", "ending_summary_value_reclassified"
+            return "", "ending_countermeasure_value_judgement"
+        if backward_dependency < 0.40:
+            if summary_like_tail:
+                return "ending_summary", "ending_summary_backward_supported"
+            return "", "ending_countermeasure_backward_link_weak"
+
+        countermeasure_ok, countermeasure_reason = self._fill_countermeasure_gate(
+            slot_text=slot_text,
+            context_before=context_before,
+            countermeasure_signal=countermeasure_strength,
+            summary_signal=summary_signal,
+        )
+        if countermeasure_ok and action_hits >= 1 and backward_dependency >= 0.40:
+            return "countermeasure", countermeasure_reason
+        if summary_like_tail:
+            return "ending_summary", "ending_summary_fallback_reclassified"
+        return "", "ending_countermeasure_reject_surface_only"
+
+    def _middle_blank_value_precheck(
+        self,
+        *,
+        slot_text: str,
+        context_before: str,
+        context_after: str,
+        slot_context_text: str,
+    ) -> dict[str, Any]:
+        middle_trace = self._classify_middle_functional_slot(
+            slot_text=slot_text,
+            context_before=context_before,
+            context_after=context_after,
+            slot_context_text=slot_context_text,
+        )
+        if not (context_before.strip() and context_after.strip()):
+            return {
+                "ok": False,
+                "slot_function": "",
+                "reason": "middle_blank_value_requires_two_side_context",
+                "trace": middle_trace,
+            }
+
+        slot_plain = re.sub(r"\s+", "", slot_text)
+        digit_count = len(re.findall(r"\d|[%％]", slot_plain))
+        digit_density = digit_count / max(1, len(slot_plain))
+        comma_count = slot_text.count("，") + slot_text.count(",") + slot_text.count("、")
+        quote_count = slot_text.count("“") + slot_text.count("”") + slot_text.count('"')
+        data_heavy = digit_density >= 0.10 or (digit_density >= 0.06 and comma_count >= 4)
+        list_like = comma_count >= 5 or any(token in slot_text for token in ("包括", "分别", "例如", "比如", "一是", "二是", "三是"))
+        detail_heavy = len(slot_text) >= 88 or quote_count >= 2
+        standalone_anchor = float(middle_trace.get("standalone_anchor") or 0.0)
+        reference_dependency = float(middle_trace.get("reference_dependency") or 0.0)
+        backward_score = float(middle_trace.get("backward_score") or 0.0)
+        forward_score = float(middle_trace.get("forward_score") or 0.0)
+        bidirectional_score = float(middle_trace.get("bidirectional_score") or 0.0)
+        carry_dependency_score = float(middle_trace.get("carry_dependency_score") or 0.0)
+        implicit_carry_gap_score = float(middle_trace.get("implicit_carry_gap_score") or 0.0)
+        bridge_dependency_score = float(middle_trace.get("bridge_dependency_score") or 0.0)
+        forward_dependency_score = float(middle_trace.get("forward_dependency_score") or 0.0)
+        topic_continuity_score = float(middle_trace.get("topic_continuity_score") or 0.0)
+        layer_continuity_score = float(middle_trace.get("layer_continuity_score") or 0.0)
+        carry_gap_ready = bool(middle_trace.get("carry_gap_ready"))
+        has_reference_marker = bool(middle_trace.get("has_reference_marker"))
+        has_weak_carry_marker = bool(middle_trace.get("has_weak_carry_marker"))
+        has_forward_marker = bool(middle_trace.get("has_forward_marker"))
+        has_bridge_marker = bool(middle_trace.get("has_bridge_marker"))
+
+        if self._fill_slot_is_decorative_weak(slot_text):
+            return {
+                "ok": False,
+                "slot_function": "",
+                "reason": "middle_blank_value_decorative_sentence",
+                "trace": middle_trace,
+            }
+        if data_heavy:
+            return {
+                "ok": False,
+                "slot_function": "",
+                "reason": "middle_blank_value_data_heavy",
+                "trace": middle_trace,
+            }
+        if list_like:
+            return {
+                "ok": False,
+                "slot_function": "",
+                "reason": "middle_blank_value_list_like",
+                "trace": middle_trace,
+            }
+        if detail_heavy:
+            return {
+                "ok": False,
+                "slot_function": "",
+                "reason": "middle_blank_value_detail_heavy",
+                "trace": middle_trace,
+            }
+        if standalone_anchor >= 0.70 and reference_dependency < 0.22:
+            return {
+                "ok": False,
+                "slot_function": "",
+                "reason": "middle_blank_value_sentence_too_independent",
+                "trace": middle_trace,
+            }
+
+        candidates: list[tuple[str, float, str]] = []
+
+        carry_score = (
+            0.32 * backward_score
+            + 0.24 * carry_dependency_score
+            + 0.18 * implicit_carry_gap_score
+            + 0.12 * topic_continuity_score
+            + 0.14 * layer_continuity_score
+        )
+        if (
+            carry_gap_ready
+            and backward_score >= 0.64
+            and carry_dependency_score >= 0.66
+            and implicit_carry_gap_score >= 0.54
+            and 0.16 <= forward_dependency_score <= 0.46
+            and topic_continuity_score >= 0.46
+            and layer_continuity_score >= 0.72
+            and standalone_anchor <= 0.58
+            and (has_reference_marker or has_weak_carry_marker)
+            and not has_bridge_marker
+            and comma_count <= 3
+            and len(slot_text) <= 76
+        ):
+            candidates.append(("carry_previous", round(carry_score, 4), "middle_carry_prechecked_gap"))
+
+        bridge_score = (
+            0.28 * backward_score
+            + 0.28 * forward_score
+            + 0.22 * bidirectional_score
+            + 0.22 * bridge_dependency_score
+        )
+        if (
+            bidirectional_score >= 0.72
+            and min(backward_score, forward_score) >= 0.58
+            and bridge_dependency_score >= 0.76
+            and forward_dependency_score >= 0.42
+            and standalone_anchor <= 0.54
+            and has_bridge_marker
+            and (has_reference_marker or has_forward_marker)
+            and comma_count <= 3
+            and len(slot_text) <= 68
+        ):
+            candidates.append(("bridge_both_sides", round(bridge_score, 4), "middle_bridge_prechecked_gap"))
+
+        lead_score = 0.42 * forward_score + 0.30 * forward_dependency_score + 0.28 * (1 - min(1.0, backward_score))
+        if (
+            forward_score >= 0.64
+            and forward_dependency_score >= 0.62
+            and backward_score <= 0.48
+            and bidirectional_score <= 0.54
+            and standalone_anchor <= 0.56
+            and has_forward_marker
+            and comma_count <= 3
+            and len(slot_text) <= 64
+        ):
+            candidates.append(("lead_next", round(lead_score, 4), "middle_lead_prechecked_gap"))
+
+        if not candidates:
+            return {
+                "ok": False,
+                "slot_function": "",
+                "reason": "middle_blank_value_gap_not_strong_enough",
+                "trace": middle_trace,
+            }
+
+        candidates.sort(key=lambda item: item[1], reverse=True)
+        best_function, _, best_reason = candidates[0]
+        return {
+            "ok": True,
+            "slot_function": best_function,
+            "reason": best_reason,
+            "trace": middle_trace,
+        }
 
     def _functional_slot_has_blank_value(
         self,
@@ -1530,83 +2987,43 @@ class MaterialPipelineV2:
         backward = self._backward_link_strength(slot_context_text)
         forward = self._forward_link_strength(slot_context_text)
         bidirectional = self._bidirectional_validation(slot_context_text)
+        if self._fill_slot_is_decorative_weak(slot_text) and max(backward, forward, bidirectional) < 0.52:
+            return False, "decorative_sentence_low_gap"
         if slot_role == "opening":
-            opening_markers = ("当前", "如今", "近年来", "面对", "在此背景下", "放眼", "着眼于")
             if slot_function == "summary":
-                if summary_signal >= 0.18:
+                if summary_signal >= 0.16 and bool(context_after.strip()):
                     return True, "summary_anchor"
                 return False, "opening_summary_weak_blank_value"
-            if any(marker in slot_text for marker in opening_markers) or self._core_object_anchor_strength(slot_text) >= 0.28:
-                return True, "topic_intro_anchor"
-            return False, "opening_topic_intro_weak_blank_value"
+            return self._fill_topic_intro_gate(
+                slot_text=slot_text,
+                context_after=context_after,
+                summary_signal=summary_signal,
+            )
         if slot_role == "middle":
-            middle_trace = self._classify_middle_functional_slot(
+            precheck = self._middle_blank_value_precheck(
                 slot_text=slot_text,
                 context_before=context_before,
                 context_after=context_after,
                 slot_context_text=slot_context_text,
             )
-            inferred_function = str(middle_trace.get("slot_function") or "")
-            if not inferred_function:
-                return False, "middle_structural_role_unresolved"
+            if not bool(precheck.get("ok")):
+                return False, str(precheck.get("reason") or "middle_blank_value_gap_not_strong_enough")
+            inferred_function = str(precheck.get("slot_function") or "")
             if inferred_function != slot_function:
                 return False, f"middle_role_mismatch:{inferred_function}"
-            backward_score = float(middle_trace.get("backward_score") or 0.0)
-            forward_score = float(middle_trace.get("forward_score") or 0.0)
-            bidirectional_score = float(middle_trace.get("bidirectional_score") or 0.0)
-            carry_dependency_score = float(middle_trace.get("carry_dependency_score") or 0.0)
-            implicit_carry_gap_score = float(middle_trace.get("implicit_carry_gap_score") or 0.0)
-            bridge_dependency_score = float(middle_trace.get("bridge_dependency_score") or 0.0)
-            forward_dependency_score = float(middle_trace.get("forward_dependency_score") or 0.0)
-            topic_continuity_score = float(middle_trace.get("topic_continuity_score") or 0.0)
-            layer_continuity_score = float(middle_trace.get("layer_continuity_score") or 0.0)
-            classification_reason = str(middle_trace.get("classification_reason") or "middle_role_supported")
-            carry_gap_ready = bool(middle_trace.get("carry_gap_ready"))
-            if slot_function == "carry_previous":
-                if not carry_gap_ready:
-                    return False, "middle_carry_previous_gap_not_ready"
-                if classification_reason == "middle_carry_previous_implicit":
-                    if (
-                        backward_score >= 0.50
-                        and implicit_carry_gap_score >= 0.48
-                        and topic_continuity_score >= 0.42
-                        and layer_continuity_score >= 0.60
-                        and forward_dependency_score <= implicit_carry_gap_score
-                    ):
-                        return True, "middle_carry_previous_implicit:carry_structural_gap"
-                elif classification_reason == "middle_carry_previous_weak_explicit":
-                    if (
-                        backward_score >= 0.56
-                        and carry_dependency_score >= 0.48
-                        and layer_continuity_score >= 0.78
-                        and forward_dependency_score <= 0.36
-                    ):
-                        return True, "middle_carry_previous_weak_explicit:carry_structural_gap"
-                elif (
-                    backward_score >= 0.54
-                    and carry_dependency_score >= 0.58
-                    and forward_dependency_score <= carry_dependency_score
-                ):
-                    return True, f"{classification_reason}:carry_structural_gap"
-                return False, "middle_carry_previous_weak_link"
-            if slot_function == "lead_next":
-                if forward_score >= 0.54 and bidirectional_score < 0.58 and forward_dependency_score >= 0.52:
-                    return True, f"{classification_reason}:lead_next_forward_gap"
-                return False, "middle_lead_next_weak_link"
-            if slot_function == "bridge_both_sides":
-                if (
-                    bidirectional_score >= 0.58
-                    and min(backward_score, forward_score) >= 0.44
-                    and bridge_dependency_score >= 0.62
-                ):
-                    return True, f"{classification_reason}:bridge_structural_gap"
-                return False, "middle_bridge_weak_link"
+            return True, str(precheck.get("reason") or "middle_blank_value_prechecked")
         if slot_role == "ending":
             if slot_function == "countermeasure":
-                if countermeasure_signal >= 0.16 or any(marker in slot_text for marker in ("应当", "应该", "要", "需要", "必须", "建议", "措施", "路径")):
-                    return True, "ending_countermeasure_anchor"
-                return False, "ending_countermeasure_weak_anchor"
-            if summary_signal >= 0.18 or any(marker in slot_text for marker in ("总之", "可见", "由此", "这启示我们", "这说明")):
+                return self._fill_countermeasure_gate(
+                    slot_text=slot_text,
+                    context_before=context_before,
+                    countermeasure_signal=countermeasure_signal,
+                    summary_signal=summary_signal,
+                )
+            if (
+                (summary_signal >= 0.16 or any(marker in slot_text for marker in ("总之", "可见", "由此", "这启示我们", "这说明")))
+                and bool(context_before.strip())
+            ):
                 return True, "ending_summary_anchor"
             return False, "ending_summary_weak_anchor"
         return False, "slot_role_unresolved"
@@ -1631,25 +3048,30 @@ class MaterialPipelineV2:
         )
         slot_universal = self.universal_tagger._heuristic_tag(slot_span)
         if slot_role == "opening":
-            if slot_universal.summary_strength >= 0.56 or self._marker_strength(slot_text, SUMMARY_MARKERS) >= 0.22:
+            summary_signal = max(slot_universal.summary_strength, self._marker_strength(slot_text, SUMMARY_MARKERS))
+            if summary_signal >= 0.50:
                 return "summary"
-            return "topic_intro"
-        if slot_role == "ending":
-            countermeasure_strength = max(
-                self._marker_strength(slot_text, COUNTERMEASURE_MARKERS + ACTION_MEASURE_MARKERS),
-                slot_universal.method_signal_strength,
+            opening_function, _ = self._resolve_opening_slot_function(
+                slot_text=slot_text,
+                context_after=context_after,
             )
-            if countermeasure_strength >= 0.28 or any(marker in slot_text for marker in ("应当", "应该", "要", "需要", "必须", "建议", "路径", "措施")):
-                return "countermeasure"
-            return "ending_summary"
+            return opening_function
+        if slot_role == "ending":
+            ending_function, _ = self._resolve_ending_slot_function(
+                slot_text=slot_text,
+                context_before=context_before,
+            )
+            return ending_function
 
-        middle_trace = self._classify_middle_functional_slot(
+        middle_precheck = self._middle_blank_value_precheck(
             slot_text=slot_text,
             context_before=context_before,
             context_after=context_after,
             slot_context_text=context_text,
         )
-        return str(middle_trace.get("slot_function") or "")
+        if not bool(middle_precheck.get("ok")):
+            return ""
+        return str(middle_precheck.get("slot_function") or "")
 
     def _carry_previous_gap_ready(
         self,
@@ -1876,6 +3298,13 @@ class MaterialPipelineV2:
             "topic_continuity_score": round(topic_continuity_score, 4),
             "layer_continuity_score": round(layer_continuity_score, 4),
             "classification_reason": classification_reason,
+            "reference_dependency": round(reference_dependency, 4),
+            "standalone_anchor": round(standalone_anchor, 4),
+            "has_reference_marker": has_reference_marker,
+            "has_weak_carry_marker": has_weak_carry_marker,
+            "has_explanation_marker": has_explanation_marker,
+            "has_forward_marker": has_forward_marker,
+            "has_bridge_marker": has_bridge_marker,
         }
 
     def _functional_slot_middle_priority(self, *, middle_trace: dict[str, Any]) -> float:
@@ -1944,7 +3373,7 @@ class MaterialPipelineV2:
         prompt = self._build_candidate_planner_prompt(article_context=article_context, selected_types=selected_types)
         try:
             result = self.provider.generate_json(
-                model=self.llm_config.get("models", {}).get("candidate_planner_v2", self.llm_config.get("models", {}).get("family_tagger", "gpt-4.1-mini")),
+                model=self.llm_config.get("models", {}).get("candidate_planner_v2", self.llm_config.get("models", {}).get("family_tagger", "gpt-5.4-mini")),
                 instructions=self.candidate_planner_prompt,
                 input_payload={
                     "prompt": prompt,
@@ -2209,7 +3638,7 @@ class MaterialPipelineV2:
                 score += 0.05
             if neutral_signal_profile.get("slot_function") == "bridge_both_sides":
                 score += 0.04
-        if candidate_type == "ordered_unit_group":
+        if candidate_type in {"ordered_unit_group", "weak_formal_order_group"}:
             sequence_integrity = float(neutral_signal_profile.get("sequence_integrity") or 0.0)
             local_binding = float(neutral_signal_profile.get("local_binding_strength") or 0.0)
             opening_strength = float(neutral_signal_profile.get("opening_signal_strength") or 0.0)
@@ -2226,6 +3655,8 @@ class MaterialPipelineV2:
                 + 0.10 * context_closure
                 + 0.08 * (1 - exchange_risk)
             )
+            if candidate_type == "weak_formal_order_group":
+                score -= 0.04
         if candidate_type == "phrase_or_clause_group":
             clause_count = int((candidate.get("meta") or {}).get("clause_count") or 0)
             score = 0.30 * float(neutral_signal_profile.get("phrase_order_salience") or 0.0) + 0.22 * float(neutral_signal_profile.get("local_binding_strength") or 0.0) + 0.18 * float(neutral_signal_profile.get("sequence_integrity") or 0.0)
@@ -2252,7 +3683,7 @@ class MaterialPipelineV2:
             return 0.05 if covered <= 2 else -0.04
         if candidate["candidate_type"] == "functional_slot_unit":
             return 0.08 if covered <= 2 else -0.06
-        if candidate["candidate_type"] == "ordered_unit_group":
+        if candidate["candidate_type"] in {"ordered_unit_group", "weak_formal_order_group"}:
             return 0.08 if covered <= 3 else -0.06
         if candidate["candidate_type"] == "sentence_block_group":
             composition = str((candidate.get("meta") or {}).get("composition") or "")
@@ -2267,6 +3698,7 @@ class MaterialPipelineV2:
             "multi_paragraph_unit": 0.48,
             "functional_slot_unit": 0.50,
             "ordered_unit_group": 0.56,
+            "weak_formal_order_group": 0.52,
             "sentence_block_group": 0.54,
             "insertion_context_unit": 0.46,
             "phrase_or_clause_group": 0.62,
@@ -2280,6 +3712,7 @@ class MaterialPipelineV2:
             "multi_paragraph_unit": 6,
             "functional_slot_unit": 4,
             "ordered_unit_group": 4,
+            "weak_formal_order_group": 4,
             "sentence_block_group": 6,
             "insertion_context_unit": 6,
             "phrase_or_clause_group": 3,
@@ -2299,6 +3732,7 @@ class MaterialPipelineV2:
             "multi_paragraph_unit",
             "functional_slot_unit",
             "ordered_unit_group",
+            "weak_formal_order_group",
             "sentence_block_group",
             "insertion_context_unit",
             "phrase_or_clause_group",
@@ -2613,7 +4047,7 @@ class MaterialPipelineV2:
             return "main_idea"
         if candidate_type == "functional_slot_unit":
             return "sentence_fill"
-        if candidate_type == "ordered_unit_group":
+        if candidate_type in {"ordered_unit_group", "weak_formal_order_group"}:
             return "sentence_order"
         return None
 
@@ -3141,6 +4575,12 @@ class MaterialPipelineV2:
             and int(meta.get("group_size") or 0) == self.SENTENCE_ORDER_FIXED_UNIT_COUNT
             and final_candidate_score >= thresholds.get("recommended", 0.56)
         )
+        weak_formal_ready = bool(
+            candidate.get("candidate_type") == "weak_formal_order_group"
+            and int(meta.get("group_size") or 0) == self.SENTENCE_ORDER_FIXED_UNIT_COUNT
+            and readiness_score >= max(0.44, thresholds.get("review_readiness", 0.58) - 0.10)
+            and final_candidate_score >= max(0.28, thresholds.get("fallback_review_score", 0.46) - 0.14)
+        )
         needs_review = bool(
             (
                 readiness_score >= thresholds.get("review_readiness", 0.58)
@@ -3151,12 +4591,15 @@ class MaterialPipelineV2:
                 and readiness_score >= max(0.50, thresholds.get("review_readiness", 0.58) - 0.08)
                 and final_candidate_score >= thresholds.get("fallback_review_score", 0.46)
             )
+            or weak_formal_ready
         )
         recommendation_reason = "six_unit_group_above_threshold" if recommended else "sentence_order_candidate_below_threshold_or_incomplete"
         review_reason = ""
         if needs_review:
             if readiness_score >= thresholds.get("review_readiness", 0.58) and total_penalty >= thresholds.get("review_penalty", 0.24):
                 review_reason = "readiness_high_but_order_risk_high"
+            elif weak_formal_ready:
+                review_reason = "weak_formal_order_group_ready"
             else:
                 review_reason = "borderline_sentence_order_candidate"
         group_size = int(meta.get("group_size") or 0)
@@ -3227,6 +4670,7 @@ class MaterialPipelineV2:
             "risk_penalties": risk_penalties,
             "final_candidate_score": final_candidate_score,
             "recommended": recommended,
+            "weak_formal_ready": weak_formal_ready,
             "needs_review": needs_review,
             "difficulty_vector": difficulty_vector,
             "difficulty_band_hint": difficulty_band_hint,
@@ -3265,10 +4709,11 @@ class MaterialPipelineV2:
                         "total_penalty": total_penalty,
                     },
                 },
-                "decision": {
-                    "recommended_reason": recommendation_reason,
-                    "needs_review_reason": review_reason,
-                    "recommended_threshold": thresholds.get("recommended", 0.56),
+                    "decision": {
+                        "recommended_reason": recommendation_reason,
+                        "needs_review_reason": review_reason,
+                        "weak_formal_ready": weak_formal_ready,
+                        "recommended_threshold": thresholds.get("recommended", 0.56),
                     "review_readiness_threshold": thresholds.get("review_readiness", 0.58),
                     "review_penalty_threshold": thresholds.get("review_penalty", 0.24),
                 },
@@ -3284,6 +4729,157 @@ class MaterialPipelineV2:
         if business_family_id in {"sentence_fill", "sentence_order"}:
             return business_family_id
         return None
+
+    def _selected_task_scoring_for_item(self, *, item: dict[str, Any], business_family_id: str) -> dict[str, Any]:
+        selected = item.get("selected_task_scoring")
+        if isinstance(selected, dict) and selected:
+            return dict(selected)
+        scoring_key = self._task_family_scoring_key(business_family_id)
+        if not scoring_key:
+            return {}
+        for source in (
+            item.get("task_scoring"),
+            (item.get("neutral_signal_profile") or {}).get("task_scoring"),
+            (item.get("meta") or {}).get("task_scoring"),
+        ):
+            if isinstance(source, dict) and isinstance(source.get(scoring_key), dict):
+                return dict(source.get(scoring_key) or {})
+        meta_scoring = (item.get("meta") or {}).get("scoring")
+        if isinstance(meta_scoring, dict) and meta_scoring:
+            return dict(meta_scoring)
+        return {}
+
+    def _question_card_material_contract(self, *, question_card: dict[str, Any], business_family_id: str) -> dict[str, Any]:
+        validator_contract = question_card.get("validator_contract") or {}
+        runtime_binding = question_card.get("runtime_binding") or {}
+        contract_keys = [
+            str(question_card.get("business_subtype_id") or "").strip(),
+            str(runtime_binding.get("business_subtype") or "").strip(),
+            business_family_id,
+            str(runtime_binding.get("question_type") or "").strip(),
+        ]
+        for key in contract_keys:
+            if key and isinstance(validator_contract.get(key), dict):
+                return dict(validator_contract.get(key) or {})
+        return {}
+
+    @staticmethod
+    def _top_card_score(item: dict[str, Any]) -> float:
+        cards = item.get("eligible_material_cards") or []
+        if cards and isinstance(cards[0], dict):
+            return float(cards[0].get("score") or 0.0)
+        return 0.0
+
+    @staticmethod
+    def _top_business_card_score(item: dict[str, Any]) -> float:
+        cards = item.get("eligible_business_cards") or []
+        if cards and isinstance(cards[0], dict):
+            return float(cards[0].get("score") or 0.0)
+        return 0.0
+
+    def _passes_question_card_material_contract(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+        question_card: dict[str, Any],
+    ) -> tuple[bool, str]:
+        scoring = self._selected_task_scoring_for_item(item=item, business_family_id=business_family_id)
+        if business_family_id not in {"title_selection", "sentence_fill", "sentence_order"}:
+            return True, ""
+        if not scoring:
+            return False, "missing_task_scoring"
+
+        contract = self._question_card_material_contract(
+            question_card=question_card,
+            business_family_id=business_family_id,
+        )
+        if not contract:
+            return True, ""
+
+        final_candidate_score = float(scoring.get("final_candidate_score") or 0.0)
+        readiness_score = float(scoring.get("readiness_score") or 0.0)
+        risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
+        total_penalty = sum(float(value or 0.0) for value in risk_penalties.values())
+        difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
+        difficulty_band = str(scoring.get("difficulty_band_hint") or "").strip().lower()
+
+        if final_candidate_score < float(contract.get("min_final_candidate_score") or 0.0):
+            return False, "final_candidate_score_below_contract_floor"
+        if readiness_score < float(contract.get("min_readiness_score") or 0.0):
+            return False, "readiness_score_below_contract_floor"
+
+        max_total_penalty = contract.get("max_total_penalty")
+        if max_total_penalty is not None and total_penalty > float(max_total_penalty):
+            return False, "total_penalty_above_contract_ceiling"
+
+        difficulty_band_allowed = contract.get("difficulty_band_allowed")
+        if isinstance(difficulty_band_allowed, list) and difficulty_band and difficulty_band not in {
+            str(value).strip().lower() for value in difficulty_band_allowed if str(value).strip()
+        }:
+            return False, "difficulty_band_not_allowed"
+
+        if business_family_id == "title_selection":
+            if float(difficulty_vector.get("reasoning_depth_score") or 0.0) < float(contract.get("min_reasoning_depth_score") or 0.0):
+                return False, "reasoning_depth_below_contract_floor"
+            max_ambiguity = contract.get("max_ambiguity_score")
+            if max_ambiguity is not None and float(difficulty_vector.get("ambiguity_score") or 0.0) > float(max_ambiguity):
+                return False, "ambiguity_above_contract_ceiling"
+            return True, ""
+
+        if business_family_id == "sentence_fill":
+            if float(difficulty_vector.get("reasoning_depth_score") or 0.0) < float(contract.get("min_reasoning_depth_score") or 0.0):
+                return False, "reasoning_depth_below_contract_floor"
+            if float(difficulty_vector.get("constraint_intensity_score") or 0.0) < float(contract.get("min_constraint_intensity_score") or 0.0):
+                return False, "constraint_intensity_below_contract_floor"
+            max_role_ambiguity = contract.get("max_role_ambiguity_penalty")
+            if max_role_ambiguity is not None and float(risk_penalties.get("role_ambiguity_penalty") or 0.0) > float(max_role_ambiguity):
+                return False, "role_ambiguity_penalty_above_contract_ceiling"
+            max_standalone = contract.get("max_standalone_penalty")
+            if max_standalone is not None and float(risk_penalties.get("standalone_penalty") or 0.0) > float(max_standalone):
+                return False, "standalone_penalty_above_contract_ceiling"
+            return True, ""
+
+        if business_family_id == "sentence_order":
+            if float(difficulty_vector.get("complexity_score") or 0.0) < float(contract.get("min_complexity_score") or 0.0):
+                return False, "complexity_below_contract_floor"
+            if float(difficulty_vector.get("constraint_intensity_score") or 0.0) < float(contract.get("min_constraint_intensity_score") or 0.0):
+                return False, "constraint_intensity_below_contract_floor"
+            max_first_instability = contract.get("max_first_instability_penalty")
+            if max_first_instability is not None and float(risk_penalties.get("first_instability_penalty") or 0.0) > float(max_first_instability):
+                return False, "first_instability_penalty_above_contract_ceiling"
+            max_last_instability = contract.get("max_last_instability_penalty")
+            if max_last_instability is not None and float(risk_penalties.get("last_instability_penalty") or 0.0) > float(max_last_instability):
+                return False, "last_instability_penalty_above_contract_ceiling"
+            max_weak_constraint = contract.get("max_weak_constraint_penalty")
+            if max_weak_constraint is not None and float(risk_penalties.get("weak_constraint_penalty") or 0.0) > float(max_weak_constraint):
+                return False, "weak_constraint_penalty_above_contract_ceiling"
+        return True, ""
+
+    def _passes_runtime_material_gate(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+        question_card: dict[str, Any],
+        min_card_score: float,
+        min_business_card_score: float,
+        require_business_card: bool,
+    ) -> tuple[bool, str]:
+        if business_family_id in {"center_understanding", "sentence_fill", "sentence_order"} and self.main_card_dual_judge.is_enforce_mode():
+            adjudication = dict(item.get("llm_adjudication") or {})
+            if self.main_card_dual_judge.consensus_allows_accept(adjudication):
+                return True, ""
+            return False, "llm_adjudication_rejected"
+        if self._top_card_score(item) < float(min_card_score or 0.0):
+            return False, "material_card_score_below_threshold"
+        if require_business_card and self._top_business_card_score(item) < float(min_business_card_score or 0.0):
+            return False, "business_card_score_below_threshold"
+        return self._passes_question_card_material_contract(
+            item=item,
+            business_family_id=business_family_id,
+            question_card=question_card,
+        )
 
     def _build_business_feature_profile(
         self,
@@ -4160,16 +5756,28 @@ class MaterialPipelineV2:
             "countermeasure_signal_strength": countermeasure_signal_strength,
         }
 
-    def _score_material_cards(self, *, material_cards: list[dict[str, Any]], signal_profile: dict[str, Any], candidate: dict[str, Any], min_card_score: float) -> list[dict[str, Any]]:
+    def _score_material_cards(
+        self,
+        *,
+        material_cards: list[dict[str, Any]],
+        signal_profile: dict[str, Any],
+        candidate: dict[str, Any],
+        business_family_id: str,
+        min_card_score: float,
+        apply_runtime_gate: bool = True,
+    ) -> list[dict[str, Any]]:
         hits: list[dict[str, Any]] = []
         for card in material_cards:
             contract = card.get("candidate_contract", {})
             allowed_types = contract.get("allowed_candidate_types", [])
             candidate_type = candidate["candidate_type"]
-            candidate_contract_types = self._candidate_contract_types(candidate)
+            candidate_contract_types = self._candidate_contract_types(
+                candidate,
+                business_family_id=business_family_id,
+            )
             if allowed_types and not (candidate_contract_types & set(allowed_types)):
                 continue
-            if not self._passes_card_runtime_gate(card_id=card.get("card_id"), signal_profile=signal_profile, candidate=candidate):
+            if apply_runtime_gate and not self._passes_card_runtime_gate(card_id=card.get("card_id"), signal_profile=signal_profile, candidate=candidate):
                 continue
             reasons = []
             scores = []
@@ -4213,14 +5821,41 @@ class MaterialPipelineV2:
             hits.append({"card_id": card["card_id"], "display_name": card["display_name"], "score": value, "generation_archetype": card.get("default_generation_archetype"), "selection_core": card.get("selection_core"), "reason": "; ".join(reasons)})
         return sorted(hits, key=lambda item: item["score"], reverse=True)[:5]
 
-    def _candidate_contract_types(self, candidate: dict[str, Any]) -> set[str]:
+    def _candidate_contract_types(
+        self,
+        candidate: dict[str, Any],
+        *,
+        business_family_id: str | None = None,
+    ) -> set[str]:
         candidate_type = str(candidate.get("candidate_type") or "")
         contract_types = {candidate_type}
         if candidate_type == "functional_slot_unit":
             contract_types.update({"closed_span", "multi_paragraph_unit"})
         if candidate_type == "ordered_unit_group":
             contract_types.update({"sentence_block_group"})
+        if candidate_type == "weak_formal_order_group":
+            contract_types.update({"sentence_block_group", "sentence_group", "paragraph_window"})
+        if business_family_id in {"title_selection", "center_understanding"}:
+            contract_types.update(self._title_selection_contract_types(candidate))
+        if business_family_id == "continuation":
+            contract_types.update(self._continuation_contract_types(candidate))
         return contract_types
+
+    def _title_selection_contract_types(self, candidate: dict[str, Any]) -> set[str]:
+        candidate_type = str(candidate.get("candidate_type") or "")
+        if candidate_type == "paragraph_window":
+            return {"multi_paragraph_unit"}
+        if candidate_type in {"sentence_group", "single_paragraph"}:
+            return {"closed_span"}
+        return set()
+
+    def _continuation_contract_types(self, candidate: dict[str, Any]) -> set[str]:
+        candidate_type = str(candidate.get("candidate_type") or "")
+        if candidate_type == "paragraph_window":
+            return {"multi_paragraph_unit"}
+        if candidate_type in {"sentence_group", "single_paragraph"}:
+            return {"closed_span"}
+        return set()
 
     def _resolve_slots(self, question_card: dict[str, Any], material_card_id: str, business_card_hit: dict[str, Any] | None = None) -> dict[str, Any]:
         resolved = dict(question_card.get("base_slots", {}))
@@ -4288,7 +5923,7 @@ class MaterialPipelineV2:
             meaning_score = self._sentence_order_meaningfulness(candidate["text"], signal_profile, candidate["candidate_type"])
             score += 0.10 * structure_score
             score += 0.10 * meaning_score
-            if candidate["candidate_type"] != "sentence_block_group":
+            if candidate["candidate_type"] not in {"sentence_block_group", "weak_formal_order_group"}:
                 score -= 0.35
             if unit_count != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
                 score -= 0.40
@@ -5183,8 +6818,10 @@ class MaterialPipelineV2:
             multi_path_risk = float(signal_profile.get("multi_path_risk") or 0.0)
             discourse_progression_strength = float(signal_profile.get("discourse_progression_strength") or 0.0)
             context_closure_score = float(signal_profile.get("context_closure_score") or 0.0)
-            if candidate["candidate_type"] not in {"sentence_block_group", "ordered_unit_group"}:
+            if candidate["candidate_type"] not in {"sentence_block_group", "ordered_unit_group", "weak_formal_order_group"}:
                 return False
+            if candidate["candidate_type"] == "weak_formal_order_group":
+                return self._passes_weak_formal_order_runtime_gate(signal_profile=signal_profile, candidate=candidate)
             if unit_count != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
                 return False
             if structure_score < 0.60 or meaning_score < 0.60:

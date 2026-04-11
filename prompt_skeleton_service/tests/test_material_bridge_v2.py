@@ -253,6 +253,45 @@ class MaterialBridgeV2UnitTest(TestCase):
 
         self.assertEqual(items, [{"candidate_id": "mat-ok", "review_status": "auto_tagged"}])
 
+    def test_search_candidates_retries_remote_search_after_timeout(self) -> None:
+        payloads: list[tuple[dict, int | None]] = []
+
+        def fake_post(payload: dict, *, timeout: int | None = None) -> dict:
+            payloads.append((dict(payload), timeout))
+            if len(payloads) == 1:
+                raise DomainError(
+                    "Failed to fetch v2 materials from passage_service.",
+                    status_code=502,
+                    details={"reason": "timed out"},
+                )
+            return {"items": [{"candidate_id": "mat-recovered", "review_status": "auto_tagged"}]}
+
+        self.service._post_v2_search = Mock(side_effect=fake_post)
+
+        items = self.service._search_candidates(
+            business_family_id="sentence_fill",
+            question_card_id="question.title_selection.standard_v1",
+            article_ids=[],
+            article_limit=12,
+            candidate_limit=8,
+            min_card_score=0.55,
+            business_card_ids=["sentence_fill__opening_topic_intro__abstract"],
+            preferred_business_card_ids=[],
+            query_terms=["总起"],
+            target_length=220,
+            length_tolerance=120,
+            structure_constraints={"blank_position": "opening"},
+            enable_anchor_adaptation=True,
+        )
+
+        self.assertEqual(items, [{"candidate_id": "mat-recovered", "review_status": "auto_tagged"}])
+        self.assertEqual(len(payloads), 2)
+        self.assertEqual(payloads[0][1], None)
+        self.assertEqual(payloads[1][1], self.service.SEARCH_RETRY_TIMEOUT_SECONDS)
+        self.assertEqual(payloads[1][0]["query_terms"], [])
+        self.assertEqual(payloads[1][0]["business_card_ids"], [])
+        self.assertEqual(payloads[1][0]["structure_constraints"], {"blank_position": "opening"})
+
     def test_local_sqlite_fallback_excludes_review_pending_materials(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = f"{temp_dir}\\bridge_fallback.db"

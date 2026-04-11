@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,23 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
     disable_scheduler: bool = False
+
+    @property
+    def resolved_openai_api_key(self) -> str | None:
+        return (
+            self.openai_api_key
+            or os.getenv("MATERIAL_LLM_API_KEY")
+            or os.getenv("GENERATION_LLM_API_KEY")
+        )
+
+    @property
+    def resolved_openai_base_url(self) -> str:
+        return (
+            (self.openai_base_url or "").strip()
+            or os.getenv("MATERIAL_LLM_BASE_URL", "").strip()
+            or os.getenv("GENERATION_LLM_BASE_URL", "").strip()
+            or "https://api.openai.com/v1"
+        )
 
 
 class ConfigBundle(BaseModel):

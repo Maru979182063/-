@@ -5,33 +5,50 @@ from app.services.family_taggers.base import BaseFamilyTagger
 
 
 class TitleFamilyTagger(BaseFamilyTagger):
-    family_name = "标题命名型"
+    family_name = "鏍囬鍛藉悕鍨?"
 
     def __init__(self) -> None:
         super().__init__("title_family_prompt.md")
 
     def score(self, span: SpanRecord, universal_profile: UniversalProfile) -> tuple[list[SubtypeCandidate], dict]:
-        llm_result = self.score_with_llm(
+        subtype_names = [
+            "骞冲疄涓绘棬鍥炴敹鍗?",
+            "渚嬭瘉褰掔撼鍥炴敹鍗?",
+            "杞姌鍚庨噸蹇冨崱",
+            "澶氱淮缁熸憚鍗?",
+            "鍗曞璞¤鏄庡崱",
+            "闂鏈川鍒ゆ柇鍗?",
+            "鍙嶅父璇嗗弽杞崱",
+            "鍙戝睍鑴夌粶鍗?",
+            "鐢卞皬瑙佸ぇ鍗囧崕鍗?",
+            "浠峰€艰瘎璁崱",
+        ]
+        candidates: list[SubtypeCandidate] = []
+        if universal_profile.titleability >= 0.75:
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="骞冲疄涓绘棬鍥炴敹鍗?", score=0.80))
+        if universal_profile.example_to_theme_strength >= 0.7:
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="渚嬭瘉褰掔撼鍥炴敹鍗?", score=0.78))
+        if "杞姌鍚庣粨璁?" in universal_profile.position_roles:
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="杞姌鍚庨噸蹇冨崱", score=0.77))
+        if universal_profile.branch_focus_strength >= 0.7:
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="澶氱淮缁熸憚鍗?", score=0.74))
+        if universal_profile.problem_signal_strength >= 0.7:
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="闂鏈川鍒ゆ柇鍗?", score=0.75))
+        if universal_profile.value_judgement_strength >= 0.75:
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="浠峰€艰瘎璁崱", score=0.79))
+        heuristic_candidates = self.sort_candidates(candidates)
+        llm_result = self.maybe_score_with_llm(
             model=self.llm_config.get("models", {}).get("family_tagger", "gpt-4.1-mini"),
             span=span,
             universal_profile=universal_profile,
-            subtype_names=["平实主旨回收卡", "例证归纳回收卡", "转折后重心卡", "多维统摄卡", "单对象说明卡", "问题本质判断卡", "反常识反转卡", "发展脉络卡", "由小见大升华卡", "价值评议卡"],
+            subtype_names=subtype_names,
+            heuristic_candidates=heuristic_candidates,
         )
         if llm_result is not None:
-            candidates, notes = llm_result
-            return sorted(candidates, key=lambda item: item.score, reverse=True)[:3], notes
-
-        candidates: list[SubtypeCandidate] = []
-        if universal_profile.titleability >= 0.75:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="平实主旨回收卡", score=0.80))
-        if universal_profile.example_to_theme_strength >= 0.7:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="例证归纳回收卡", score=0.78))
-        if "转折后结论" in universal_profile.position_roles:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="转折后重心卡", score=0.77))
-        if universal_profile.branch_focus_strength >= 0.7:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="多维统摄卡", score=0.74))
-        if universal_profile.problem_signal_strength >= 0.7:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="问题本质判断卡", score=0.75))
-        if universal_profile.value_judgement_strength >= 0.75:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="价值评议卡", score=0.79))
-        return sorted(candidates, key=lambda item: item.score, reverse=True)[:3], {"family": self.family_name}
+            return llm_result
+        return heuristic_candidates, {
+            "family": self.family_name,
+            "llm_used": False,
+            "llm_gate_reason": "heuristic_path",
+            "family_runtime_context": dict(self._runtime_context),
+        }

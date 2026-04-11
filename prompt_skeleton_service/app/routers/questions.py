@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends
 
 from app.core.dependencies import get_prompt_template_registry, get_question_repository, get_registry, get_runtime_registry
@@ -7,16 +9,20 @@ from app.schemas.question import (
     QuestionBatchListResponse,
     QuestionConfirmRequest,
     QuestionControlPanelResponse,
+    QuestionDownloadRequest,
+    QuestionDownloadResponse,
     QuestionFineTuneRequest,
     QuestionGenerateRequest,
     QuestionGenerationBatchResponse,
     QuestionGenerationItem,
     QuestionItemListResponse,
+    QuestionUsageEventLog,
     ReplacementMaterialListResponse,
     QuestionReviewActionLog,
     QuestionReviewActionRequest,
     QuestionReviewActionResponse,
     QuestionReviewQueueResponse,
+    SourceQuestionAssetListResponse,
     SourceQuestionDetectRequest,
     SourceQuestionDetectResponse,
     SourceQuestionParseRequest,
@@ -47,8 +53,11 @@ def parse_source_question(
 
 
 @router.post("/source-question/detect", response_model=SourceQuestionDetectResponse)
-def detect_source_question_fields(request: SourceQuestionDetectRequest) -> SourceQuestionDetectResponse:
-    analyzer = SourceQuestionAnalyzer()
+def detect_source_question_fields(
+    request: SourceQuestionDetectRequest,
+    runtime_registry: RuntimeConfigRegistry = Depends(get_runtime_registry),
+) -> SourceQuestionDetectResponse:
+    analyzer = SourceQuestionAnalyzer(runtime_registry.get())
     analysis = analyzer.analyze(
         source_question=request.source_question,
         question_type="main_idea",
@@ -177,6 +186,21 @@ def get_review_queue(
     return QuestionReviewQueueResponse(count=len(items), review_status=review_status, items=items)
 
 
+@router.get("/source-question/assets", response_model=SourceQuestionAssetListResponse)
+def list_source_question_assets(
+    limit: int = 100,
+    source_type: str | None = None,
+    question_card_id: str | None = None,
+    repository: QuestionRepository = Depends(get_question_repository),
+) -> SourceQuestionAssetListResponse:
+    items = repository.list_source_question_assets(
+        limit=limit,
+        source_type=source_type,
+        question_card_id=question_card_id,
+    )
+    return SourceQuestionAssetListResponse(count=len(items), items=items)
+
+
 @router.get("/{item_id}", response_model=QuestionGenerationItem)
 def get_question_item(
     item_id: str,
@@ -282,6 +306,67 @@ def confirm_question_item(
         operator=request.operator,
     )
     return QuestionReviewActionResponse.model_validate(service.apply_action(item_id, action_request))
+
+
+@router.post("/{item_id}/download", response_model=QuestionDownloadResponse)
+def record_question_download(
+    item_id: str,
+    request: QuestionDownloadRequest,
+    repository: QuestionRepository = Depends(get_question_repository),
+) -> QuestionDownloadResponse:
+    item = repository.get_item(item_id)
+    if item is None:
+        raise DomainError("Question item not found.", status_code=404, details={"item_id": item_id})
+
+    latest_action = str(item.get("latest_action") or "")
+    revision_count = int(item.get("revision_count", 0) or 0)
+    statuses = item.get("statuses") or {}
+    download_variant = "accepted_after_edit" if revision_count > 0 or latest_action == "manual_edit" else "accepted_direct"
+    payload = {
+        "channel": request.channel,
+        "export_format": request.export_format,
+        "metadata": request.metadata,
+        "download_variant": download_variant,
+        "question_card_id": (item.get("request_snapshot") or {}).get("question_card_id"),
+        "question_type": item.get("question_type"),
+        "business_subtype": item.get("business_subtype"),
+        "pattern_id": item.get("pattern_id"),
+        "difficulty_target": item.get("difficulty_target"),
+        "review_status": statuses.get("review_status"),
+        "generation_status": statuses.get("generation_status"),
+        "current_status": item.get("current_status"),
+        "latest_action": latest_action,
+        "current_version_no": item.get("current_version_no"),
+        "revision_count": revision_count,
+        "material_id": (item.get("material_selection") or {}).get("material_id"),
+    }
+    event_id = str(uuid4())
+    repository.save_usage_event(
+        event_id,
+        item_id,
+        "download",
+        payload,
+        operator=request.operator or "system",
+    )
+    event = repository.list_usage_events(item_id=item_id, limit=1, event_type="download")[0]
+    return QuestionDownloadResponse(
+        event=QuestionUsageEventLog.model_validate(event),
+        item=QuestionGenerationItem.model_validate(item),
+    )
+
+
+@router.get("/{item_id}/usage-events", response_model=list[QuestionUsageEventLog])
+def list_question_usage_events(
+    item_id: str,
+    limit: int = 100,
+    event_type: str | None = None,
+    repository: QuestionRepository = Depends(get_question_repository),
+) -> list[QuestionUsageEventLog]:
+    item = repository.get_item(item_id)
+    if item is None:
+        raise DomainError("Question item not found.", status_code=404, details={"item_id": item_id})
+    events = repository.list_usage_events(item_id=item_id, limit=limit, event_type=event_type)
+    return [QuestionUsageEventLog.model_validate(event) for event in events]
 
 
 @router.post("/{item_id}/review-actions", response_model=QuestionReviewActionResponse)

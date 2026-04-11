@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -90,6 +91,31 @@ class QuestionRepository:
                     operator TEXT,
                     payload_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS question_usage_events (
+                    event_id TEXT PRIMARY KEY,
+                    item_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    operator TEXT,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS source_question_assets (
+                    asset_id TEXT PRIMARY KEY,
+                    source_hash TEXT NOT NULL UNIQUE,
+                    source_type TEXT NOT NULL,
+                    question_card_id TEXT,
+                    question_type TEXT,
+                    business_subtype TEXT,
+                    pattern_id TEXT,
+                    difficulty_target TEXT,
+                    topic TEXT,
+                    payload_json TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 );
                 """
             )
@@ -1160,6 +1186,178 @@ class QuestionRepository:
                 ),
             )
 
+    def save_usage_event(
+        self,
+        event_id: str,
+        item_id: str,
+        event_type: str,
+        payload: dict,
+        *,
+        operator: str | None = None,
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO question_usage_events (
+                    event_id, item_id, event_type, operator, payload_json, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    item_id,
+                    event_type,
+                    operator,
+                    json.dumps(payload, ensure_ascii=False, default=self._json_default),
+                    self._utc_now(),
+                ),
+            )
+
+    def list_usage_events(self, *, item_id: str, limit: int = 100, event_type: str | None = None) -> list[dict]:
+        sql = """
+            SELECT event_id, item_id, event_type, operator, payload_json, created_at
+            FROM question_usage_events
+            WHERE item_id = ?
+        """
+        params: list[object] = [item_id]
+        if event_type:
+            sql += " AND event_type = ?"
+            params.append(event_type)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        return [
+            {
+                "event_id": row["event_id"],
+                "item_id": row["item_id"],
+                "event_type": row["event_type"],
+                "operator": row["operator"],
+                "created_at": row["created_at"],
+                "payload": json.loads(row["payload_json"] or "{}"),
+            }
+            for row in rows
+        ]
+
+    def upsert_source_question_asset(
+        self,
+        *,
+        asset_id: str,
+        source_type: str,
+        payload: dict,
+        metadata: dict,
+        question_card_id: str | None = None,
+        question_type: str | None = None,
+        business_subtype: str | None = None,
+        pattern_id: str | None = None,
+        difficulty_target: str | None = None,
+        topic: str | None = None,
+    ) -> dict[str, Any]:
+        now = self._utc_now()
+        source_hash = self._source_question_hash(payload)
+        serialized_payload = json.dumps(payload, ensure_ascii=False, default=self._json_default)
+        serialized_metadata = json.dumps(metadata, ensure_ascii=False, default=self._json_default)
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT asset_id, created_at, metadata_json FROM source_question_assets WHERE source_hash = ?",
+                (source_hash,),
+            ).fetchone()
+            resolved_asset_id = existing["asset_id"] if existing else asset_id
+            created_at = existing["created_at"] if existing else now
+            existing_metadata = json.loads(existing["metadata_json"] or "{}") if existing else {}
+            merged_metadata = dict(existing_metadata if isinstance(existing_metadata, dict) else {})
+            merged_metadata.update(metadata)
+            merged_metadata["usage_count"] = int((existing_metadata or {}).get("usage_count") or 0) + int(metadata.get("usage_count") or 1)
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO source_question_assets (
+                    asset_id, source_hash, source_type, question_card_id, question_type,
+                    business_subtype, pattern_id, difficulty_target, topic, payload_json,
+                    metadata_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    resolved_asset_id,
+                    source_hash,
+                    source_type,
+                    question_card_id,
+                    question_type,
+                    business_subtype,
+                    pattern_id,
+                    difficulty_target,
+                    topic,
+                    serialized_payload,
+                    json.dumps(merged_metadata, ensure_ascii=False, default=self._json_default),
+                    created_at,
+                    now,
+                ),
+            )
+        return {
+            "asset_id": resolved_asset_id,
+            "source_hash": source_hash,
+            "source_type": source_type,
+            "question_card_id": question_card_id,
+            "question_type": question_type,
+            "business_subtype": business_subtype,
+            "pattern_id": pattern_id,
+            "difficulty_target": difficulty_target,
+            "topic": topic,
+            "payload": payload,
+            "metadata": merged_metadata,
+            "created_at": created_at,
+            "updated_at": now,
+        }
+
+    def list_source_question_assets(
+        self,
+        *,
+        limit: int = 100,
+        source_type: str | None = None,
+        question_card_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        sql = """
+            SELECT asset_id, source_hash, source_type, question_card_id, question_type,
+                   business_subtype, pattern_id, difficulty_target, topic, payload_json,
+                   metadata_json, created_at, updated_at
+            FROM source_question_assets
+            WHERE 1 = 1
+        """
+        params: list[object] = []
+        if source_type:
+            sql += " AND source_type = ?"
+            params.append(source_type)
+        if question_card_id:
+            sql += " AND question_card_id = ?"
+            params.append(question_card_id)
+        sql += " ORDER BY updated_at DESC LIMIT ?"
+        params.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            metadata = json.loads(row["metadata_json"] or "{}")
+            usage_count = int(metadata.get("usage_count") or 0) if isinstance(metadata, dict) else 0
+            items.append(
+                {
+                    "asset_id": row["asset_id"],
+                    "source_hash": row["source_hash"],
+                    "source_type": row["source_type"],
+                    "question_card_id": row["question_card_id"],
+                    "question_type": row["question_type"],
+                    "business_subtype": row["business_subtype"],
+                    "pattern_id": row["pattern_id"],
+                    "difficulty_target": row["difficulty_target"],
+                    "topic": row["topic"],
+                    "usage_count": usage_count,
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "payload": json.loads(row["payload_json"] or "{}"),
+                    "metadata": metadata if isinstance(metadata, dict) else {},
+                }
+            )
+        return items
+
     def get_review_metrics_summary(
         self,
         *,
@@ -1475,6 +1673,11 @@ class QuestionRepository:
             return None
         clean = text.replace("\n", " ").strip()
         return clean if len(clean) <= limit else clean[: limit - 3] + "..."
+
+    @staticmethod
+    def _source_question_hash(payload: dict[str, Any]) -> str:
+        serialized = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True, default=str)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
     def _utc_now(self) -> str:
         return datetime.now(timezone.utc).isoformat()

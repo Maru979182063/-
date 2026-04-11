@@ -4,11 +4,11 @@ sources:
     base_url: "http://www.people.com.cn"
     entry_urls:
       - "http://opinion.people.com.cn/GB/8213/49160/index.html"
-      - "http://world.people.com.cn/"
-      - "http://politics.people.com.cn/"
     allowed_domains: ["people.com.cn"]
     article_url_patterns: ["/n1/\\d{4}/\\d{4}/c\\d+-\\d+\\.html", "/n1/\\d{4}/\\d{2}/\\d{2}/c\\d+-\\d+\\.html"]
     exclude_url_patterns: ["/index\\.html$", "/GB/", "paper\\.people\\.com\\.cn"]
+    exclude_title_patterns: ["招聘", "面试通知", "通报", "巡视", "对象公布", "全部导航", "直播", "快讯", "名单", "公告", "通知", "答记者问", "图解"]
+    required_title_keywords: ["评论", "时评", "人民论坛", "现场评论", "观点", "理论", "观察", "人民时评"]
     priority_keywords: ["人民时评", "评论", "观察", "人民论坛", "热评", "理论"]
     article_limit: 50
     min_body_length: 180
@@ -28,10 +28,11 @@ sources:
     base_url: "http://www.news.cn"
     entry_urls:
       - "https://www.news.cn/comments/"
-      - "https://www.news.cn/politics/"
     allowed_domains: ["news.cn", "xinhuanet.com"]
     article_url_patterns: ["/comments/\\d{8}/[a-z0-9]+/c\\.html$", "/politics/\\d{8}/[a-z0-9]+/c\\.html$", "/politics/leaders/\\d{8}/[a-z0-9]+/c\\.html$"]
     exclude_url_patterns: ["/index\\.htm$", "/home\\.htm$", "/zt/", "english\\.news\\.cn"]
+    exclude_title_patterns: ["招聘", "面试通知", "通报", "对象公布", "全部导航", "直播", "快讯", "名单", "公告", "通知", "答记者问", "图解"]
+    required_title_keywords: ["评论", "时评", "述评", "观察", "新华时评", "记者手记"]
     priority_keywords: ["新华时评", "述评", "观察", "评论员", "热点"]
     article_limit: 50
     min_body_length: 180
@@ -55,6 +56,8 @@ sources:
     allowed_domains: ["gmw.cn"]
     article_url_patterns: ["/\\d{4}-\\d{2}/\\d{2}/content_\\d+\\.htm$", "/content_\\d+\\.htm$"]
     exclude_url_patterns: ["/node_\\d+\\.htm$", "/topics\\.", "/index\\.htm$"]
+    exclude_title_patterns: ["招聘", "面试通知", "通报", "对象公布", "全部导航", "直播", "快讯", "名单", "公告", "通知", "图解"]
+    required_title_keywords: ["评论", "时评", "理论", "观察", "光明时评", "光明论坛"]
     priority_keywords: ["光明时评", "理论", "评论", "观察"]
     article_limit: 50
     min_body_length: 180
@@ -73,11 +76,12 @@ sources:
     site_name: "求是网"
     base_url: "http://www.qstheory.cn"
     entry_urls:
-      - "http://www.qstheory.cn/"
       - "http://www.qstheory.cn/qszq/llwx/index.htm"
     allowed_domains: ["qstheory.cn"]
     article_url_patterns: ["/\\d{8}/[a-z0-9]+/c\\.html$", "/\\d{8}/[a-z0-9]+/c\\.html"]
     exclude_url_patterns: ["/index\\.htm$", "/v9zhuanqu/", "/qssp/", "/qswp\\.htm"]
+    exclude_title_patterns: ["招聘", "面试通知", "通报", "巡视", "对象公布", "全部导航", "直播", "快讯", "名单", "公告", "通知"]
+    required_title_keywords: ["评论", "理论", "观察", "求是", "政绩观", "中国式现代化", "人民论坛"]
     priority_keywords: ["求是", "理论", "评论", "观察"]
     article_limit: 50
     min_body_length: 180
@@ -102,6 +106,8 @@ sources:
     allowed_domains: ["gov.cn"]
     article_url_patterns: ["/zhengce/(content/)?\\d{6}/content_\\d+\\.htm$", "/yaowen/liebiao/\\d{6}/content_\\d+\\.htm$"]
     exclude_url_patterns: ["/index\\.htm$", "/jiedu/tujie/", "/xzfgk/", "/search/"]
+    exclude_title_patterns: ["招聘", "面试通知", "通报", "对象公布", "全部导航", "直播", "快讯", "名单", "公告", "通知", "印发", "答记者问", "图解"]
+    required_title_keywords: ["解读", "评论", "观察", "综述"]
     priority_keywords: ["政策", "解读", "要闻", "国办", "国务院"]
     article_limit: 50
     min_body_length: 180
@@ -122,7 +128,10 @@ sources:
     entry_urls:
       - "http://www.banyuetan.org/"
     allowed_domains: ["banyuetan.org"]
-    article_url_patterns: ["/c/", "/detail/", "/\\d{8}/", "\\.html?$"]
+    article_url_patterns: ["/detail/\\d{8}/\\d+_\\d+(?:_\\d+)?\\.html$"]
+    exclude_url_patterns: ["/index\\.html$", "/byt/", "/special/", "/zt/", "/about/", "/app/"]
+    exclude_title_patterns: ["招聘", "面试通知", "通报", "对象公布", "全部导航", "直播", "快讯", "名单", "公告", "通知", "图解"]
+    required_title_keywords: ["评论", "时评", "观察", "半月谈", "热点", "理论"]
     priority_keywords: ["评论", "时评", "观察", "热点", "半月谈"]
     article_limit: 50
     min_body_length: 180
@@ -141,6 +150,7 @@ sources:
       - "https://www.cyol.com/"
     allowed_domains: ["cyol.com"]
     article_url_patterns: ["/gb/", "/content/", "/\\d{4}-\\d{2}/\\d{2}/", "\\.htm$"]
+    exclude_url_patterns: ["/gb/baobao/", "/gb/live/", "/video/", "/search", "/index\\.htm$"]
     priority_keywords: ["评论", "青年", "观察", "热点"]
     article_limit: 50
     min_body_length: 180
@@ -156,10 +166,12 @@ sources:
     site_name: "经济日报"
     base_url: "http://www.ce.cn"
     entry_urls:
-      - "http://www.ce.cn/"
       - "http://views.ce.cn/"
     allowed_domains: ["ce.cn"]
     article_url_patterns: ["/\\d{4}/\\d{2}/\\d{2}/", "/xwzx/", "/views/", "\\.shtml$"]
+    exclude_url_patterns: ["/view/ent/", "/video/", "/photo/", "/search/", "/index\\.shtml$", "/about/", "/vr\\.", "/jjw/", "/jjrb/gk"]
+    exclude_title_patterns: ["招聘", "面试通知", "通报", "对象公布", "全部导航", "直播", "快讯", "名单", "公告", "通知", "图解"]
+    required_title_keywords: ["评论", "时评", "观察", "经济日报", "述评"]
     priority_keywords: ["评论", "观察", "经济日报", "时评"]
     article_limit: 50
     min_body_length: 180
@@ -177,7 +189,8 @@ sources:
     entry_urls:
       - "https://www.lifeweek.com.cn/"
     allowed_domains: ["lifeweek.com.cn"]
-    article_url_patterns: ["/article/", "/\\d+/\\d+/\\d+/", "\\.html?$"]
+    article_url_patterns: ["/article/\\d+\\.html$", "/\\d{4}/\\d{2}/\\d{2}/[^/]+\\.html$"]
+    exclude_url_patterns: ["/rules/", "privacyAgreement", "userAgreement", "/member/", "/login", "/register"]
     priority_keywords: ["评论", "随笔", "人物", "社会"]
     article_limit: 50
     min_body_length: 180
@@ -194,8 +207,10 @@ sources:
     base_url: "https://www.whb.cn"
     entry_urls:
       - "https://www.whb.cn/"
+      - "http://www.whb.cn/"
     allowed_domains: ["whb.cn"]
     article_url_patterns: ["/commonDetail/", "/\\d{8}/", "\\.html?$"]
+    exclude_url_patterns: ["/staticsg/", "/recommend\\.html$", "/index\\.html?$", "/video/", "/topic/"]
     priority_keywords: ["评论", "文汇", "观察", "随笔"]
     article_limit: 50
     min_body_length: 180
@@ -209,11 +224,14 @@ sources:
 
   - id: "thepaper"
     site_name: "澎湃新闻"
-    base_url: "https://www.thepaper.cn"
+    base_url: "https://m.thepaper.cn"
     entry_urls:
-      - "https://www.thepaper.cn/"
+      - "https://m.thepaper.cn/channel_25950"
+      - "https://m.thepaper.cn/channel_25951"
+      - "https://m.thepaper.cn/channel_25952"
     allowed_domains: ["thepaper.cn"]
-    article_url_patterns: ["/newsDetail_forward_", "/\\d+$", "/newsDetail_"]
+    article_url_patterns: ["/newsDetail_forward_\\d+$", "/newsDetail_\\d+$"]
+    exclude_url_patterns: ["/live/", "/video/", "/topic/", "/channel/", "/index\\.html?$"]
     priority_keywords: ["评论", "澎湃", "观察", "热点"]
     article_limit: 50
     min_body_length: 180
@@ -229,9 +247,10 @@ sources:
     site_name: "果壳"
     base_url: "https://www.guokr.com"
     entry_urls:
-      - "https://www.guokr.com/"
+      - "https://www.guokr.com/science/"
     allowed_domains: ["guokr.com"]
-    article_url_patterns: ["/article/", "/science/", "\\d+/"]
+    article_url_patterns: ["/article/\\d+/?$"]
+    exclude_url_patterns: ["/science/category/", "/science/all", "undefined", "/question/", "/ask/", "/wiki/", "/video/"]
     priority_keywords: ["科学", "科普", "解释", "观察"]
     article_limit: 50
     min_body_length: 180

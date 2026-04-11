@@ -105,7 +105,7 @@ class UniversalTagger:
     def _tag_many_with_llm(self, spans: list[SpanRecord]) -> list[UniversalProfile]:
         prompt = self._build_batch_prompt(spans)
         result = self.provider.generate_json(
-            model=self.llm_config.get("models", {}).get("universal_tagger", "gpt-4o-mini"),
+                model=self.llm_config.get("models", {}).get("universal_tagger", "gpt-5.4-nano"),
             instructions=self.prompt,
             input_payload={
                 "prompt": prompt,

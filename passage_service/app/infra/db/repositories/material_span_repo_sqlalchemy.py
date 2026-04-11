@@ -55,13 +55,17 @@ class SQLAlchemyMaterialSpanRepository:
         self.session.refresh(material)
         return material
 
-    def demote_existing_for_article(self, article_id: str) -> None:
-        self.session.execute(
+    def demote_existing_for_article(self, article_id: str, exclude_material_ids: list[str] | None = None) -> int:
+        stmt = (
             update(MaterialSpanORM)
             .where(MaterialSpanORM.article_id == article_id, MaterialSpanORM.is_primary.is_(True))
             .values(is_primary=False, status="deprecated")
         )
+        if exclude_material_ids:
+            stmt = stmt.where(MaterialSpanORM.id.not_in(exclude_material_ids))
+        result = self.session.execute(stmt)
         self.session.commit()
+        return int(result.rowcount or 0)
 
     def list_for_v2_index(
         self,

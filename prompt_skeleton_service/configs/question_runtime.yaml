@@ -1,13 +1,32 @@
 llm:
-  active_provider: openai
+  active_provider: generation_llm
 
   providers:
-    openai:
-      api_key_env: OPENAI_API_KEY
-      base_url_env: OPENAI_BASE_URL
+    generation_llm:
+      api_key_env: GENERATION_LLM_API_KEY
+      base_url_env: GENERATION_LLM_BASE_URL
       default_base_url: https://api.openai.com/v1
       models:
         default_generation: gpt-5.4-mini
+        question_generation: gpt-5.4
+        question_repair: gpt-5.4
+        minor_edit: gpt-5.4-mini
+        question_modify: gpt-5.4-mini
+        text_modify: gpt-5.4-mini
+        judge_review: gpt-5.4-mini
+        reference_parse: gpt-5.4-mini
+      params:
+        temperature: 0.7
+        max_output_tokens: 10800
+        timeout_seconds: 120
+    material_llm:
+      api_key_env: MATERIAL_LLM_API_KEY
+      base_url_env: MATERIAL_LLM_BASE_URL
+      default_base_url: https://api.openai.com/v1
+      models:
+        default_generation: gpt-5.4-mini
+        question_generation: gpt-5.4-mini
+        question_repair: gpt-5.4-mini
         minor_edit: gpt-5.4-mini
         question_modify: gpt-5.4-mini
         text_modify: gpt-5.4-mini
@@ -20,29 +39,29 @@ llm:
 
   routing:
     generate_question:
-      provider: openai
-      model_key: default_generation
+      provider: generation_llm
+      model_key: question_generation
     question_generation:
-      provider: openai
-      model_key: default_generation
+      provider: generation_llm
+      model_key: question_generation
     question_repair:
-      provider: openai
-      model_key: default_generation
+      provider: generation_llm
+      model_key: question_repair
     material_refinement:
-      provider: openai
+      provider: material_llm
       model_key: minor_edit
     source_question_parse:
-      provider: openai
+      provider: generation_llm
       model_key: reference_parse
     review_actions:
       minor_edit:
-        provider: openai
+        provider: generation_llm
         model_key: minor_edit
       question_modify:
-        provider: openai
+        provider: generation_llm
         model_key: question_modify
       text_modify:
-        provider: openai
+        provider: generation_llm
         model_key: text_modify
 
 materials:
@@ -58,6 +77,6 @@ persistence:
 
 evaluation:
   judge:
-    provider: openai
+    provider: generation_llm
     enabled: true
     model_key: judge_review

@@ -16,7 +16,7 @@ cards:
   - 高位概括
   required_signals:
     blank_position: opening
-    function_type: opening_summary
+    function_type: summary
     logic_relation: summary
     abstraction_level: '>=0.60'
   preferred_signals:
@@ -50,7 +50,7 @@ cards:
     blank_position: middle
     function_type: bridge
     bidirectional_validation: '>=0.60'
-    logic_relation: continuation_or_transition
+    logic_relation: continuation
   preferred_signals:
   - 前文先提出对象/问题
   - 后文继续说明作用、机制或应用
@@ -80,7 +80,7 @@ cards:
   - 焦点切换
   required_signals:
     blank_position: middle
-    function_type: middle_focus_shift
+    function_type: lead_next
     logic_relation: focus_shift
     context_dependency: '>=0.70'
   preferred_signals:
@@ -112,7 +112,7 @@ cards:
   - 功能桥梁
   required_signals:
     blank_position: middle
-    function_type: middle_explanation
+    function_type: carry_previous
     logic_relation: explanation
   preferred_signals:
   - 前文概念需要说明
@@ -142,7 +142,7 @@ cards:
   - 对象绑定
   required_signals:
     blank_position: ending
-    function_type: ending_summary
+    function_type: conclusion
     logic_relation: summary
   preferred_signals:
   - 前文信息点较多但主线单一
@@ -173,7 +173,7 @@ cards:
   - 事实到价值
   required_signals:
     blank_position: ending
-    function_type: ending_elevation
+    function_type: conclusion
     logic_relation: elevation
     abstraction_level: '>=0.60'
   preferred_signals:
@@ -204,7 +204,7 @@ cards:
   - 前后双卡位
   required_signals:
     blank_position: inserted
-    function_type: inserted_reference
+    function_type: reference_summary
     logic_relation: reference_match
     reference_dependency: '>=0.60'
   preferred_signals:
@@ -235,7 +235,7 @@ cards:
   - 高依赖
   - 综合判定
   required_signals:
-    function_type: comprehensive_match
+    function_type: bridge
     logic_relation: multi_constraint
     context_dependency: '>=0.70'
     bidirectional_validation: '>=0.70'

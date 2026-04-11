@@ -171,9 +171,28 @@ validator_contract:
   - 解析必须显式指出主轴来源、抽象层级和错项错因。
 answer_grounding:
   require_material_traceability: true
+  disallow_unsupported_extensions: true
+  unsupported_extension_types:
+  - stance
+  - causal_chain
+  - countermeasure
+  - conclusion
+  - evaluative_claim
+  require_correct_option_material_defensibility: true
+  distractor_sources:
+  - non_key_detail
+  - scope_shift
+  - partial_reading
+  - unsupported_extension
+  require_analysis_material_evidence: true
+  align_with_reference_elimination_style: true
   require_central_meaning_alignment: true
   disallow_detail_as_correct_answer: true
   disallow_stronger_conclusion: true
+  expression_fidelity_mode: meaning_preserving
+  allow_meaning_preserving_creation: true
+  allow_cross_sentence_abstraction: true
+  allow_exam_style_rephrasing: true
 normalized_from: center_understanding_standard_question_card.yaml
 normalization_notes:
 - center_understanding runtime binding is now explicitly normalized instead of falling through title_selection only

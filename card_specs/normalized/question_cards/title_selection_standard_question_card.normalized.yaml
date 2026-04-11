@@ -212,6 +212,7 @@ answer_grounding:
   require_central_meaning_alignment: true
   disallow_detail_as_correct_answer: true
   disallow_stronger_conclusion: true
+  expression_fidelity_mode: source_strict
 normalized_from: title_selection_standard_question_card.yaml
 normalization_notes:
 - business_family_id normalized from legacy family_id=main_idea to title_selection

@@ -10,7 +10,30 @@ def test_card_registry_v2_loads_normalized_specs() -> None:
     sentence_order_card = registry.get_default_question_card("sentence_order")
 
     assert title_question_card["business_family_id"] == "title_selection"
-    assert "phrase_or_clause_group" in sentence_order_card["upstream_contract"]["required_candidate_types"]
+    assert title_question_card["card_id"] == "question.title_selection.standard_v1"
+    assert "sentence_block_group" in sentence_order_card["upstream_contract"]["required_candidate_types"]
+
+
+def test_runtime_material_gate_rejects_sentence_fill_item_without_task_scoring() -> None:
+    pipeline = MaterialPipelineV2()
+    question_card = pipeline.registry.get_question_card("question.sentence_fill.standard_v1")
+    item = {
+        "eligible_material_cards": [{"card_id": "fill_material.bridge_transition", "score": 0.92}],
+        "eligible_business_cards": [{"business_card_id": "sentence_fill__bridge", "score": 0.88}],
+        "selected_task_scoring": {},
+    }
+
+    passed, reason = pipeline._passes_runtime_material_gate(
+        item=item,
+        business_family_id="sentence_fill",
+        question_card=question_card,
+        min_card_score=0.55,
+        min_business_card_score=0.45,
+        require_business_card=True,
+    )
+
+    assert passed is False
+    assert reason == "missing_task_scoring"
 
 
 def test_candidate_planner_materializes_llm_specs_when_provider_is_available() -> None:

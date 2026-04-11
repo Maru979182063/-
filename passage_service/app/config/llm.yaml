@@ -1,15 +1,241 @@
-provider: "openai_responses"
+﻿provider: "openai_responses"
 enabled: true
 
 models:
   universal_tagger: "gpt-4o-mini"
-  family_tagger: "gpt-4.1-mini"
+  family_tagger: "gpt-4o-mini"
   candidate_planner_v2: "gpt-4o-mini"
   logical_segment_refiner: "gpt-4o-mini"
   integrity_gate: "gpt-4o-mini"
+
+main_card_dual_judge:
+  enabled: true
+  mode: "enforce"
+  judge_count: 1
+  consensus_rule: "unanimous"
+  use_full_card_catalog: true
+  models:
+    judge_a: "gpt-4o-mini"
+  common_instructions: |
+    你是材料业务适配判官，只负责判断候选内容是否真实落位到指定主卡的正式承载单元。
+    你不能通过放宽门槛来放行样本，也不能因为形式整齐就高估业务价值。
+    你必须优先判断业务题感是否成立，再判断它属于 strong、weak 还是 reject。
+    strong 代表业务上已经稳定可用；weak 代表业务上可承接但仍属过渡正式单元；reject 代表不应进入有效库存。
+    你只能在给定的 material/business card 候选里选择落点；如果都不合适，应返回 null。
+    reason 要说明主因；evidence_summary 要给出一句最关键证据。
+  user_prompt_template: |
+    主卡: {family_label} ({business_family_id})
+    运行时 family: {runtime_business_family_id}
+    问题卡: {question_card_id}
+    业务目标:
+    {family_goal}
+
+    正式承载单元定义:
+    {formal_unit_definition}
+
+    strong 接收标准:
+    {strong_accept_definition}
+
+    weak 接收标准:
+    {weak_accept_definition}
+
+    reject 标准:
+    {reject_definition}
+
+    文章标题: {article_title}
+    候选类型: {candidate_type}
+    当前机械选中 material card: {selected_material_card}
+    当前机械选中 business card: {selected_business_card}
+    quality_score: {quality_score}
+
+    候选正文:
+    {candidate_text}
+
+    候选元数据(JSON):
+    {candidate_meta_json}
+
+    中性信号(JSON):
+    {neutral_signal_profile_json}
+
+    当前 task scoring(JSON):
+    {task_scoring_json}
+
+    business feature profile(JSON):
+    {business_feature_profile_json}
+
+    可选 material cards(JSON):
+    {eligible_material_cards_json}
+
+    可选 business cards(JSON):
+    {eligible_business_cards_json}
+
+    当前 question_ready_context(JSON):
+    {question_ready_context_json}
+
+    请只输出 JSON。
+  families:
+    center_understanding:
+      label: "中心理解"
+      goal: |
+        判断材料是否真正适合承载中心理解主卡，而不是泛泛主题相关或标题观感。
+      formal_unit_definition: |
+        重点看强单中心、主轴收束、非例证主导、多信息共同服务一个核心判断，是否足以承载主旨判断。
+      strong_accept_definition: |
+        主轴明确、收束稳定、例证不压过主旨，业务上可以直接拿去做中心理解题。
+      weak_accept_definition: |
+        主轴大致成立，但仍有轻微背景铺垫或支撑冗余，属于可承接的弱正式单元。
+      reject_definition: |
+        只是主题相关、主旨分散、例证过重，或更像背景段/材料片段而不是中心理解正式单元。
+    sentence_fill:
+      label: "语句填空"
+      goal: |
+        判断候选是否真能作为填空题槽位句，而不是表面像连接句。
+      formal_unit_definition: |
+        重点看 functional_slot_unit：槽位句加最小上下文，要求 blank-value ready、缺口明显、上下文依赖清晰、值得抽空。
+      strong_accept_definition: |
+        抽空后缺口明显、上下文预期清晰、角色真实成立，业务上可直接做语句填空。
+      weak_accept_definition: |
+        仍有填空价值，但缺口显著性或角色稳定性略弱，属于可承接的过渡正式单元。
+      reject_definition: |
+        只是表面像承接/总结/引题，抽空价值弱、上下文依赖模糊，或替换成别的同类句也差不多。
+    sentence_order:
+      label: "语句排序"
+      goal: |
+        判断候选句组是否真有排序意义，而不是仅仅句子都相关或读起来顺。
+      formal_unit_definition: |
+        重点看 ordered_unit_group 或 weak_formal_order_group：有稳定顺序链、首尾方向感、局部 binding，不多解到失去题感。
+      strong_accept_definition: |
+        句组顺序链清楚，首尾较稳定，多解风险低，业务上可直接作为排序题正式承载。
+      weak_accept_definition: |
+        整体排序意义成立，但尾句或局部收束不够完美，属于业务上可承接的弱正式排序句组。
+      reject_definition: |
+        虽然句子相关，但顺序意义弱、首尾模糊、多解风险高，或只是形式像排序而题感不足。
+
+main_card_signal_resolver:
+  enabled: true
+  mode: "enforce"
+  judge_count: 1
+  models:
+    judge_a: "gpt-4o-mini"
+  common_instructions: |
+    你是三主卡结构信号判官，只负责把候选内容翻译成结构化业务信号。
+    你不能机械追随已有分数，也不能为了放行而夸大信号强度。
+    你的任务是用真实题感重新判断：这条内容在对应主卡下，到底有哪些结构强项、弱项与风险。
+    所有 0-1 数值都必须保守给出；弱就低，强才高。
+    如果机械信号与正文不一致，应以正文真实结构为准。
+  user_prompt_template: |
+    主卡: {family_label} ({business_family_id})
+    运行时 family: {runtime_business_family_id}
+    目标:
+    {goal}
+
+    本轮信号任务:
+    {signal_goal}
+
+    文章标题: {article_title}
+    来源(JSON): {article_source_json}
+    候选类型: {candidate_type}
+    候选元数据(JSON):
+    {candidate_meta_json}
+
+    候选正文:
+    {candidate_text}
+
+    当前机械 neutral_signal_profile(JSON):
+    {mechanical_neutral_signal_profile_json}
+
+    当前机械 business_feature_profile(JSON):
+    {mechanical_business_feature_profile_json}
+
+    请只输出 JSON，不要解释。
+  families:
+    center_understanding:
+      label: "中心理解"
+      goal: |
+        判断这段正文是否具备中心理解所需的主轴、归旨和收束。
+      signal_goal: |
+        重新判断强单中心、主轴收束、例证/枝杈干扰程度、归纳提升程度，并输出保守分值。
+    sentence_fill:
+      label: "语句填空"
+      goal: |
+        判断这条候选是否真的有槽位句价值，而不是表面像连接句。
+      signal_goal: |
+        重新判断 slot_role、slot_function、blank_position，以及承前/启后/双向依赖强度、blank-value 就绪度。
+    sentence_order:
+      label: "语句排序"
+      goal: |
+        判断这组句子是否真的具备排序题感，而不是仅仅相关。
+      signal_goal: |
+        重新判断 opener/closer、局部绑定、顺序链、多解风险、推进与收束，并输出保守分值。
+
+main_card_family_landing:
+  enabled: true
+  mode: "enforce"
+  judge_count: 1
+  models:
+    judge_a: "gpt-4o-mini"
+  common_instructions: |
+    你是三主卡正文落位判官，只负责判断一条 material 是否真实落位到中心理解、语句填空、语句排序中的一个或多个主卡。
+    你不能因为材料整体不错就放行，也不能机械追随已有 family 名称。
+    你要基于正文内容、结构、题感和 formal unit 适配性，判断它真正对应哪些主卡。
+    如果不适配任何主卡，就返回空数组。
+    只在给定的三张主卡中选择，不要发明新的 family。
+  user_prompt_template: |
+    文章标题: {article_title}
+    来源: {article_source}
+    material_id: {material_id}
+    状态: {material_status} / {release_channel}
+    quality_score: {quality_score}
+    paragraph_count: {paragraph_count}
+    sentence_count: {sentence_count}
+
+    当前原始 primary_family: {primary_family}
+    当前原始 primary_subtype: {primary_subtype}
+    parallel_families(JSON):
+    {parallel_families_json}
+
+    family_scores(JSON):
+    {family_scores_json}
+    universal_profile(JSON):
+    {universal_profile_json}
+    feature_profile(JSON):
+    {feature_profile_json}
+
+    旧机械映射得到的 runtime families(JSON):
+    {mechanical_v2_families_json}
+
+    可选主卡定义(JSON):
+    {allowed_main_cards_json}
+
+    material 正文:
+    {material_text}
+
+    请判断这条 material 真正适配哪些主卡，并只输出 JSON。
+  runtime_families:
+    center_understanding:
+      label: "中心理解"
+      goal: "判断材料是否真能承载中心理解主卡，而不是泛泛主题相关。"
+      formal_unit_definition: "强单中心、主轴收束、非例证主导、可稳定承载主旨判断的归旨单元。"
+      accept_definition: "文章围绕同一核心判断展开，主旨聚焦，业务上值得作为中心理解材料。"
+      reject_definition: "只是主题相关、背景铺垫或例证堆积，不足以稳定承载中心理解。"
+    sentence_fill:
+      label: "语句填空"
+      goal: "判断 material 是否真有值得抽空的槽位句，而不是表面像连接句。"
+      formal_unit_definition: "functional_slot_unit，要求 blank-value ready、缺口明显、上下文依赖清晰。"
+      accept_definition: "抽空后缺口真实存在，语义预期明确，业务上值得做填空。"
+      reject_definition: "只是看起来像承接/总结/引题，但抽空价值弱或替换空间过大。"
+    sentence_order:
+      label: "语句排序"
+      goal: "判断句组是否真有排序意义，而不是句子相关但顺序不稳。"
+      formal_unit_definition: "ordered_unit_group 或 weak_formal_order_group，要求顺序链、首尾方向感、局部 binding、题感成立。"
+      accept_definition: "句组存在较稳定顺序关系，业务上可作为排序材料。"
+      reject_definition: "顺序意义弱、多解风险高，或只是形式像排序而题感不足。"
 
 batch:
   universal_batch_size: 8
 
 timeouts:
   request_seconds: 45
+
+retries:
+  max_attempts: 3

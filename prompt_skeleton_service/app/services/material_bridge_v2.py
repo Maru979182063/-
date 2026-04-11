@@ -12,14 +12,17 @@ from app.core.exceptions import DomainError
 from app.schemas.question import MaterialPolicy, MaterialSelectionResult
 from app.schemas.runtime import MaterialsConfig
 from app.services.question_card_binding import QuestionCardBindingService
+from app.services.sentence_fill_protocol import normalize_sentence_fill_function_type
 
 
 logger = logging.getLogger(__name__)
 
 
 class MaterialBridgeV2Service:
-    SEARCH_TIMEOUT_SECONDS = 8
+    SEARCH_TIMEOUT_SECONDS = 16
+    SEARCH_RETRY_TIMEOUT_SECONDS = 24
     SERVABLE_REVIEW_STATUSES = {"auto_tagged", "review_confirmed"}
+    REJECTED_REVIEW_STATUS = "review_rejected"
 
     def __init__(self, config: MaterialsConfig) -> None:
         self.config = config
@@ -66,7 +69,7 @@ class MaterialBridgeV2Service:
         if binding_warning:
             warnings.append(binding_warning)
         requested_candidate_limit = max(min(self.config.candidate_pool_size, 16), count * 4)
-        items = self._search_candidates(
+        search_result = self._search_candidates(
             business_family_id=business_family_id,
             question_card_id=resolved_question_card_id,
             article_ids=article_ids or [],
@@ -76,11 +79,17 @@ class MaterialBridgeV2Service:
             business_card_ids=business_card_ids or [],
             preferred_business_card_ids=preferred_business_card_ids or [],
             query_terms=query_terms or [],
+            topic=topic,
+            text_direction=text_direction,
+            document_genre=document_genre,
+            material_structure_label=material_structure_label,
             target_length=target_length,
             length_tolerance=length_tolerance,
             structure_constraints=structure_constraints or {},
             enable_anchor_adaptation=enable_anchor_adaptation,
         )
+        warnings.extend(search_result.get("warnings") or [])
+        items = search_result.get("items") or []
         items = self._attach_local_usage_stats(items, usage_stats_lookup)
         ranked = sorted(
             (
@@ -202,7 +211,7 @@ class MaterialBridgeV2Service:
             method_name="list_material_options",
         )
         items = self._attach_local_usage_stats(
-            self._search_candidates(
+            (self._search_candidates(
                 business_family_id=business_family_id,
                 question_card_id=resolved_question_card_id,
                 article_ids=article_ids or [],
@@ -212,11 +221,15 @@ class MaterialBridgeV2Service:
                 business_card_ids=business_card_ids or [],
                 preferred_business_card_ids=preferred_business_card_ids or [],
                 query_terms=query_terms or [],
+                topic=None,
+                text_direction=None,
+                document_genre=document_genre,
+                material_structure_label=material_structure_label,
                 target_length=target_length,
                 length_tolerance=length_tolerance,
                 structure_constraints=structure_constraints or {},
                 enable_anchor_adaptation=enable_anchor_adaptation,
-            ),
+            ).get("items") or []),
             usage_stats_lookup,
         )
         ranked = sorted(
@@ -286,7 +299,7 @@ class MaterialBridgeV2Service:
             requested_question_card_id=question_card_id,
             resolved_question_card_id=resolved_question_card_id,
         )
-        items = self._search_candidates(
+        search_result = self._search_candidates(
             business_family_id=business_family_id,
             question_card_id=resolved_question_card_id,
             article_ids=article_ids or [],
@@ -296,16 +309,22 @@ class MaterialBridgeV2Service:
             business_card_ids=[],
             preferred_business_card_ids=[],
             query_terms=[],
+            topic=None,
+            text_direction=None,
+            document_genre=None,
+            material_structure_label=None,
             target_length=None,
             length_tolerance=120,
             structure_constraints={},
             enable_anchor_adaptation=True,
         )
+        items = search_result.get("items") or []
         return {
             "business_family_id": business_family_id,
             "question_card_id": resolved_question_card_id,
             "question_card_binding_warning": binding_warning,
             "items": items,
+            "warnings": search_result.get("warnings") or [],
         }
 
     def _missing_question_card_warning(
@@ -386,11 +405,16 @@ class MaterialBridgeV2Service:
         business_card_ids: list[str],
         preferred_business_card_ids: list[str],
         query_terms: list[str],
+        topic: str | None,
+        text_direction: str | None,
+        document_genre: str | None,
+        material_structure_label: str | None,
         target_length: int | None,
         length_tolerance: int,
         structure_constraints: dict[str, Any],
         enable_anchor_adaptation: bool,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
+        warnings: list[str] = []
         payload = {
             "business_family_id": business_family_id,
             "question_card_id": question_card_id,
@@ -401,20 +425,50 @@ class MaterialBridgeV2Service:
             "business_card_ids": business_card_ids,
             "preferred_business_card_ids": preferred_business_card_ids,
             "query_terms": query_terms,
+            "topic": topic,
+            "text_direction": text_direction,
+            "document_genre": document_genre,
+            "material_structure_label": material_structure_label,
             "target_length": target_length,
             "length_tolerance": length_tolerance,
             "structure_constraints": structure_constraints,
             "enable_anchor_adaptation": enable_anchor_adaptation,
+            "review_gate_mode": "stable_relaxed",
         }
-        data = self._post_v2_search(payload)
+        try:
+            data = self._post_v2_search(payload)
+        except DomainError as exc:
+            if not self._is_search_timeout_error(exc):
+                raise
+            relaxed_payload = self._build_relaxed_search_payload(
+                payload,
+                query_terms=[],
+                business_card_ids=business_card_ids,
+                structure_constraints=structure_constraints,
+            )
+            data = self._post_v2_search(relaxed_payload, timeout=self.SEARCH_RETRY_TIMEOUT_SECONDS)
+        warnings.extend(self._extract_search_warnings(data))
         items = data.get("items", [])
-        if not items and (query_terms or business_card_ids):
-            relaxed_payload = dict(payload)
-            relaxed_payload["query_terms"] = []
-            relaxed_payload["business_card_ids"] = []
-            relaxed_payload["candidate_limit"] = max(8, min(candidate_limit, 12))
-            relaxed_payload["article_limit"] = min(article_limit, 10)
+        if not items and query_terms:
+            relaxed_payload = self._build_relaxed_search_payload(
+                payload,
+                query_terms=[],
+                business_card_ids=business_card_ids,
+                structure_constraints=structure_constraints,
+            )
             data = self._post_v2_search(relaxed_payload)
+            warnings.extend(self._extract_search_warnings(data))
+        items = data.get("items", [])
+        if not items and structure_constraints and not (query_terms or business_card_ids or preferred_business_card_ids):
+            loose_payload = self._build_relaxed_search_payload(
+                payload,
+                query_terms=[],
+                business_card_ids=[],
+                structure_constraints={},
+                enable_anchor_adaptation=False,
+            )
+            data = self._post_v2_search(loose_payload, timeout=self.SEARCH_RETRY_TIMEOUT_SECONDS)
+            warnings.extend(self._extract_search_warnings(data))
         items = data.get("items", [])
         if not isinstance(items, list):
             raise DomainError(
@@ -422,15 +476,29 @@ class MaterialBridgeV2Service:
                 status_code=502,
                 details={"payload_keys": sorted(data.keys())},
             )
-        return self._filter_reviewable_items(items)
+        return {
+            "items": self._filter_reviewable_items(items),
+            "warnings": self._dedupe_warnings(warnings),
+        }
 
-    def _post_v2_search(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post_v2_search(self, payload: dict[str, Any], *, timeout: int | None = None) -> dict[str, Any]:
         try:
-            with httpx.Client(base_url=self.config.base_url, timeout=self.SEARCH_TIMEOUT_SECONDS) as client:
+            with httpx.Client(base_url=self.config.base_url, timeout=timeout or self.SEARCH_TIMEOUT_SECONDS) as client:
                 response = client.post(self.config.v2_search_path, json=payload)
                 response.raise_for_status()
                 data = response.json()
         except httpx.HTTPError as exc:
+            if self._disable_local_sqlite_fallback(payload):
+                raise DomainError(
+                    "Failed to fetch v2 materials from passage_service.",
+                    status_code=502,
+                    details={
+                        "base_url": self.config.base_url,
+                        "search_path": self.config.v2_search_path,
+                        "reason": str(exc),
+                        "fallback_blocked": True,
+                    },
+                ) from exc
             fallback_items = self._search_candidates_local_sqlite(payload)
             if fallback_items:
                 return {
@@ -445,6 +513,54 @@ class MaterialBridgeV2Service:
             ) from exc
         return data
 
+    @staticmethod
+    def _extract_search_warnings(data: dict[str, Any]) -> list[str]:
+        raw = data.get("warnings") if isinstance(data, dict) else []
+        if not isinstance(raw, list):
+            return []
+        return [str(item) for item in raw if str(item).strip()]
+
+    @staticmethod
+    def _dedupe_warnings(warnings: list[str]) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for warning in warnings:
+            text = str(warning).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            merged.append(text)
+        return merged
+
+    @staticmethod
+    def _disable_local_sqlite_fallback(payload: dict[str, Any]) -> bool:
+        return False
+
+    @staticmethod
+    def _build_relaxed_search_payload(
+        payload: dict[str, Any],
+        *,
+        query_terms: list[str],
+        business_card_ids: list[str],
+        structure_constraints: dict[str, Any],
+        enable_anchor_adaptation: bool | None = None,
+    ) -> dict[str, Any]:
+        relaxed_payload = dict(payload)
+        relaxed_payload["query_terms"] = list(query_terms)
+        relaxed_payload["business_card_ids"] = list(business_card_ids)
+        relaxed_payload["candidate_limit"] = max(8, min(int(payload.get("candidate_limit") or 8), 12))
+        relaxed_payload["article_limit"] = min(int(payload.get("article_limit") or 12), 10)
+        relaxed_payload["structure_constraints"] = dict(structure_constraints)
+        if enable_anchor_adaptation is not None:
+            relaxed_payload["enable_anchor_adaptation"] = bool(enable_anchor_adaptation)
+        return relaxed_payload
+
+    @staticmethod
+    def _is_search_timeout_error(exc: DomainError) -> bool:
+        details = exc.details if isinstance(exc.details, dict) else {}
+        reason = str(details.get("reason") or "").lower()
+        return "timed out" in reason or "timeout" in reason
+
     def _search_candidates_local_sqlite(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         db_path = self._fallback_db_path()
         if not db_path.exists():
@@ -452,9 +568,15 @@ class MaterialBridgeV2Service:
 
         business_family_id = str(payload.get("business_family_id") or "")
         requested_business_card_ids = {card_id for card_id in (payload.get("business_card_ids") or []) if card_id}
+        preferred_business_card_ids = {card_id for card_id in (payload.get("preferred_business_card_ids") or []) if card_id}
+        structure_constraints = dict(payload.get("structure_constraints") or {})
         query_terms = [term for term in (payload.get("query_terms") or []) if term]
         article_ids = [article_id for article_id in (payload.get("article_ids") or []) if article_id]
         limit = max(int(payload.get("candidate_limit") or 20) * 12, 120)
+        # Local sqlite fallback should scan broadly enough to actually see
+        # non-top-family materials; otherwise sentence_fill/sentence_order can
+        # be starved by a quality-sorted top slice dominated by other families.
+        limit = max(limit, 1600)
 
         sql = """
             SELECT material_spans.id,
@@ -483,13 +605,13 @@ class MaterialBridgeV2Service:
         finally:
             connection.close()
 
-        matched: list[dict[str, Any]] = []
-        relaxed: list[dict[str, Any]] = []
+        enforce_structure_gate = bool(requested_business_card_ids)
+        ranked_matches: list[tuple[dict[str, Any], tuple[float, float, int, float]]] = []
         for row in rows:
             material_id, article_id, _quality_score, usage_count, last_used_at, family_ids_raw, payload_raw, review_status = row
             if article_ids and article_id not in article_ids:
                 continue
-            if review_status not in self.SERVABLE_REVIEW_STATUSES:
+            if review_status and review_status not in self.SERVABLE_REVIEW_STATUSES:
                 continue
 
             family_ids = self._decode_json_value(family_ids_raw, default=[])
@@ -499,6 +621,8 @@ class MaterialBridgeV2Service:
             payload_map = self._decode_json_value(payload_raw, default={})
             cached_item = dict((payload_map or {}).get(business_family_id) or {})
             if not cached_item:
+                continue
+            if not self._cached_item_matches_front_filters(cached_item=cached_item, payload=payload):
                 continue
 
             cached_item["usage_count"] = int(usage_count or 0)
@@ -519,25 +643,134 @@ class MaterialBridgeV2Service:
             if selected_business_card:
                 cached_recommended.add(selected_business_card)
 
-            has_card_match = not requested_business_card_ids or bool(requested_business_card_ids.intersection(cached_recommended))
+            card_score = 0.0
+            if requested_business_card_ids:
+                if selected_business_card in requested_business_card_ids:
+                    card_score = 2.0
+                elif requested_business_card_ids.intersection(cached_recommended):
+                    card_score = 1.0
+                else:
+                    continue
+            elif preferred_business_card_ids:
+                if selected_business_card in preferred_business_card_ids:
+                    card_score = 1.0
+                elif preferred_business_card_ids.intersection(cached_recommended):
+                    card_score = 0.5
+            else:
+                card_score = 1.0
+
             has_query_match = not query_terms or any(term in haystack for term in query_terms)
+            if not has_query_match:
+                continue
 
-            if has_query_match:
-                relaxed.append(cached_item)
-            if has_card_match and has_query_match:
-                matched.append(cached_item)
+            structure_score = self._local_structure_match_score(
+                business_family_id=business_family_id,
+                cached_item=cached_item,
+                structure_constraints=structure_constraints,
+            )
+            if enforce_structure_gate and structure_score < self._local_minimum_structure_score(
+                business_family_id=business_family_id,
+                structure_constraints=structure_constraints,
+            ):
+                continue
 
-        if matched:
-            return matched[: int(payload.get("candidate_limit") or 20)]
-        if relaxed:
-            return relaxed[: max(8, min(int(payload.get("candidate_limit") or 20), 12))]
-        return []
+            quality_score = float(cached_item.get("quality_score") or 0.0)
+            ranked_matches.append(
+                (
+                    cached_item,
+                    (
+                        float(card_score),
+                        float(structure_score),
+                        int(sum(1 for term in query_terms if term in haystack)),
+                        float(quality_score),
+                    ),
+                )
+            )
+
+        ranked_matches.sort(key=lambda entry: entry[1], reverse=True)
+        return [item for item, _ in ranked_matches[: int(payload.get("candidate_limit") or 20)]]
+
+    @staticmethod
+    def _local_minimum_structure_score(*, business_family_id: str, structure_constraints: dict[str, Any]) -> float:
+        if not structure_constraints:
+            return 0.0
+        if business_family_id == "sentence_fill":
+            return 0.32 if structure_constraints.get("preserve_blank_position") else 0.20
+        if business_family_id == "sentence_order":
+            return 0.20 if structure_constraints.get("preserve_unit_count") else 0.15
+        return 0.0
+
+    def _local_structure_match_score(
+        self,
+        *,
+        business_family_id: str,
+        cached_item: dict[str, Any],
+        structure_constraints: dict[str, Any],
+    ) -> float:
+        if not structure_constraints:
+            return 0.0
+        business_feature_profile = cached_item.get("business_feature_profile") or {}
+        if business_family_id != "sentence_fill":
+            return 0.0
+        profile = business_feature_profile.get("sentence_fill_profile") or {}
+        expected_position = str(structure_constraints.get("blank_position") or "")
+        expected_function = self._canonical_sentence_fill_function_type(
+            structure_constraints.get("function_type"),
+            blank_position=expected_position,
+        )
+        actual_position = str(profile.get("blank_position") or "")
+        actual_function = self._canonical_sentence_fill_function_type(
+            profile.get("function_type"),
+            blank_position=actual_position,
+        )
+        score = 0.0
+        if expected_position:
+            if actual_position == expected_position:
+                score += 0.62
+            elif structure_constraints.get("preserve_blank_position"):
+                score += 0.08
+        if expected_function and actual_function == expected_function:
+            score += 0.30
+        return round(min(1.0, score), 4)
+
+    @staticmethod
+    def _canonical_sentence_fill_function_type(function_type: Any, *, blank_position: str = "") -> str:
+        _ = blank_position
+        return normalize_sentence_fill_function_type(function_type)
+
+    @staticmethod
+    def _cached_item_matches_front_filters(*, cached_item: dict[str, Any], payload: dict[str, Any]) -> bool:
+        article_profile = dict(cached_item.get("article_profile") or {})
+        local_profile = dict(cached_item.get("local_profile") or {})
+        text = "\n".join(
+            [
+                str(cached_item.get("text") or ""),
+                str(cached_item.get("original_text") or ""),
+                str(cached_item.get("article_title") or ""),
+                str(article_profile.get("core_object") or ""),
+                str(local_profile.get("core_object") or ""),
+            ]
+        )
+        requested_genre = str(payload.get("document_genre") or "").strip()
+        if requested_genre and str(article_profile.get("document_genre") or "").strip() != requested_genre:
+            return False
+        requested_structure = str(payload.get("material_structure_label") or "").strip()
+        candidate_structure = str(local_profile.get("discourse_shape") or article_profile.get("discourse_shape") or "").strip()
+        if requested_structure and candidate_structure != requested_structure:
+            return False
+        requested_topic = str(payload.get("topic") or "").strip()
+        if requested_topic and requested_topic not in text:
+            return False
+        requested_direction = str(payload.get("text_direction") or "").strip()
+        if requested_direction and requested_direction not in text:
+            return False
+        return True
 
     def _filter_reviewable_items(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         filtered: list[dict[str, Any]] = []
         for item in items:
             review_status = item.get("review_status")
-            if review_status is not None and review_status not in self.SERVABLE_REVIEW_STATUSES:
+            if review_status and review_status not in self.SERVABLE_REVIEW_STATUSES:
                 continue
             filtered.append(item)
         return filtered
@@ -606,6 +839,25 @@ class MaterialBridgeV2Service:
         decision_meta: dict[str, Any],
         preference_profile: dict[str, float],
     ) -> dict[str, Any]:
+        if not scoring and decision_meta.get("decision_reason") == "material_scoring_missing":
+            return {
+                "selection_state": decision_meta.get("selection_state"),
+                "review_like_risk": bool(decision_meta.get("review_like_risk")),
+                "repair_suggested": bool(decision_meta.get("repair_suggested")),
+                "decision_reason": decision_meta.get("decision_reason"),
+                "repair_reason": decision_meta.get("repair_reason"),
+                "quality_difficulty_note": None,
+                "final_candidate_score": None,
+                "readiness_score": None,
+                "total_penalty": None,
+                "difficulty_band_hint": None,
+                "difficulty_vector": {},
+                "recommended": False,
+                "needs_review": False,
+                "key_penalties": {},
+                "key_difficulty_dimensions": {},
+                "preference_profile": dict(preference_profile),
+            }
         risk_penalties = scoring.get("risk_penalties") if isinstance(scoring.get("risk_penalties"), dict) else {}
         difficulty_vector = scoring.get("difficulty_vector") if isinstance(scoring.get("difficulty_vector"), dict) else {}
         scoring_summary = decision_meta.get("scoring_summary") if isinstance(decision_meta.get("scoring_summary"), dict) else {}
@@ -878,7 +1130,7 @@ class MaterialBridgeV2Service:
         if expected_unit_count > 0 and structure_constraints.get("preserve_unit_count") and not has_explicit_question_card:
             actual_unit_count = int(sentence_order_profile.get("unit_count") or 0)
             if actual_unit_count != expected_unit_count:
-                unit_count_penalty = 0.42
+                unit_count_penalty = 0.22
                 score -= unit_count_penalty
                 reasons.append(
                     f"sentence_order_unit_count_penalty={unit_count_penalty:.2f} expected={expected_unit_count} actual={actual_unit_count}"
@@ -959,7 +1211,7 @@ class MaterialBridgeV2Service:
             if actual_blank_position == expected_blank_position:
                 bonus += 0.34
             elif structure_constraints.get("preserve_blank_position"):
-                bonus -= 0.18
+                bonus -= 0.08
 
         expected_function_type = str(structure_constraints.get("function_type") or "")
         if expected_function_type and not has_explicit_question_card:
@@ -972,8 +1224,10 @@ class MaterialBridgeV2Service:
             actual_unit_count = int(sentence_order_profile.get("unit_count") or 0)
             if actual_unit_count == expected_unit_count:
                 bonus += 0.36
+            elif abs(actual_unit_count - expected_unit_count) == 1:
+                bonus += 0.10
             elif structure_constraints.get("preserve_unit_count"):
-                bonus -= 0.80
+                bonus -= 0.24
 
         expected_logic_modes = set(structure_constraints.get("logic_modes") or [])
         if expected_logic_modes and not has_explicit_question_card:

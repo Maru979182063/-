@@ -5,22 +5,24 @@ from app.services.family_taggers.base import BaseFamilyTagger
 
 
 class ContinuationFamilyTagger(BaseFamilyTagger):
-    family_name = "灏炬缁啓鍨?"
+    family_name = "鐏忕偓顔岀紒顓炲晸閸?"
 
     def __init__(self) -> None:
         super().__init__("continuation_family_prompt.md")
 
     def score(self, span: SpanRecord, universal_profile: UniversalProfile) -> tuple[list[SubtypeCandidate], dict]:
-        llm_result = self.score_with_llm(
-            model=self.llm_config.get("models", {}).get("family_tagger", "gpt-4.1-mini"),
-            span=span,
-            universal_profile=universal_profile,
-            subtype_names=["鏂拌惤鐐瑰欢灞曞崱", "闂鏆撮湶杞绛栧崱", "鏈哄埗褰卞搷灞曞紑鍗?", "姒傚康鎻愬崌寮曢鍗?", "鎬荤粨鍚庣暀鐧藉崱", "鍒ゆ柇钀界偣琛ヨ璇佸崱", "涓杞ぇ鑳屾櫙鍗?", "骞跺垪鎷╀竴灞曞紑鍗?", "寮犲姏鍐茬獊鎵挎帴鍗?", "鏂规硶璺緞缁嗗寲鍗?"],
-        )
-        if llm_result is not None:
-            candidates, notes = llm_result
-            return sorted(candidates, key=lambda item: item.score, reverse=True)[:3], notes
-
+        subtype_names = [
+            "閺傛媽鎯ら悙鐟版鐏炴洖宕?",
+            "闂傤噣顣介弳鎾苟鏉烆剙顕粵鏍у幢",
+            "閺堝搫鍩楄ぐ鍗炴惙鐏炴洖绱戦崡?",
+            "濮掑倸搴烽幓鎰磳瀵洟顣介崡?",
+            "閹崵绮ㄩ崥搴ｆ殌閻ц棄宕?",
+            "閸掋倖鏌囬拃鐣屽仯鐞涖儴顔戠拠浣稿幢",
+            "娑擃亝顢嶆潪顒€銇囬懗灞炬珯閸?",
+            "楠炶泛鍨幏鈺€绔寸仦鏇炵磻閸?",
+            "瀵姴濮忛崘鑼崐閹垫寧甯撮崡?",
+            "閺傝纭剁捄顖氱窞缂佸棗瀵查崡?",
+        ]
         text = span.text.strip()
         tail = text[-80:]
         has_complete_tail = text.endswith(("\u3002", "\uff01", "\uff1f", "!", "?"))
@@ -39,17 +41,30 @@ class ContinuationFamilyTagger(BaseFamilyTagger):
 
         candidates: list[SubtypeCandidate] = []
         if universal_profile.continuation_openness >= 0.72 and universal_profile.direction_uniqueness >= 0.58 and has_complete_tail and has_tail_extension_signal:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="鏂拌惤鐐瑰欢灞曞崱", score=0.80))
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="閺傛媽鎯ら悙鐟版鐏炴洖宕?", score=0.80))
         if universal_profile.problem_signal_strength >= 0.7 and universal_profile.method_signal_strength >= 0.5 and has_complete_tail:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="闂鏆撮湶杞绛栧崱", score=0.82))
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="闂傤噣顣介弳鎾苟鏉烆剙顕粵鏍у幢", score=0.82))
         if universal_profile.method_signal_strength >= 0.7 and has_complete_tail and has_tail_extension_signal:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="鏂规硶璺緞缁嗗寲鍗?", score=0.79))
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="閺傝纭剁捄顖氱窞缂佸棗瀵查崡?", score=0.79))
         if universal_profile.direction_uniqueness >= 0.7 and has_complete_tail and has_tail_extension_signal:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="鍒ゆ柇钀界偣琛ヨ璇佸崱", score=0.76))
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="閸掋倖鏌囬拃鐣屽仯鐞涖儴顔戠拠浣稿幢", score=0.76))
         if universal_profile.value_judgement_strength >= 0.7 and universal_profile.summary_strength >= 0.45 and has_complete_tail and has_tail_extension_signal:
-            candidates.append(SubtypeCandidate(family=self.family_name, subtype="鎬荤粨鍚庣暀鐧藉崱", score=0.74))
-        return sorted(candidates, key=lambda item: item.score, reverse=True)[:3], {
+            candidates.append(SubtypeCandidate(family=self.family_name, subtype="閹崵绮ㄩ崥搴ｆ殌閻ц棄宕?", score=0.74))
+        heuristic_candidates = self.sort_candidates(candidates)
+        llm_result = self.maybe_score_with_llm(
+            model=self.llm_config.get("models", {}).get("family_tagger", "gpt-4.1-mini"),
+            span=span,
+            universal_profile=universal_profile,
+            subtype_names=subtype_names,
+            heuristic_candidates=heuristic_candidates,
+        )
+        if llm_result is not None:
+            return llm_result
+        return heuristic_candidates, {
             "family": self.family_name,
+            "llm_used": False,
+            "llm_gate_reason": "heuristic_path",
+            "family_runtime_context": dict(self._runtime_context),
             "has_complete_tail": has_complete_tail,
             "has_tail_extension_signal": has_tail_extension_signal,
         }

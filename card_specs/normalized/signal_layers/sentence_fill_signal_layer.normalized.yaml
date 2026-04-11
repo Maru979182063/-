@@ -19,14 +19,14 @@ signals:
   type: enum
   description: 空位在段落中的功能身份。
   allowed_values:
-  - opening_summary
+  - summary
+  - topic_intro
+  - carry_previous
+  - lead_next
   - bridge
-  - middle_explanation
-  - middle_focus_shift
-  - ending_summary
-  - ending_elevation
-  - inserted_reference
-  - comprehensive_match
+  - reference_summary
+  - countermeasure
+  - conclusion
 - signal_id: logic_relation
   type: enum
   description: 空位句与前后文之间的主要逻辑关系。
@@ -36,6 +36,7 @@ signals:
   - explanation
   - focus_shift
   - summary
+  - action
   - elevation
   - reference_match
   - multi_constraint

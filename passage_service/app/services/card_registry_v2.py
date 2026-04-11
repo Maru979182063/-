@@ -88,6 +88,13 @@ class CardRegistryV2:
         cards = self.payload["question_cards_by_family"].get(business_family_id, [])
         if not cards:
             raise KeyError(f"No question cards for family: {business_family_id}")
+        for card in cards:
+            if str(card.get("business_subtype_id") or "").strip() == business_family_id:
+                return card
+        for card in cards:
+            runtime_binding = card.get("runtime_binding") or {}
+            if str(runtime_binding.get("business_subtype") or "").strip() == business_family_id:
+                return card
         return cards[0]
 
     def get_business_cards(

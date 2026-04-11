@@ -50,6 +50,9 @@ class QuestionItem(BaseModel):
     question_type: str
     business_subtype: str | None = None
     pattern_id: str | None = None
+    generation_mode: str = "standard"
+    material_source_type: str | None = None
+    forced_generation: bool = False
     current_version_no: int = 1
     current_status: str = "draft"
     latest_action: str | None = None

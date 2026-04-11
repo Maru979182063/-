@@ -49,6 +49,12 @@ question_generation:
       require_central_meaning_alignment_template: "Correct option must remain within the passage's central meaning."
       disallow_detail_as_correct_answer_template: "A detail must not become the correct answer."
       disallow_stronger_conclusion_template: "Do not create a stronger conclusion than the passage supports."
+    main_idea:
+      source_strict_template: "Keep the correct option closely source-anchored and conservative. Do not relax into free creation."
+      meaning_preserving_template: "For center-understanding items, meaning-preserving rewriting is allowed when it stays inside the passage's supported central meaning."
+      allow_cross_sentence_abstraction_template: "You may integrate dispersed clues across the passage into one central-meaning statement."
+      allow_exam_style_rephrasing_template: "You may use concise exam-style wording instead of copying a source sentence verbatim."
+      allow_meaning_preserving_creation_template: "Reasonable creation is allowed only as a meaning-preserving restatement; do not add a new stance, causal chain, countermeasure, evaluative claim, or stronger conclusion."
     residual:
       central_meaning_alignment_template: "Correct option must remain within the central meaning already present in the original material."
       disallow_detail_or_stronger_conclusion_template: "Do not turn a detail into the correct answer, and do not create a stronger conclusion than the passage supports."

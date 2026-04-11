@@ -267,6 +267,8 @@ def main() -> None:
         results["load_replacements"] = page.locator(".replacement-select option").count() >= 2
 
         page.locator(".replacement-select").select_option(value="mat-2")
+        page.wait_for_timeout(100)
+        results["replacement_preview"] = "备选材料全文" in page.locator(".replacement-preview-slot").inner_text()
         page.locator('[data-action="apply-replacement"]').click()
         page.wait_for_timeout(200)
         results["apply_replacement"] = any(
