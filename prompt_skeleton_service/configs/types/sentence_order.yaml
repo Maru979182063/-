@@ -19,10 +19,15 @@ default_pattern_id: dual_anchor_lock
 
 formal_runtime_spec:
   primary_business_card_id: sentence_order__six_sentence_role_chain__abstract
-  sentence_count:
+  sortable_unit_count:
     mode: fixed
     value: 6
-  reject_non_six_sentence_sequences: true
+  sortable_unit_sentence_span:
+    min: 1
+    max: 2
+  sortable_unit_type: sentence_block
+  candidate_type: sentence_block_group
+  reject_non_six_unit_sequences: true
   uniqueness_model: role_chain_only
 
 difficulty_target_profiles:
@@ -48,9 +53,13 @@ skeleton:
   target_type: coherent_sequence
 
 structure_schema:
-  sentence_count:
+  sortable_unit_count:
     mode: fixed
     value: 6
+  sortable_unit_sentence_span:
+    min: 1
+    max: 2
+  sortable_unit_type: sentence_block
   sentence_roles:
     type: enum_list
     values:
@@ -99,7 +108,7 @@ legacy_slot_mapping:
   block_order_complexity: ordering_logic
 
 slot_schema:
-  sentence_count:
+  sortable_unit_count:
     type: integer
     required: false
     default: 6
@@ -107,6 +116,20 @@ slot_schema:
       - 6
     description: 排序题正式运行口径固定为6句
 
+  sortable_unit_sentence_span:
+    type: object
+    required: false
+    default:
+      min: 1
+      max: 2
+    description: 鍙帓搴忓崟鍏冩渶灏戜负1鍙ュ彞锛屾渶澶氫负2鍙ュ彞
+  sortable_unit_type:
+    type: string
+    required: false
+    default: sentence_block
+    allowed:
+      - sentence_block
+    description: 鎺掑簭鍗曞厓绫诲瀷锛屼粎鏀寔浠ュ彞瀛愪负鍩虹
   opening_anchor_type:
     type: string
     required: false
@@ -256,7 +279,12 @@ slot_schema:
     description: 正确顺序唯一性的结构来源
 
 default_slots:
-  sentence_count: 6
+  sortable_unit_count: 6
+  sortable_unit_sentence_span:
+    min: 1
+    max: 2
+  sortable_unit_type: sentence_block
+  candidate_type: sentence_block_group
   opening_anchor_type: explicit_topic
   opening_signal_strength: medium
   middle_structure_type: local_binding
@@ -268,7 +296,7 @@ default_slots:
     - wrong_opening
     - local_binding_break
     - wrong_closing
-  distractor_strength: high
+  distractor_strength: medium
   sentence_roles:
     - thesis
     - explanation
@@ -295,15 +323,16 @@ default_slots:
 
 validator_contract:
   sentence_order:
-    sentence_count:
-      mode: fixed
-      value: 6
+    sortable_unit_count: 6
+    sortable_unit_sentence_span:
+      min: 1
+      max: 2
     require_legal_head: true
     require_legal_tail: true
     require_binding_pairs_intact: true
     require_complete_ordering_chain: true
     fail_when:
-      - sentence_count_mismatch
+      - sortable_unit_count_mismatch
       - illegal_head
       - illegal_tail
       - binding_pairs_broken
@@ -618,51 +647,4 @@ patterns:
             medium: 0.62
             high: 0.80
 
-  - pattern_id: phrase_order_variant
-    pattern_name: 短语内部排序变体
-    enabled: false
-    match_rules:
-      opening_anchor_type:
-        - none
-      closing_anchor_type:
-        - none
 
-    control_logic:
-      difficulty_source: 语义常识+固定搭配+动作流程
-      option_confusion: 高
-      control_levers:
-        passage: 不使用句群首尾结构，而使用并列短语或固定表达内部次序
-        correct_option: 保持动作流程、价值顺序或语体习惯上的自然先后
-        wrong_options:
-          - 语义表面通顺但动作顺序不合逻辑
-          - 搭配习惯不自然
-          - 价值排序失衡
-      special_fields:
-        reverse_inference_key: 这类题不看首尾，而看内部短语顺序是否符合语义流程和语体习惯
-
-    generation_logic:
-      generation_core: 短语内部排序变体制作
-      processing_type: 短语逻辑顺序判断
-      correct_logic: 正确项应体现自然的动作链、搭配链或价值排序，而不是单纯语义相关
-      high_freq_traps:
-        - 语义顺序错
-        - 表达习惯错误
-        - 价值排序错误
-      distractor_pattern: 用“看似通顺但不合流程”的选项做强迷惑干扰
-      analysis_steps:
-        step1_识别核心链条: 找出动作或价值递进顺序
-        step2_比较选项内部: 对比选项内部短语顺序
-        step3_排除伪通顺: 排除表面顺但逻辑不合的表达
-
-    difficulty_rules:
-      complexity:
-        base: 0.52
-      ambiguity:
-        base: 0.68
-      reasoning_depth:
-        base: 0.58
-      distractor_similarity:
-        by_slot:
-          distractor_strength:
-            medium: 0.72
-            high: 0.86

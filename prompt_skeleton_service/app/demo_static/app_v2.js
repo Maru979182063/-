@@ -113,6 +113,7 @@ const VALUE_LABELS = {
   easy: "简单",
   medium: "中等",
   hard: "困难",
+  approve: "通过",
   main_idea: "主旨中心类",
   continuation: "接语选择题",
   sentence_order: "语句排序题",
@@ -151,11 +152,19 @@ const VALUE_LABELS = {
   ending_countermeasure: "结尾对策",
   approved: "已通过",
   pending_review: "待复核",
+  waiting_review: "待复核",
+  needs_revision: "需修订",
+  rejected: "已拒绝",
+  draft: "草稿",
   auto_failed: "自动校验未过",
   discarded: "已丢弃",
   generated: "已生成",
   generate: "生成",
   revising: "修订中",
+  success: "成功",
+  failed: "失败",
+  passed: "通过",
+  not_started: "未开始",
   recommended: "推荐保留",
   hold: "继续复核",
   weak_candidate: "弱候选",
@@ -164,6 +173,19 @@ const VALUE_LABELS = {
   question_modify: "按参数重做",
   text_modify: "替换材料重做",
   manual_edit: "手工编辑",
+  distractor_patch: "单错误项修复",
+  fine_tune: "精修调整",
+  minor_edit: "微调修改",
+  source_question: "参考母题",
+  forced_user_material: "用户自带材料",
+  user_material: "用户材料",
+  material_pool_v2: "材料池 V2",
+  review_pending: "待复核",
+  review_confirmed: "复核通过",
+  auto_tagged: "自动标注",
+  stable: "稳定池",
+  gray: "灰态池",
+  promoted: "已晋升",
   role_ambiguity_penalty: "角色歧义惩罚",
   standalone_penalty: "独立成段风险",
   overlong_penalty: "篇幅过长惩罚",
@@ -180,8 +202,8 @@ const DECISION_REASON_LABELS = {
   hard_but_currently_weak_candidate: "难度不低，但当前质量仍偏弱",
   high_readiness_high_penalty: "可用度较高，但风险惩罚偏高",
   high_risk_but_not_high_difficulty: "风险偏高，但并不是高难候选",
-  easy_but_weak_candidate: "不是 hard，只是当前质量偏弱",
-  borderline_hold_candidate: "边界候选，建议继续 review",
+  easy_but_weak_candidate: "并非高难，只是当前质量偏弱",
+  borderline_hold_candidate: "边界候选，建议继续复核",
   overall_weak_candidate: "整体偏弱，不建议包装成推荐态",
   material_scoring_missing: "当前材料缺少评分解释，先按保守态展示",
 };
@@ -195,7 +217,187 @@ const REPAIR_REASON_LABELS = {
 const QUALITY_NOTE_LABELS = {
   hard_but_currently_weak_candidate: "难度不低，但当前版本偏弱",
   difficulty_and_quality_balanced: "难度与质量大体平衡",
-  not_hard_but_currently_weak_candidate: "不是 hard，是当前质量偏弱",
+  not_hard_but_currently_weak_candidate: "并非高难，是当前质量偏弱",
+};
+
+const CHECK_NAME_LABELS = {
+  main_idea_material_scoring_available: "主旨题材料评分尚未就绪",
+  sentence_order_material_scoring_available: "排序题材料评分尚未就绪",
+  sentence_fill_material_scoring_available: "填空题材料评分尚未就绪",
+  continuation_material_scoring_available: "接语题材料评分尚未就绪",
+  center_understanding_material_scoring_available: "中心理解题材料评分尚未就绪",
+  min_final_candidate_score: "最终得分下限",
+};
+
+const PHRASE_LABELS = {
+  "llm judge overall score too low": "模型综合评分过低",
+  "llm judge material alignment too low": "材料匹配度评分过低",
+  "llm judge answer analysis consistency too low": "答案与解析一致性评分过低",
+  "difficulty projection is outside the target profile range.": "难度投射超出目标档位范围。",
+  "material scoring payload is missing, so validator could not enforce main idea scoring controls.": "材料评分载荷缺失，暂时无法执行主旨题评分约束。",
+  "material scoring payload is missing, so validator could not enforce sentence order scoring controls.": "材料评分载荷缺失，暂时无法执行排序题评分约束。",
+  "material scoring payload is missing, so validator could not enforce sentence fill scoring controls.": "材料评分载荷缺失，暂时无法执行填空题评分约束。",
+  "material scoring payload is missing, so validator could not enforce continuation scoring controls.": "材料评分载荷缺失，暂时无法执行接语题评分约束。",
+  "material scoring payload is missing, so validator could not enforce center understanding scoring controls.": "材料评分载荷缺失，暂时无法执行中心理解题评分约束。",
+};
+
+const TOKEN_LABELS = {
+  main: "主",
+  idea: "旨",
+  continuation: "接语",
+  sentence: "语句",
+  fill: "填空",
+  order: "排序",
+  center: "中心",
+  understanding: "理解",
+  title: "标题",
+  selection: "选择",
+  turning: "转折",
+  relation: "关系",
+  cause: "因果",
+  effect: "结果",
+  conclusion: "结论",
+  necessary: "必要",
+  condition: "条件",
+  countermeasure: "对策",
+  theme: "主题",
+  word: "词",
+  local: "局部",
+  paragraph: "段意",
+  plot: "情节",
+  character: "人物",
+  extension: "延展",
+  foreshadow: "伏笔",
+  recall: "呼应",
+  setting: "环境",
+  alignment: "匹配",
+  emotion: "情绪",
+  progression: "递进",
+  conflict: "冲突",
+  resolution: "解决",
+  value: "值",
+  expression: "表达",
+  head: "首",
+  tail: "尾",
+  lock: "锁定",
+  deterministic: "确定性",
+  binding: "捆绑",
+  discourse: "行文",
+  logic: "逻辑",
+  timeline: "时间线",
+  action: "动作",
+  carry: "承接",
+  parallel: "并列",
+  expand: "展开",
+  viewpoint: "观点",
+  reason: "原因",
+  problem: "问题",
+  solution: "对策",
+  case: "案例",
+  blocks: "块",
+  opening: "开头",
+  summary: "总结",
+  intro: "引入",
+  middle: "中间",
+  bridge: "衔接",
+  both: "两侧",
+  sides: "两侧",
+  ending: "结尾",
+  easy: "简单",
+  medium: "中等",
+  hard: "困难",
+  approved: "已通过",
+  pending: "待处理",
+  review: "复核",
+  auto: "自动",
+  failed: "失败",
+  discarded: "已丢弃",
+  generated: "已生成",
+  generate: "生成",
+  revising: "修订中",
+  recommended: "推荐",
+  hold: "保留待审",
+  weak: "偏弱",
+  candidate: "候选",
+  confirm: "确认",
+  discard: "丢弃",
+  distractor: "错误项",
+  patch: "修复",
+  question: "题目",
+  text: "文本",
+  modify: "修改",
+  manual: "手工",
+  fine: "精细",
+  tune: "调整",
+  minor: "微调",
+  source: "来源",
+  forced: "强制",
+  user: "用户",
+  material: "材料",
+  pool: "池",
+  tagged: "标注",
+  confirmed: "确认",
+  stable: "稳定",
+  gray: "灰态",
+  promoted: "晋升",
+  ambiguity: "歧义",
+  complexity: "复杂度",
+  reasoning: "推理",
+  depth: "深度",
+  constraint: "约束",
+  intensity: "强度",
+  final: "最终",
+  score: "得分",
+  readiness: "可用性",
+  total: "总",
+  penalty: "处罚分",
+  penalties: "处罚分",
+  difficulty: "难度",
+  band: "档位",
+  hint: "提示",
+  vector: "向量",
+  dimensions: "维度",
+  dimension: "维度",
+  validator: "校验器",
+  validation: "校验",
+  errors: "错误",
+  warnings: "警告",
+  current: "当前",
+  latest: "最新",
+  status: "状态",
+  replacement: "备选",
+  custom: "自定义",
+  distractor: "干扰项",
+  strategy: "策略",
+  mild: "偏弱",
+  strong: "偏强",
+  target: "目标",
+  adjustment: "调整",
+  scope: "范围",
+  only: "仅",
+  stem: "题干",
+  and: "与",
+  full: "整体",
+  keep: "保持",
+  correct: "正确",
+  answer: "答案",
+  fixed: "固定",
+  overall: "整体",
+  too: "过于",
+  low: "低",
+  missing: "缺失",
+  payload: "载荷",
+  available: "可用",
+  started: "开始",
+  not: "未",
+  true: "是",
+  false: "否",
+  name: "名称",
+  caution: "提示",
+  tag: "标签",
+  v2: "V2",
+  llm: "模型",
+  judge: "判定",
 };
 
 const FIELD_LABELS = {
@@ -248,18 +450,50 @@ function escapeHtml(value) {
 function humanize(value, dictionary = VALUE_LABELS) {
   const key = String(value == null ? "" : value).trim();
   if (!key) return "未提供";
-  return dictionary[key] || key;
+  if (dictionary[key]) return dictionary[key];
+  return localizeMachineValue(key);
 }
 
 function humanizeCode(value, dictionary = {}) {
   const key = String(value == null ? "" : value).trim();
   if (!key) return "未提供";
   if (dictionary[key]) return dictionary[key];
-  return key.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+  return localizeMachineValue(key);
 }
 
 function fieldLabel(key) {
-  return FIELD_LABELS[key] || humanizeCode(key);
+  return FIELD_LABELS[key] || localizeMachineValue(key, { fallback: "未识别字段" });
+}
+
+function localizeMachineValue(value, options = {}) {
+  const fallback = options.fallback || "未识别项";
+  const key = String(value == null ? "" : value).trim();
+  if (!key) return "未提供";
+  if (VALUE_LABELS[key]) return VALUE_LABELS[key];
+  if (CHECK_NAME_LABELS[key]) return CHECK_NAME_LABELS[key];
+  if (PHRASE_LABELS[key.toLowerCase()]) return PHRASE_LABELS[key.toLowerCase()];
+  if (/[\u4e00-\u9fff]/.test(key)) return key;
+
+  const normalized = key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_\-\/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const exactPhrase = PHRASE_LABELS[normalized.toLowerCase()];
+  if (exactPhrase) return exactPhrase;
+
+  const translated = normalized
+    .split(" ")
+    .map((part) => TOKEN_LABELS[part.toLowerCase()] || part.toUpperCase())
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!translated) return fallback;
+  if (/^[A-Z0-9 _-]+$/.test(translated)) return fallback;
+  if (/^[A-Za-z0-9 _-]+$/.test(translated) && !/V\d+/i.test(translated)) return fallback;
+  return translated;
 }
 
 function safeFloat(value) {
@@ -421,6 +655,15 @@ function localizeErrorMessage(message) {
   if (/question_modify cannot cross the material boundary; use text_modify instead/i.test(text)) {
     return "当前题目不能跨材料边界做参数重做，请改用“替换材料重做”。";
   }
+  if (/distractor_patch only accepts a non-answer option as target_option/i.test(text)) {
+    return "当前选中的目标是正确项，正确项已锁定，不能作为错误项修复。";
+  }
+  if (/distractor_patch did not produce a scoped change/i.test(text)) {
+    return "这次没有形成有效的错误项变更，请先调整该错误项控件或文本。";
+  }
+  if (/distractor_patch requires at least one patch input/i.test(text)) {
+    return "请至少调整迷惑方式、迷惑强度，或直接修改该错误项文本。";
+  }
   if (/Failed to call configured LLM provider/i.test(text) && /getaddrinfo failed/i.test(text)) {
     return "上游生成服务暂时不可用，当前网络解析失败，请稍后重试。";
   }
@@ -430,7 +673,59 @@ function localizeErrorMessage(message) {
   if (/Internal Server Error/i.test(text)) {
     return "服务端暂时异常，请稍后重试。";
   }
-  return text;
+  return localizeDisplayMessage(text);
+}
+
+function localizeDisplayMessage(message) {
+  const text = String(message == null ? "" : message).trim();
+  if (!text) return "未提供";
+  const lower = text.toLowerCase();
+  if (PHRASE_LABELS[lower]) return PHRASE_LABELS[lower];
+  if (/^llm_judge_.+_too_low$/i.test(text)) {
+    return localizeMachineValue(text);
+  }
+  return text
+    .split(/\n+/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return "";
+      const phraseHit = PHRASE_LABELS[trimmed.toLowerCase()];
+      if (phraseHit) return phraseHit;
+      if (/^[A-Za-z0-9_\-./ ]+$/.test(trimmed)) {
+        return localizeMachineValue(trimmed, { fallback: "未识别提示" });
+      }
+      return trimmed
+        .replace(/main_idea/gi, "主旨题")
+        .replace(/sentence_order/gi, "排序题")
+        .replace(/sentence_fill/gi, "填空题")
+        .replace(/center_understanding/gi, "中心理解题")
+        .replace(/continuation/gi, "接语题")
+        .replace(/difficulty projection/gi, "难度投射")
+        .replace(/target profile range/gi, "目标档位范围")
+        .replace(/validator/gi, "校验器")
+        .replace(/review/gi, "复核")
+        .replace(/score/gi, "得分")
+        .replace(/material/gi, "材料")
+        .replace(/alignment/gi, "匹配度")
+        .replace(/consistency/gi, "一致性");
+    })
+    .join("\n");
+}
+
+function localizeCheckDetailLabel(key) {
+  return {
+    actual: "实际值",
+    threshold: "阈值",
+    allowed: "允许范围",
+    band: "难度档位",
+  }[key] || localizeMachineValue(key, { fallback: "说明" });
+}
+
+function formatCheckDetailValue(value) {
+  if (typeof value === "boolean") return value ? "是" : "否";
+  if (typeof value === "string") return localizeDisplayMessage(value);
+  const serialized = JSON.stringify(value);
+  return String(serialized == null ? value : serialized).replace(/\btrue\b/g, "是").replace(/\bfalse\b/g, "否");
 }
 
 function syncCountValue() {
@@ -975,11 +1270,19 @@ function renderExplainList(feedback, item) {
         <strong>规则侧失败项</strong><br />
         ${failedChecks
           .map((entry) => {
-            const parts = [humanizeCode(entry.name)];
-            if (entry.actual != null) parts.push(`actual=${JSON.stringify(entry.actual)}`);
-            if (entry.threshold != null) parts.push(`threshold=${JSON.stringify(entry.threshold)}`);
-            if (entry.allowedRange != null) parts.push(`allowed=${JSON.stringify(entry.allowedRange)}`);
-            if (entry.difficultyBand != null) parts.push(`band=${entry.difficultyBand}`);
+            const parts = [humanizeCode(entry.name, CHECK_NAME_LABELS)];
+            if (entry.actual != null) {
+              parts.push(`${localizeCheckDetailLabel("actual")}=${formatCheckDetailValue(entry.actual)}`);
+            }
+            if (entry.threshold != null) {
+              parts.push(`${localizeCheckDetailLabel("threshold")}=${formatCheckDetailValue(entry.threshold)}`);
+            }
+            if (entry.allowedRange != null) {
+              parts.push(`${localizeCheckDetailLabel("allowed")}=${formatCheckDetailValue(entry.allowedRange)}`);
+            }
+            if (entry.difficultyBand != null) {
+              parts.push(`${localizeCheckDetailLabel("band")}=${localizeDisplayMessage(entry.difficultyBand)}`);
+            }
             return escapeHtml(parts.join(" | "));
           })
           .join("<br />")}
@@ -990,7 +1293,7 @@ function renderExplainList(feedback, item) {
     items.push(`
       <li>
         <strong>${escapeHtml(fieldLabel("validator_errors"))}</strong><br />
-        ${validationErrors.map((entry) => escapeHtml(entry)).join("<br />")}
+        ${validationErrors.map((entry) => escapeHtml(localizeDisplayMessage(entry))).join("<br />")}
       </li>
     `);
   }
@@ -998,7 +1301,7 @@ function renderExplainList(feedback, item) {
     items.push(`
       <li>
         <strong>${escapeHtml(fieldLabel("validator_warnings"))}</strong><br />
-        ${validationWarnings.map((entry) => escapeHtml(entry)).join("<br />")}
+        ${validationWarnings.map((entry) => escapeHtml(localizeDisplayMessage(entry))).join("<br />")}
       </li>
     `);
   }
@@ -1010,31 +1313,23 @@ function renderExplainList(feedback, item) {
   return `<ul class="explain-list">${items.join("")}</ul>`;
 }
 
-const REVIEW_TUNING_FIELDS = [
-  {
-    key: "review_distractor_strategy",
-    label: "错误选项方式",
-    help: "指定错误项偏差方向，便于按不满意的错法重做。",
-    options: [
-      ["", "不调整"],
-      ["partial_scope", "以偏概全"],
-      ["detail_trap", "细节设陷"],
-      ["concept_swap", "偷换概念"],
-      ["stronger_conclusion", "结论过强"],
-      ["causal_reversal", "因果倒置"],
-    ],
-  },
-  {
-    key: "review_distractor_intensity",
-    label: "错误项强度",
-    help: "控制干扰项迷惑性，越强越接近正确项。",
-    options: [
-      ["", "不调整"],
-      ["mild", "偏弱"],
-      ["medium", "中等"],
-      ["strong", "偏强"],
-    ],
-  },
+const DISTRACTOR_STRATEGY_OPTIONS = [
+  ["", "不调整"],
+  ["partial_scope", "以偏概全"],
+  ["detail_trap", "细节设陷"],
+  ["concept_swap", "偷换概念"],
+  ["stronger_conclusion", "结论过强"],
+  ["causal_reversal", "因果倒置"],
+];
+
+const DISTRACTOR_INTENSITY_OPTIONS = [
+  ["", "不调整"],
+  ["mild", "偏弱"],
+  ["medium", "中等"],
+  ["strong", "偏强"],
+];
+
+const QUESTION_MODIFY_TUNING_FIELDS = [
   {
     key: "review_difficulty_target",
     label: "目标难度",
@@ -1069,10 +1364,10 @@ const REVIEW_TUNING_FIELDS = [
   },
 ];
 
-function renderReviewTuningControls(item) {
+function renderQuestionModifyTuningControls(item) {
   const itemId = item.item_id;
   const defaults = item?.request_snapshot?.extra_constraints || {};
-  const fields = REVIEW_TUNING_FIELDS.map((field) => {
+  const fields = QUESTION_MODIFY_TUNING_FIELDS.map((field) => {
     const rawValue = defaults[field.key];
     const selectedValue = rawValue == null ? "" : String(rawValue);
     const options = field.options
@@ -1096,6 +1391,15 @@ function renderReviewTuningControls(item) {
     <div class="inline-feedback">审核调优：只影响“按参数重做”这次生成，不改材料来源。</div>
     <div class="builder-stack">${fields}</div>
   `;
+}
+
+function renderDistractorPatchOptions(optionPairs, selectedValue = "") {
+  return optionPairs
+    .map(([value, label]) => {
+      const selected = value === selectedValue ? " selected" : "";
+      return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
 }
 
 function renderQuestionModifySection(item) {
@@ -1157,7 +1461,72 @@ function renderQuestionModifyPanel(item) {
     }
   }
 
-  return `${dynamicSection}${renderReviewTuningControls(item)}`;
+  return `${dynamicSection}${renderQuestionModifyTuningControls(item)}`;
+}
+
+function renderDistractorPatchPanel(item) {
+  const generated = item?.generated_question || {};
+  const answer = String(generated.answer || "").trim().toUpperCase();
+  const analysisText = cleanDisplayText(generated.analysis || "");
+  const options = generated.options || {};
+  const discarded = item.current_status === "discarded";
+
+  return ["A", "B", "C", "D"]
+    .map((letter) => {
+      const optionText = cleanDisplayText(options[letter] || "");
+      if (letter === answer) {
+        return `
+          <div class="material-box">
+            <div class="section-title">选项 ${letter}</div>
+            <div class="inline-feedback">正确项，已锁定，不提供迷惑方式或迷惑强度编辑入口。</div>
+            <pre class="compact-pre">${escapeHtml(optionText || "未提供")}</pre>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="material-box">
+          <div class="section-title">错误项 ${letter}</div>
+          <div class="inline-feedback">这次只会作用于选项 ${letter} 和解析，其它选项、题干、材料与答案保持锁定。</div>
+          <label class="field-compact">
+            <span>错误项文案</span>
+            <textarea class="distractor-option-text" data-item-id="${item.item_id}" data-target-option="${letter}" rows="2" ${
+              discarded ? "disabled" : ""
+            }>${escapeHtml(optionText)}</textarea>
+          </label>
+          <div class="builder-grid">
+            <label class="field-compact">
+              <span>迷惑方式</span>
+              <select class="distractor-strategy-input" data-item-id="${item.item_id}" data-target-option="${letter}" ${
+                discarded ? "disabled" : ""
+              }>
+                ${renderDistractorPatchOptions(DISTRACTOR_STRATEGY_OPTIONS)}
+              </select>
+            </label>
+            <label class="field-compact">
+              <span>迷惑强度</span>
+              <select class="distractor-intensity-input" data-item-id="${item.item_id}" data-target-option="${letter}" ${
+                discarded ? "disabled" : ""
+              }>
+                ${renderDistractorPatchOptions(DISTRACTOR_INTENSITY_OPTIONS)}
+              </select>
+            </label>
+          </div>
+          <label class="field-compact">
+            <span>解析联动</span>
+            <textarea class="distractor-analysis" data-item-id="${item.item_id}" data-target-option="${letter}" rows="4" ${
+              discarded ? "disabled" : ""
+            }>${escapeHtml(analysisText)}</textarea>
+          </label>
+          <div class="action-row">
+            <button type="button" class="secondary-btn" data-action="apply-distractor-patch" data-item-id="${item.item_id}" data-target-option="${letter}" ${
+              discarded ? "disabled" : ""
+            }>应用到错误项 ${letter}</button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function renderReplacementOptions(itemId) {
@@ -1176,7 +1545,7 @@ function renderReplacementOptions(itemId) {
         .join(" / ");
       const materialId = String(entry.material_id || "").trim();
       const selected = materialId && materialId === selectedMaterialId ? " selected" : "";
-      return `<option value="${escapeHtml(materialId)}"${selected}>${escapeHtml(label || entry.material_id)}</option>`;
+      return `<option value="${escapeHtml(materialId)}"${selected}>${escapeHtml(label || "备选材料")}</option>`;
     }),
   ].join("");
 }
@@ -1320,6 +1689,13 @@ function buildQuestionCard(item, index) {
       </details>
 
       <details class="result-collapse" style="margin-top: 16px;">
+        <summary>错误项定点修复</summary>
+        <div class="collapse-body support-box">
+          ${renderDistractorPatchPanel(item)}
+        </div>
+      </details>
+
+      <details class="result-collapse" style="margin-top: 16px;">
         <summary>材料重做</summary>
         <div class="collapse-body support-box">
           <div class="action-row">
@@ -1338,7 +1714,7 @@ function buildQuestionCard(item, index) {
             <span>自贴材料</span>
             <textarea class="custom-material-input" data-item-id="${item.item_id}" rows="4" ${
               discarded ? "disabled" : ""
-            } placeholder="可直接粘贴一段替换材料，再执行 text_modify。"></textarea>
+            } placeholder="可直接粘贴一段替换材料，再执行材料重做。"></textarea>
           </label>
           <div class="action-row">
             <button type="button" class="secondary-btn" data-action="apply-custom-material" data-item-id="${item.item_id}" ${
@@ -1519,6 +1895,47 @@ function collectQuestionModifyOverrides(itemId) {
   return overrides;
 }
 
+function collectDistractorPatchPayload(itemId, targetOption) {
+  const card = getCard(itemId);
+  const item = state.items.find((entry) => entry.item_id === itemId);
+  const generated = item?.generated_question || {};
+  const normalizedTargetOption = String(targetOption || "").trim().toUpperCase();
+  const answer = String(generated.answer || "").trim().toUpperCase();
+  if (!card || !normalizedTargetOption) return null;
+  if (normalizedTargetOption === answer) return null;
+
+  const currentOptionText = cleanDisplayText(generated.options?.[normalizedTargetOption] || "");
+  const currentAnalysis = cleanDisplayText(generated.analysis || "");
+  const optionText =
+    card.querySelector(`.distractor-option-text[data-item-id="${itemId}"][data-target-option="${normalizedTargetOption}"]`)
+      ?.value.trim() || "";
+  const analysis =
+    card.querySelector(`.distractor-analysis[data-item-id="${itemId}"][data-target-option="${normalizedTargetOption}"]`)
+      ?.value.trim() || "";
+  const distractorStrategy =
+    card.querySelector(`.distractor-strategy-input[data-item-id="${itemId}"][data-target-option="${normalizedTargetOption}"]`)
+      ?.value.trim() || "";
+  const distractorIntensity =
+    card.querySelector(`.distractor-intensity-input[data-item-id="${itemId}"][data-target-option="${normalizedTargetOption}"]`)
+      ?.value.trim() || "";
+
+  const hasManualChange = optionText !== currentOptionText || analysis !== currentAnalysis;
+  if (!hasManualChange && !distractorStrategy && !distractorIntensity) {
+    return null;
+  }
+
+  const payload = {
+    action: "distractor_patch",
+    target_option: normalizedTargetOption,
+    option_text: optionText || currentOptionText,
+    analysis: analysis || currentAnalysis,
+    operator: "demo",
+  };
+  if (distractorStrategy) payload.distractor_strategy = distractorStrategy;
+  if (distractorIntensity) payload.distractor_intensity = distractorIntensity;
+  return payload;
+}
+
 function upsertItem(nextItem) {
   state.items = state.items.map((current) => (current.item_id === nextItem.item_id ? nextItem : current));
 }
@@ -1636,6 +2053,26 @@ async function handleResultAction(event) {
       renderResults();
       void loadControlsForItem(itemId);
       showToast("参数重做已提交");
+      return;
+    }
+
+    if (action === "apply-distractor-patch") {
+      const targetOption = String(button.dataset.targetOption || "").trim().toUpperCase();
+      const payload = collectDistractorPatchPayload(itemId, targetOption);
+      if (!payload) {
+        showToast("请先调整该错误项的迷惑方式、迷惑强度或文本后再提交", "info");
+        return;
+      }
+
+      setButtonBusy(button, true, "应用中...");
+      const result = await apiFetch(`/api/v1/questions/${itemId}/review-actions`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      upsertItem(result.item);
+      renderResults();
+      void loadControlsForItem(itemId);
+      showToast(`错误项 ${targetOption} 已提交定点修复`);
       return;
     }
 

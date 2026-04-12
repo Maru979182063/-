@@ -19,9 +19,9 @@ feature_signature:
   sentence_order_scoring_mode: six_sentence_role_chain
   relation_focus: 六句固定前提下，先判首句、再判尾句、再判角色链、最后校验绑定不被破坏
   typical_formats:
-    - 将以上6个句子重新排列，语序正确的是……
+      - 将以上6个部分重新排列，语序正确的是……
   business_axes:
-    - sentence_count
+    - sortable_unit_count
     - sentence_roles
     - head_constraints
     - tail_constraints
@@ -41,8 +41,11 @@ feature_signature:
   extraction_hints:
     require_explicit_marker: false
     require_complete_meaning: true
-    min_sentence_count: 6
-    max_sentence_count: 6
+    min_sortable_unit_count: 6
+    max_sortable_unit_count: 6
+    sortable_unit_sentence_span:
+      min: 1
+      max: 2
     preferred_paragraph_window:
       - 1
 
@@ -50,9 +53,13 @@ schema_alignment:
   schema_status: primary_aligned_v2
   canonical_card_type: sentence_order
   structure_schema:
-    sentence_count:
+    sortable_unit_count:
       mode: fixed
       value: 6
+    sortable_unit_sentence_span:
+      min: 1
+      max: 2
+    sortable_unit_type: sentence_block
     sentence_roles:
       preferred:
         - thesis
@@ -95,7 +102,7 @@ retrieval_profile:
   hard_filters:
     require_complete_unit: true
     require_sentence_block_group: true
-    fixed_sentence_count: 6
+    fixed_sortable_unit_count: 6
   soft_filters:
     preferred_document_genres:
       - 科普文
@@ -129,7 +136,11 @@ slot_projection:
     - viewpoint_reason_action
     - problem_solution_case_blocks
   type_slots:
-    sentence_count: 6
+    sortable_unit_count: 6
+    sortable_unit_sentence_span:
+      min: 1
+      max: 2
+    sortable_unit_type: sentence_block
     opening_anchor_type: explicit_topic
     opening_signal_strength: high
     middle_structure_type: local_binding

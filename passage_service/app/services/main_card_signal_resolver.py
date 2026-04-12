@@ -6,6 +6,11 @@ from typing import Any
 from app.core.config import get_config_bundle
 from app.infra.llm.base import BaseLLMProvider
 from app.services.llm_runtime import get_llm_provider
+from app.services.sentence_fill_protocol import (
+    normalize_sentence_fill_blank_position,
+    normalize_sentence_fill_function_type,
+    normalize_sentence_fill_logic_relation,
+)
 
 
 class _SafeDict(dict):
@@ -207,21 +212,37 @@ class MainCardSignalResolver:
         if business_family_id == "sentence_fill":
             return {
                 "sentence_fill_profile": {
-                    key: payload.get(key)
-                    for key in (
-                        "blank_position",
-                        "function_type",
-                        "slot_role",
-                        "slot_function",
-                        "explicit_slot_ready",
-                        "logic_relation",
-                        "backward_link_strength",
-                        "forward_link_strength",
-                        "bidirectional_validation",
-                        "reference_dependency",
-                        "countermeasure_signal_strength",
-                    )
-                    if key in payload and payload.get(key) is not None
+                    **(
+                        {"blank_position": normalize_sentence_fill_blank_position(payload.get("blank_position"))}
+                        if payload.get("blank_position") is not None
+                        else {}
+                    ),
+                    **(
+                        {"function_type": normalize_sentence_fill_function_type(payload.get("function_type"))}
+                        if payload.get("function_type") is not None
+                        else {}
+                    ),
+                    **(
+                        {"logic_relation": normalize_sentence_fill_logic_relation(payload.get("logic_relation"))}
+                        if payload.get("logic_relation") is not None
+                        else {}
+                    ),
+                    **(
+                        {"explicit_slot_ready": payload.get("slot_explicit_ready")}
+                        if payload.get("slot_explicit_ready") is not None
+                        else {}
+                    ),
+                    **{
+                        key: payload.get(key)
+                        for key in (
+                            "backward_link_strength",
+                            "forward_link_strength",
+                            "bidirectional_validation",
+                            "reference_dependency",
+                            "countermeasure_signal_strength",
+                        )
+                        if key in payload and payload.get(key) is not None
+                    },
                 }
             }
         if business_family_id == "sentence_order":
@@ -345,7 +366,7 @@ class MainCardSignalResolver:
         if business_family_id == "center_understanding":
             return ()
         if business_family_id == "sentence_fill":
-            return ("blank_position", "slot_role", "slot_function")
+            return ("blank_position", "function_type", "logic_relation")
         if business_family_id == "sentence_order":
             return ("opening_rule", "closing_rule")
         return ()
@@ -370,9 +391,8 @@ class MainCardSignalResolver:
             )
         if business_family_id == "sentence_fill":
             return (
-                "slot_role",
-                "slot_function",
                 "blank_position",
+                "function_type",
                 "bidirectional_validation",
                 "backward_link_strength",
                 "forward_link_strength",
@@ -454,11 +474,9 @@ class MainCardSignalResolver:
             return {
                 "type": "object",
                 "properties": {
-                    "slot_role": {"type": "string", "enum": ["opening", "middle", "ending"]},
-                    "slot_function": {"type": "string", "enum": ["summary", "topic_intro", "carry_previous", "lead_next", "bridge_both_sides", "ending_summary", "countermeasure"]},
-                    "blank_position": {"type": "string", "enum": ["opening", "middle", "ending"]},
-                    "function_type": {"type": "string", "enum": ["summarize_following_text", "topic_introduction", "carry_previous", "lead_next", "bridge_both_sides", "propose_countermeasure", "summarize_previous_text"]},
-                    "logic_relation": {"type": "string"},
+                    "blank_position": {"type": "string", "enum": ["opening", "middle", "ending", "inserted", "mixed"]},
+                    "function_type": {"type": "string", "enum": ["summary", "topic_intro", "carry_previous", "lead_next", "bridge", "reference_summary", "countermeasure", "conclusion"]},
+                    "logic_relation": {"type": "string", "enum": ["continuation", "transition", "explanation", "focus_shift", "summary", "action", "elevation", "reference_match", "multi_constraint"]},
                     "bidirectional_validation": {"type": "number"},
                     "backward_link_strength": {"type": "number"},
                     "forward_link_strength": {"type": "number"},
@@ -469,8 +487,6 @@ class MainCardSignalResolver:
                     "reason": {"type": "string"},
                 },
                 "required": [
-                    "slot_role",
-                    "slot_function",
                     "blank_position",
                     "function_type",
                     "logic_relation",

@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from app.core.exceptions import DomainError
 from app.schemas.question import QuestionReviewActionRequest
+from app.services.patch_scope_registry import resolve_action_scope
 from app.services.question_generation import QuestionGenerationService
 from app.services.question_repository import QuestionRepository
 
@@ -32,6 +33,32 @@ class QuestionReviewService:
     TEXT_MODIFY_ALLOWED_INPUT_FIELDS = {"material_id", "material_policy", "material_text"}
     MANUAL_EDIT_ALLOWED_INPUT_FIELDS = {"manual_patch"}
     MANUAL_EDIT_ALLOWED_PATCH_FIELDS = {"analysis", "answer", "material_text", "options", "stem"}
+    DISTRACTOR_PATCH_ALLOWED_INPUT_FIELDS = {
+        "analysis",
+        "distractor_intensity",
+        "distractor_strategy",
+        "option_text",
+        "target_option",
+    }
+    DISTRACTOR_PATCH_ALLOWED_CHANGED_FIELDS = {"analysis", "options"}
+    DISTRACTOR_PATCH_LOCKED_TRACKED_FIELDS = {
+        "answer",
+        "business_subtype",
+        "control_logic",
+        "correct_order",
+        "difficulty_target",
+        "generation_logic",
+        "material_id",
+        "material_selection",
+        "material_source",
+        "material_text",
+        "original_sentences",
+        "pattern_id",
+        "question_type",
+        "resolved_slots",
+        "source_tail",
+        "stem",
+    }
     OPTION_PATCH_FIELDS = {"A", "B", "C", "D"}
     INTERNAL_EXTRA_CONSTRAINT_FIELDS = {
         "reference_business_cards",
@@ -132,7 +159,7 @@ class QuestionReviewService:
     ) -> dict[str, Any]:
         result_status = str(action_result.get("current_status") or "")
         review_status = str((action_result.get("statuses") or {}).get("review_status") or "")
-        repair_actions = {"minor_edit", "question_modify", "text_modify", "manual_edit"}
+        repair_actions = {"minor_edit", "question_modify", "text_modify", "manual_edit", "distractor_patch"}
         repair_path_taken = effective_action in repair_actions
         accepted_as_is = effective_action in {"approve", "confirm"} and result_status == "approved"
         revised_then_kept = repair_path_taken and result_status in {"pending_review", "approved", "generated"}
@@ -239,11 +266,7 @@ class QuestionReviewService:
         requested_action = self._requested_action(request)
         prior_action_context = self._get_latest_action_context(item_id)
         policy = self._build_action_policy(request)
-        self._validate_action_payload_against_item(
-            item=item,
-            action=request.action,
-            control_overrides=request.control_overrides or {},
-        )
+        self._validate_action_payload_against_item(item=item, request=request)
         approval_context = (
             self._build_approval_context(item, prior_action_context)
             if request.action in {"approve", "confirm"}
@@ -273,6 +296,13 @@ class QuestionReviewService:
             effective_action=preliminary_effective_action,
             diagnostics=diagnostics,
         )
+        if preliminary_effective_action == "distractor_patch":
+            self._enforce_distractor_patch_scope(
+                before_item=original_item,
+                after_item=action_result,
+                request=request,
+                diagnostics=diagnostics,
+            )
         statuses = action_result.get("statuses", {})
         to_status = statuses.get("review_status", from_status)
         to_version_no = int(action_result.get("current_version_no", from_version_no))
@@ -299,6 +329,7 @@ class QuestionReviewService:
             "preliminary_effective_action": preliminary_effective_action,
             "effective_action": diagnostics["effective_action"],
             "semantic_class": diagnostics["semantic_class"],
+            "scope_kind": policy.get("scope_kind"),
             "changed_fields": diagnostics["changed_fields"],
             "truth_touched": diagnostics["truth_touched"],
             "material_boundary_crossed": diagnostics["material_boundary_crossed"],
@@ -311,6 +342,13 @@ class QuestionReviewService:
             "patch": {
                 "instruction": request.instruction,
                 "control_overrides": request.control_overrides,
+                "target_option": request.target_option,
+                "distractor_strategy": request.distractor_strategy,
+                "distractor_intensity": request.distractor_intensity,
+                "option_text": request.option_text,
+                "analysis": request.analysis,
+                "scope_name": policy.get("scope_name"),
+                "scope_kind": policy.get("scope_kind"),
                 "input_fields": policy["input_fields"],
                 "allowed_input_fields": policy["allowed_input_fields"],
                 "forbidden_input_fields": policy["forbidden_input_fields"],
@@ -338,6 +376,7 @@ class QuestionReviewService:
                 "preliminary_effective_action": preliminary_effective_action,
                 "effective_action": diagnostics["effective_action"],
                 "semantic_class": diagnostics["semantic_class"],
+                "scope_kind": policy.get("scope_kind"),
                 "changed_fields": diagnostics["changed_fields"],
                 "truth_touched": diagnostics["truth_touched"],
                 "material_boundary_crossed": diagnostics["material_boundary_crossed"],
@@ -388,6 +427,7 @@ class QuestionReviewService:
             return {
                 "effective_action": action,
                 "semantic_class": "review_decision",
+                "scope_kind": "state_only",
                 "trust_level": "high",
                 "input_fields": input_fields,
                 "allowed_input_fields": [],
@@ -414,6 +454,7 @@ class QuestionReviewService:
             return {
                 "effective_action": "minor_edit",
                 "semantic_class": "targeted_repair",
+                "scope_kind": "non_patch",
                 "trust_level": "high",
                 "input_fields": input_fields,
                 "allowed_input_fields": sorted(self.MINOR_EDIT_ALLOWED_INPUT_FIELDS),
@@ -431,6 +472,7 @@ class QuestionReviewService:
             return {
                 "effective_action": "question_modify",
                 "semantic_class": "control_regenerate",
+                "scope_kind": "rebuild",
                 "trust_level": "medium",
                 "input_fields": input_fields,
                 "allowed_input_fields": sorted(self.QUESTION_MODIFY_ALLOWED_INPUT_FIELDS),
@@ -448,6 +490,7 @@ class QuestionReviewService:
             return {
                 "effective_action": "text_modify",
                 "semantic_class": "material_regenerate",
+                "scope_kind": "rebuild",
                 "trust_level": "medium",
                 "input_fields": input_fields,
                 "allowed_input_fields": sorted(self.TEXT_MODIFY_ALLOWED_INPUT_FIELDS),
@@ -476,10 +519,42 @@ class QuestionReviewService:
             return {
                 "effective_action": "manual_edit",
                 "semantic_class": "manual_override_material" if material_patch else "manual_override",
+                "scope_kind": "non_patch",
                 "trust_level": "low" if material_patch else "medium",
                 "input_fields": input_fields,
                 "allowed_input_fields": sorted(self.MANUAL_EDIT_ALLOWED_PATCH_FIELDS),
                 "forbidden_input_fields": sorted(self.UNIVERSAL_FORBIDDEN_INPUT_FIELDS),
+                "upgrade_reason": None,
+            }
+
+        if action == "distractor_patch":
+            scope = resolve_action_scope(action)
+            if request.instruction:
+                raise DomainError(
+                    "distractor_patch does not accept free-form instruction.",
+                    status_code=422,
+                    details={"action": action, "forbidden_input_fields": ["instruction"]},
+                )
+            if control_overrides:
+                raise DomainError(
+                    "distractor_patch only accepts target_option, distractor_strategy, distractor_intensity, option_text, and analysis.",
+                    status_code=422,
+                    details={
+                        "action": action,
+                        "allowed_input_fields": sorted(self.DISTRACTOR_PATCH_ALLOWED_INPUT_FIELDS),
+                        "forbidden_input_fields": input_fields,
+                    },
+                )
+            distractor_input_fields = self._collect_distractor_patch_input_fields(request)
+            return {
+                "effective_action": "distractor_patch",
+                "semantic_class": "targeted_repair",
+                "scope_kind": "patch",
+                "trust_level": "high",
+                "input_fields": distractor_input_fields,
+                "allowed_input_fields": sorted(self.DISTRACTOR_PATCH_ALLOWED_INPUT_FIELDS),
+                "forbidden_input_fields": [],
+                "scope_name": scope.name if scope else None,
                 "upgrade_reason": None,
             }
 
@@ -557,6 +632,16 @@ class QuestionReviewService:
                 final_semantic_class = "manual_override"
                 final_trust_level = "medium"
                 final_audit_reason = "manual_edit_result_within_render_scope"
+        elif preliminary_effective_action == "distractor_patch":
+            final_audit_reason = (
+                "distractor_patch_result_crossed_material_boundary"
+                if material_boundary_crossed
+                else (
+                    "distractor_patch_result_touched_truth_like_fields"
+                    if truth_touched
+                    else "distractor_patch_result_within_scope"
+                )
+            )
         else:
             final_audit_reason = final_audit_reason or "result_audit_not_required"
 
@@ -610,13 +695,28 @@ class QuestionReviewService:
                     fields.extend(f"manual_patch.options.{sub_key}" for sub_key in sorted(option_patch.keys()))
         return fields
 
+    def _collect_distractor_patch_input_fields(self, request: QuestionReviewActionRequest) -> list[str]:
+        fields: list[str] = []
+        if request.target_option is not None:
+            fields.append("target_option")
+        if request.distractor_strategy is not None:
+            fields.append("distractor_strategy")
+        if request.distractor_intensity is not None:
+            fields.append("distractor_intensity")
+        if request.option_text is not None:
+            fields.append("option_text")
+        if request.analysis is not None:
+            fields.append("analysis")
+        return fields
+
     def _validate_action_payload_against_item(
         self,
         *,
         item: dict[str, Any],
-        action: str,
-        control_overrides: dict[str, Any],
+        request: QuestionReviewActionRequest,
     ) -> None:
+        action = request.action
+        control_overrides = request.control_overrides or {}
         request_snapshot = item.get("request_snapshot") or {}
         if action == "question_modify":
             allowed_extra_constraint_keys = {
@@ -666,6 +766,43 @@ class QuestionReviewService:
                         "action": action,
                         "field": "manual_patch.options",
                         "disallowed_input_fields": [f"manual_patch.options.{key}" for key in unknown_option_keys],
+                    },
+                )
+            return
+        if action == "distractor_patch":
+            target_option = str(request.target_option or "").strip().upper()
+            option_text = str(request.option_text or "").strip()
+            analysis = str(request.analysis or "").strip()
+            distractor_strategy = str(request.distractor_strategy or "").strip()
+            distractor_intensity = str(request.distractor_intensity or "").strip()
+            if target_option not in self.OPTION_PATCH_FIELDS:
+                raise DomainError(
+                    "distractor_patch requires target_option to be one of A/B/C/D.",
+                    status_code=422,
+                    details={"action": action, "field": "target_option", "target_option": request.target_option},
+                )
+            generated_question = item.get("generated_question") or {}
+            answer = str(generated_question.get("answer") or "").strip().upper()
+            options = generated_question.get("options") or {}
+            if target_option == answer:
+                raise DomainError(
+                    "distractor_patch only accepts a non-answer option as target_option.",
+                    status_code=422,
+                    details={"action": action, "target_option": target_option, "answer": answer},
+                )
+            if target_option not in options:
+                raise DomainError(
+                    "distractor_patch target_option does not exist on this item.",
+                    status_code=422,
+                    details={"action": action, "target_option": target_option},
+                )
+            if not any([option_text, analysis, distractor_strategy, distractor_intensity]):
+                raise DomainError(
+                    "distractor_patch requires at least one patch input.",
+                    status_code=422,
+                    details={
+                        "action": action,
+                        "allowed_input_fields": sorted(self.DISTRACTOR_PATCH_ALLOWED_INPUT_FIELDS),
                     },
                 )
 
@@ -718,6 +855,136 @@ class QuestionReviewService:
                 status_code=422,
                 details=diagnostics,
             )
+
+    def _enforce_distractor_patch_scope(
+        self,
+        *,
+        before_item: dict[str, Any],
+        after_item: dict[str, Any],
+        request: QuestionReviewActionRequest,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        changed_fields = set(diagnostics.get("changed_fields") or [])
+        extra_changed_fields = changed_fields - self.DISTRACTOR_PATCH_ALLOWED_CHANGED_FIELDS
+        if extra_changed_fields:
+            raise DomainError(
+                "distractor_patch changed fields outside options/analysis scope.",
+                status_code=422,
+                details={**diagnostics, "disallowed_changed_fields": sorted(extra_changed_fields)},
+            )
+        if diagnostics.get("truth_touched"):
+            raise DomainError(
+                "distractor_patch cannot modify answer truth or truth-like fields.",
+                status_code=422,
+                details=diagnostics,
+            )
+        if diagnostics.get("material_boundary_crossed"):
+            raise DomainError(
+                "distractor_patch cannot cross the material boundary.",
+                status_code=422,
+                details=diagnostics,
+            )
+
+        before_values = self._extract_tracked_values(before_item)
+        after_values = self._extract_tracked_values(after_item)
+        locked_field_drift = sorted(
+            field_name
+            for field_name in self.DISTRACTOR_PATCH_LOCKED_TRACKED_FIELDS
+            if before_values.get(field_name) != after_values.get(field_name)
+        )
+        if locked_field_drift:
+            raise DomainError(
+                "distractor_patch changed locked fields.",
+                status_code=422,
+                details={**diagnostics, "locked_field_drift": locked_field_drift},
+            )
+
+        target_option = str(request.target_option or "").strip().upper()
+        before_question = before_item.get("generated_question") or {}
+        after_question = after_item.get("generated_question") or {}
+        before_options = before_question.get("options") or {}
+        after_options = after_question.get("options") or {}
+        changed_option_letters = sorted(
+            letter
+            for letter in self.OPTION_PATCH_FIELDS
+            if str(before_options.get(letter) or "").strip() != str(after_options.get(letter) or "").strip()
+        )
+        if changed_option_letters != [target_option]:
+            raise DomainError(
+                "distractor_patch may only change the target option text.",
+                status_code=422,
+                details={**diagnostics, "target_option": target_option, "changed_option_letters": changed_option_letters},
+            )
+        if str(before_question.get("answer") or "").strip().upper() != str(after_question.get("answer") or "").strip().upper():
+            raise DomainError(
+                "distractor_patch cannot change answer.",
+                status_code=422,
+                details=diagnostics,
+            )
+        if self._correct_option_text(before_item) != self._correct_option_text(after_item):
+            raise DomainError(
+                "distractor_patch cannot change the correct option text.",
+                status_code=422,
+                details=diagnostics,
+            )
+
+        validation_result = after_item.get("validation_result") or {}
+        evaluation_result = after_item.get("evaluation_result")
+        if not validation_result or evaluation_result is None:
+            raise DomainError(
+                "distractor_patch must rerun validator and evaluator.",
+                status_code=422,
+                details={
+                    **diagnostics,
+                    "has_validation_result": bool(validation_result),
+                    "has_evaluation_result": evaluation_result is not None,
+                },
+            )
+
+        before_checks = ((before_item.get("validation_result") or {}).get("checks") or {})
+        after_checks = (validation_result.get("checks") or {})
+        self._ensure_required_check_not_regressed(
+            before_checks=before_checks,
+            after_checks=after_checks,
+            check_name="analysis_answer_consistency",
+            error_message="distractor_patch cannot turn analysis_answer_consistency into a failed check.",
+            diagnostics=diagnostics,
+        )
+        self._ensure_required_check_not_regressed(
+            before_checks=before_checks,
+            after_checks=after_checks,
+            check_name="analysis_mentions_correct_option_text",
+            error_message="distractor_patch cannot degrade analysis_mentions_correct_option_text into a failed check.",
+            diagnostics=diagnostics,
+        )
+
+    def _ensure_required_check_not_regressed(
+        self,
+        *,
+        before_checks: dict[str, Any],
+        after_checks: dict[str, Any],
+        check_name: str,
+        error_message: str,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        before_passed = self._extract_check_passed(before_checks, check_name)
+        after_passed = self._extract_check_passed(after_checks, check_name)
+        if before_passed is not False and after_passed is False:
+            raise DomainError(
+                error_message,
+                status_code=422,
+                details={**diagnostics, "check_name": check_name, "before_passed": before_passed, "after_passed": after_passed},
+            )
+
+    @staticmethod
+    def _extract_check_passed(checks: dict[str, Any], check_name: str) -> bool | None:
+        payload = checks.get(check_name)
+        if not isinstance(payload, dict):
+            return None
+        passed = payload.get("passed")
+        if passed is None:
+            return None
+        return bool(passed)
 
     def _ensure_allowed_input_fields(
         self,
@@ -877,6 +1144,17 @@ class QuestionReviewService:
         if effective_action == "manual_edit":
             item["current_status"] = "revising"
             return self.generation_service.apply_manual_edit(item, request.instruction, request.control_overrides)
+        if effective_action == "distractor_patch":
+            item["current_status"] = "revising"
+            return self.generation_service.apply_distractor_patch(
+                item,
+                target_option=str(request.target_option or ""),
+                distractor_strategy=str(request.distractor_strategy or ""),
+                distractor_intensity=str(request.distractor_intensity or ""),
+                option_text=str(request.option_text or ""),
+                analysis=str(request.analysis or ""),
+                operator=request.operator,
+            )
         raise DomainError(
             "Unsupported review action.",
             status_code=422,

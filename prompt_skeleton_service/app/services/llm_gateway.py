@@ -9,6 +9,7 @@ import httpx
 
 from app.core.exceptions import DomainError
 from app.schemas.runtime import OperationRouteConfig, ProviderConfig, QuestionRuntimeConfig
+from app.services.text_readability import extract_json_object
 
 
 class LLMGatewayService:
@@ -105,13 +106,32 @@ class LLMGatewayService:
             for content in item.get("content", []):
                 if content.get("type") == "output_text":
                     text_output += content.get("text", "")
+        if not text_output and isinstance(data.get("output_text"), str):
+            text_output = str(data.get("output_text") or "")
         if not text_output:
             raise DomainError(
                 "Configured LLM returned no structured output.",
                 status_code=502,
-                details={"provider": route.provider, "model": model_name},
+                details={
+                    "provider": route.provider,
+                    "model": model_name,
+                    "response_id": data.get("id"),
+                },
             )
-        return json.loads(text_output)
+        try:
+            return extract_json_object(text_output)
+        except ValueError as exc:
+            raise DomainError(
+                "Configured LLM returned structured text that could not be parsed as a JSON object.",
+                status_code=502,
+                details={
+                    "provider": route.provider,
+                    "model": model_name,
+                    "reason": str(exc),
+                    "response_id": data.get("id"),
+                    "text_preview": text_output[:800],
+                },
+            ) from exc
 
     def _get_provider(self, provider_name: str) -> ProviderConfig:
         provider = self.runtime_config.llm.providers.get(provider_name)

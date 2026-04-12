@@ -75,6 +75,9 @@ _SENTENCE_ORDER_CARD_IDS = {
     "timeline": "sentence_order__timeline_action_sequence__abstract",
 }
 
+# These IDs are compatibility-only identifiers for routing and historical linkage.
+# sentence_fill runtime semantics must come from canonical blank_position /
+# function_type, not from parsing these ID names.
 _SENTENCE_FILL_CARD_IDS = {
     "opening_summary": "sentence_fill__opening_summary__abstract",
     "opening_topic_intro": "sentence_fill__opening_topic_intro__abstract",
@@ -602,7 +605,7 @@ class SourceQuestionAnalyzer:
                 flags.append("weak_reference_signal")
         if question_type == "sentence_fill":
             structure_constraints = rule_analysis.get("structure_constraints") or {}
-            if str(structure_constraints.get("blank_position") or "") == "middle" and str(structure_constraints.get("function_type") or "") == "bridge_both_sides":
+            if str(structure_constraints.get("blank_position") or "") == "middle" and str(structure_constraints.get("function_type") or "") == "bridge":
                 flags.append("fill_function_drift")
         return flags
 
@@ -1000,16 +1003,16 @@ class SourceQuestionAnalyzer:
     def _infer_fill_business_function(self, *, normalized: str, blank_position: str) -> str:
         if blank_position == "opening":
             if any(marker in normalized for marker in ("围绕", "总体来看", "总的来说", "概括")):
-                return "summarize_following_text"
-            return "topic_introduction"
+                return "summary"
+            return "topic_intro"
         if blank_position == "ending":
             if any(marker in normalized for marker in ("应该", "应当", "必须", "要", "对策", "措施")):
-                return "propose_countermeasure"
-            return "summarize_previous_text"
+                return "countermeasure"
+            return "conclusion"
         backward_hits = sum(normalized.count(marker) for marker in ("这", "这种", "上述", "前文", "由此"))
         forward_hits = sum(normalized.count(marker) for marker in ("因此", "从而", "接下来", "进一步", "后文"))
         if abs(backward_hits - forward_hits) <= 1:
-            return "bridge_both_sides"
+            return "bridge"
         if backward_hits > forward_hits:
             return "carry_previous"
         return "lead_next"
@@ -1033,18 +1036,18 @@ class SourceQuestionAnalyzer:
             _SENTENCE_FILL_CARD_IDS["ending_countermeasure"]: 0.18,
         }
         mapping = {
-            ("opening", "summarize_following_text"): _SENTENCE_FILL_CARD_IDS["opening_summary"],
-            ("opening", "topic_introduction"): _SENTENCE_FILL_CARD_IDS["opening_topic_intro"],
+            ("opening", "summary"): _SENTENCE_FILL_CARD_IDS["opening_summary"],
+            ("opening", "topic_intro"): _SENTENCE_FILL_CARD_IDS["opening_topic_intro"],
             ("middle", "carry_previous"): _SENTENCE_FILL_CARD_IDS["middle_carry_previous"],
             ("middle", "lead_next"): _SENTENCE_FILL_CARD_IDS["middle_lead_next"],
-            ("middle", "bridge_both_sides"): _SENTENCE_FILL_CARD_IDS["middle_bridge_both_sides"],
-            ("ending", "summarize_previous_text"): _SENTENCE_FILL_CARD_IDS["ending_summary"],
-            ("ending", "propose_countermeasure"): _SENTENCE_FILL_CARD_IDS["ending_countermeasure"],
+            ("middle", "bridge"): _SENTENCE_FILL_CARD_IDS["middle_bridge_both_sides"],
+            ("ending", "conclusion"): _SENTENCE_FILL_CARD_IDS["ending_summary"],
+            ("ending", "countermeasure"): _SENTENCE_FILL_CARD_IDS["ending_countermeasure"],
         }
         primary = mapping.get((blank_position, function_type))
         if primary:
             base_scores[primary] = 0.92
-        if blank_position == "middle" and function_type != "bridge_both_sides":
+        if blank_position == "middle" and function_type != "bridge":
             base_scores[_SENTENCE_FILL_CARD_IDS["middle_bridge_both_sides"]] = max(
                 base_scores[_SENTENCE_FILL_CARD_IDS["middle_bridge_both_sides"]],
                 0.42,

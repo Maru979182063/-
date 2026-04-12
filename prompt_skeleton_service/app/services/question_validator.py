@@ -1941,8 +1941,9 @@ class QuestionValidatorService:
             else "compatibility_disabled"
         )
         correct_order = list(generated_question.correct_order or [])
-        original_sentences = list(generated_question.original_sentences or [])
-        expected_order_size = expected_sortable_unit_count or len(original_sentences)
+        raw_original_units = [str(item or "").strip() for item in (generated_question.original_sentences or []) if str(item or "").strip()]
+        normalized_original_units = self._normalize_sentence_order_units_to_six(raw_original_units) or raw_original_units
+        expected_order_size = expected_sortable_unit_count or len(normalized_original_units)
         expected_order_sequence = list(range(1, expected_order_size + 1)) if expected_order_size else []
         option_orders = {
             key: self._extract_order_sequence(value)
@@ -1951,11 +1952,12 @@ class QuestionValidatorService:
         answer = str(generated_question.answer or "").strip().upper()
         analysis_orders = self._extract_reference_order_sequences(generated_question.analysis or "")
         ordered_units = self._resolve_sentence_order_units_for_sequence(
-            original_sentences=original_sentences,
+            original_sentences=normalized_original_units,
             order=correct_order,
         )
         binding_pairs = self._extract_sentence_order_binding_pairs(context)
         explicit_roles = self._extract_sentence_order_roles(context)
+        unit_sentence_counts = [self._sentence_order_unit_sentence_count(unit) for unit in normalized_original_units]
 
         checks = {
             "sentence_order_signal": {"passed": has_order_signal},
@@ -2006,13 +2008,18 @@ class QuestionValidatorService:
             ),
             "sentence_order_original_sentences": {
                 "passed": (
-                    len(original_sentences) == expected_sortable_unit_count
+                    len(normalized_original_units) == expected_sortable_unit_count
                     if expected_sortable_unit_count
-                    else len(original_sentences) >= 2
+                    else len(normalized_original_units) >= 2
                 ),
-                "count": len(original_sentences),
+                "count": len(normalized_original_units),
                 "expected": expected_sortable_unit_count,
                 "source": expected_sortable_unit_count_source,
+            },
+            "sentence_order_unit_sentence_span": {
+                "passed": bool(unit_sentence_counts) and all(1 <= count <= 2 for count in unit_sentence_counts),
+                "counts": unit_sentence_counts,
+                "allowed": [1, 2],
             },
             "sentence_order_correct_order": {
                 "passed": bool(correct_order) and (not expected_order_sequence or sorted(correct_order) == expected_order_sequence),
@@ -2032,10 +2039,12 @@ class QuestionValidatorService:
         if option_unit_counts and len(set(option_unit_counts)) > 1:
             self._append_unique_error(errors, "ordering_chain_incomplete")
         if expected_sortable_unit_count:
-            if len(original_sentences) != expected_sortable_unit_count:
+            if len(normalized_original_units) != expected_sortable_unit_count:
                 self._append_unique_error(errors, "sentence_count_mismatch")
-        elif len(original_sentences) < 2:
+        elif len(normalized_original_units) < 2:
             self._append_unique_error(errors, "sentence_count_mismatch")
+        if unit_sentence_counts and not all(1 <= count <= 2 for count in unit_sentence_counts):
+            self._append_unique_error(errors, "ordering_chain_incomplete")
         if not correct_order or (expected_order_sequence and sorted(correct_order) != expected_order_sequence):
             self._append_unique_error(errors, "ordering_chain_incomplete")
         correct_option_letters = [key for key, sequence in option_orders.items() if sequence == correct_order]
@@ -2447,90 +2456,6 @@ class QuestionValidatorService:
             warnings.append("sentence_order analysis does not clearly explain opener/closing roles.")
         return errors, warnings, checks
 
-    def _validate_sentence_fill(
-        self,
-        generated_question: GeneratedQuestion,
-        context: dict[str, Any],
-    ) -> tuple[list[str], list[str], dict[str, Any]]:
-        stem = generated_question.stem
-        material_text = str(context.get("material_text") or "")
-        validator_contract = context.get("validator_contract") or {}
-        material_source = context.get("material_source") or {}
-        material_prompt_extras = (
-            material_source.get("prompt_extras") if isinstance(material_source, dict) and isinstance(material_source.get("prompt_extras"), dict) else {}
-        )
-        source_analysis = context.get("source_question_analysis") or {}
-        structure_constraints = source_analysis.get("structure_constraints") or {}
-        sentence_fill_contract = validator_contract.get("sentence_fill") if isinstance(validator_contract, dict) else None
-        structure_contract = validator_contract.get("structure_constraints") if isinstance(validator_contract, dict) else None
-
-        has_blank_signal = any(token in material_text for token in ("____", "___", "[BLANK]", "（  ）", "( )"))
-        has_fill_prompt = any(token in stem for token in ("填入", "依次填入", "横线", "最恰当"))
-        blank_position = self._detect_blank_position(material_text)
-        contract_blank_position = ""
-        if isinstance(validator_contract, dict):
-            contract_blank_position = str(
-                validator_contract.get("blank_position")
-                or (sentence_fill_contract.get("blank_position") if isinstance(sentence_fill_contract, dict) else "")
-                or (structure_contract.get("blank_position") if isinstance(structure_contract, dict) else "")
-                or ""
-            )
-        runtime_blank_position = str(material_prompt_extras.get("blank_position") or "")
-        reference_blank_position = runtime_blank_position or contract_blank_position
-        reference_blank_position_source = (
-            "material_source.prompt_extras"
-            if runtime_blank_position
-            else ("validator_contract" if contract_blank_position else "compatibility_disabled")
-        )
-
-        checks = {
-            "sentence_fill_gap_signal": {"passed": has_blank_signal},
-            "sentence_fill_exam_style_prompt": {"passed": has_fill_prompt},
-            "sentence_fill_blank_position": {"passed": bool(blank_position), "blank_position": blank_position},
-        }
-        errors: list[str] = []
-        warnings: list[str] = []
-        if not has_blank_signal:
-            errors.append("sentence_fill material does not show an obvious blank marker.")
-        if not has_fill_prompt:
-            warnings.append("sentence_fill stem does not look like a standard fill-in-the-blank prompt.")
-        if reference_blank_position:
-            aligned = blank_position == reference_blank_position
-            checks["sentence_fill_blank_position_alignment"] = {
-                "passed": aligned,
-                "reference_blank_position": reference_blank_position,
-                "generated_blank_position": blank_position,
-                "source": reference_blank_position_source,
-            }
-            if not aligned:
-                errors.append(
-                    f"sentence_fill should preserve the reference blank position ({reference_blank_position}), but generated material drifted."
-                )
-        contract_function_type = ""
-        if isinstance(validator_contract, dict):
-            contract_function_type = str(
-                validator_contract.get("function_type")
-                or (sentence_fill_contract.get("function_type") if isinstance(sentence_fill_contract, dict) else "")
-                or (structure_contract.get("function_type") if isinstance(structure_contract, dict) else "")
-                or ""
-            )
-        runtime_function_type = str(material_prompt_extras.get("function_type") or "")
-        function_type = runtime_function_type or contract_function_type
-        function_type_source = (
-            "material_source.prompt_extras"
-            if runtime_function_type
-            else ("validator_contract" if contract_function_type else "compatibility_disabled")
-        )
-        if function_type == "bridge":
-            analysis_has_bridge = any(token in generated_question.analysis for token in ("承上启下", "承前启后", "前文", "后文"))
-            checks["sentence_fill_bridge_reasoning"] = {
-                "passed": analysis_has_bridge,
-                "function_type": function_type,
-                "source": function_type_source,
-            }
-            if not analysis_has_bridge:
-                warnings.append("reference fill question is bridge-oriented, but analysis does not clearly explain both-side linkage.")
-        return errors, warnings, checks
 
     def _validate_sentence_fill(
         self,
@@ -3044,6 +2969,9 @@ class QuestionValidatorService:
         if not text:
             return 0
         sortable_block = text.split("\n\n")[-1].strip()
+        units = self._extract_order_material_units(sortable_block)
+        normalized_units = self._normalize_sentence_order_units_to_six(units) or units
+        return len(normalized_units)
         enumerated = re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]", sortable_block)
         if enumerated:
             return len(set(enumerated))
@@ -3140,6 +3068,74 @@ class QuestionValidatorService:
             return units
         return [item.strip() for item in re.split(r"(?<=[。！？!?])", sortable_block) if item.strip()]
 
+    def _normalize_sentence_order_units_to_six(self, units: list[str]) -> list[str] | None:
+        cleaned = [unit.strip() for unit in units if unit and unit.strip()]
+        if len(cleaned) < 6 or len(cleaned) > 12:
+            return None
+        if len(cleaned) == 6:
+            return cleaned
+        merge_need = len(cleaned) - 6
+        if merge_need > len(cleaned) // 2:
+            return None
+        pair_scores: list[tuple[float, int]] = []
+        for index in range(len(cleaned) - 1):
+            left = cleaned[index]
+            right = cleaned[index + 1]
+            score = 0.0
+            if right.startswith(("因此", "所以", "此外", "同时", "并且", "而", "但", "于是", "随后", "从而")):
+                score += 0.30
+            if len(left) <= 28 and len(right) <= 28:
+                score += 0.12
+            if len(left) + len(right) > 96:
+                score -= 0.18
+            pair_scores.append((score, index))
+        pair_scores.sort(reverse=True)
+        selected: list[int] = []
+        used: set[int] = set()
+        for score, index in pair_scores:
+            if index in used or index + 1 in used:
+                continue
+            selected.append(index)
+            used.add(index)
+            used.add(index + 1)
+            if len(selected) == merge_need:
+                break
+        if len(selected) != merge_need:
+            return None
+        selected_set = set(selected)
+        normalized: list[str] = []
+        index = 0
+        while index < len(cleaned):
+            if index in selected_set:
+                normalized.append(self._merge_sentence_order_unit_pair(cleaned[index], cleaned[index + 1]))
+                index += 2
+                continue
+            normalized.append(cleaned[index])
+            index += 1
+        if len(normalized) != 6:
+            return None
+        return normalized
+
+    def _merge_sentence_order_unit_pair(self, left: str, right: str) -> str:
+        left_clean = left.strip()
+        right_clean = right.strip()
+        if not left_clean:
+            return right_clean
+        separator = ""
+        if not left_clean.endswith(("。", "！", "？", "!", "?", "；", ";", "，", ",", "：", ":")):
+            separator = "，"
+        return f"{left_clean}{separator}{right_clean}".strip()
+
+    def _sentence_order_unit_sentence_count(self, unit: str) -> int:
+        text = (unit or "").strip()
+        if not text:
+            return 0
+        line_units = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(line_units) > 1:
+            return len(line_units)
+        terminal_count = sum(text.count(marker) for marker in ("。", "！", "？", "!", "?", "；", ";", "."))
+        return max(1, terminal_count)
+
     def _sentence_order_unit_role(self, unit: str, *, is_last: bool = False) -> str:
         text = (unit or "").strip()
         if not text:
@@ -3197,6 +3193,7 @@ class QuestionValidatorService:
 
     def _build_sentence_order_uniqueness_profile(self, material_text: str) -> dict[str, Any]:
         units = self._extract_order_material_units(material_text)
+        units = self._normalize_sentence_order_units_to_six(units) or units
         if not units:
             return {
                 "unique_opener_score": 0.0,

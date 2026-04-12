@@ -10,14 +10,23 @@ display_name: 语句排序标准题卡
 description: 基于固定6句句群的角色链接口关系，为语句排序题选择唯一正确的句序。该卡消费中间结构材料卡，不直接绑定单一主族；核心看首句合法性、尾句收束、中间角色链与绑定不被破坏。
 formal_runtime_spec:
   primary_business_card_id: sentence_order__six_sentence_role_chain__abstract
-  sentence_count:
+  sortable_unit_count:
     mode: fixed
     value: 6
-  reject_non_six_sentence_sequences: true
+  sortable_unit_sentence_span:
+    min: 1
+    max: 2
+  sortable_unit_type: sentence_block
+  candidate_type: sentence_block_group
+  reject_non_six_unit_sequences: true
 structure_schema:
-  sentence_count:
+  sortable_unit_count:
     mode: fixed
     value: 6
+  sortable_unit_sentence_span:
+    min: 1
+    max: 2
+  sortable_unit_type: sentence_block
   sentence_roles:
     type: enum_list
     values:
@@ -96,7 +105,12 @@ upstream_contract:
   - order_material.viewpoint_reason_action
   - order_material.problem_solution_case_blocks
 base_slots:
-  sentence_count: 6
+  sortable_unit_count: 6
+  sortable_unit_sentence_span:
+    min: 1
+    max: 2
+  sortable_unit_type: sentence_block
+  candidate_type: sentence_block_group
   opening_anchor_type: explicit_topic
   opening_signal_strength: medium
   middle_structure_type: local_binding
@@ -136,7 +150,10 @@ slot_extensions:
   fixed_sortable_unit_count: 6
   allowed_sortable_unit_counts:
   - 6
-  reject_non_six_sentence_sequences: true
+  sortable_unit_sentence_span:
+    min: 1
+    max: 2
+  reject_non_six_unit_sequences: true
   preserve_unit_count: true
   first_sentence_legality_required: true
   unique_opener_required: true
@@ -183,14 +200,6 @@ material_card_overrides:
     middle_structure_type: problem_solution_blocks
     closing_anchor_type: case_support
     block_order_complexity: high
-- material_card: order_material.phrase_order_variant
-  slot_overrides:
-    opening_anchor_type: none
-    opening_signal_strength: none
-    middle_structure_type: mixed_layers
-    closing_anchor_type: none
-    closing_signal_strength: none
-    block_order_complexity: high
 generation_archetypes:
   dual_anchor_lock:
     source: 语句排序题配置文件 pattern dual_anchor_lock
@@ -228,20 +237,12 @@ generation_archetypes:
     - 先锁问题开头
     - 再排块顺序
     - 最后校验块内顺序
-  phrase_order_variant:
-    source: 语句排序题配置文件 pattern phrase_order_variant
-    processing_type: 短语逻辑顺序判断
-    correct_logic: 正确项应体现自然动作链、固定搭配链或价值排序，而不是表面语义相关。
-    analysis_framework:
-    - 识别动作或价值链条
-    - 比较选项内部短语顺序
-    - 排除伪通顺表达
 validator_contract:
   sentence_order:
-    sentence_count:
-      mode: fixed
-      value: 6
     sortable_unit_count: 6
+    sortable_unit_sentence_span:
+      min: 1
+      max: 2
     expected_binding_pair_count: 2
     expected_unique_answer_strength: 0.6
     require_legal_head: true
@@ -259,7 +260,7 @@ validator_contract:
     - medium
     - hard
     fail_reasons:
-      sentence_count_mismatch: sentence_count_must_equal_6
+      sentence_count_mismatch: sortable_unit_count_must_equal_6
       illegal_head: no_legal_head_sentence
       illegal_tail: no_legal_tail_sentence
       binding_violation: binding_pairs_broken
@@ -276,7 +277,7 @@ validator_contract:
     - role_chain_validation
   extension_rules:
   - 语句排序标准母卡统一按6句排序单元制作；若材料不能稳定提供6个可排序句子，则应在生成前淘汰，不得改做3句、4句或7句排序。
-  - 若 sentence_count 不等于 6，应显式判为不通过，并标记原因 sentence_count_must_equal_6。
+  - 若 sortable_unit_count 不等于 6，应显式判为不通过，并标记原因 sortable_unit_count_must_equal_6。
   - 必须存在合法首句、合法尾句、完整角色链和不被破坏的 binding_pairs，缺任一项都应显式失败。
   - 正确顺序必须能解释首句为何可起、尾句为何可收、中段为何能接，不得只给结果不讲接口。
   - 至少1个错误项应保留局部顺序正确，但破坏首句、尾句或关键捆绑关系。
@@ -316,5 +317,6 @@ normalization_notes:
 - required_candidate_types expanded to cover all preferred material cards
 - required_profiles remain on legacy runtime metrics; role-chain schema is carried as explanatory metadata for downstream alignment
 - generation_archetype duplication removed; question card now follows material_card.default_generation_archetype
-- sentence_block_group is now the primary entry; phrase_or_clause_group should only be used by narrower phrase variants
+- sentence_block_group is now the only standard candidate entry for the standard sentence_order card
 - sentence order cards now expose role-chain schema and uniqueness sources in addition to legacy anchor slots
+

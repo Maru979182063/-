@@ -336,10 +336,24 @@ class QuestionGenerationBatchResponse(BaseModel):
 class QuestionReviewActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["minor_edit", "question_modify", "text_modify", "manual_edit", "approve", "confirm", "discard"]
+    action: Literal[
+        "minor_edit",
+        "question_modify",
+        "text_modify",
+        "manual_edit",
+        "distractor_patch",
+        "approve",
+        "confirm",
+        "discard",
+    ]
     requested_action: str | None = None
     instruction: str | None = None
     control_overrides: dict[str, Any] = Field(default_factory=dict)
+    target_option: str | None = None
+    distractor_strategy: str | None = None
+    distractor_intensity: str | None = None
+    option_text: str | None = None
+    analysis: str | None = None
     operator: str | None = None
 
 
@@ -377,6 +391,31 @@ class QuestionUsageEventLog(BaseModel):
 class QuestionDownloadResponse(BaseModel):
     event: QuestionUsageEventLog
     item: QuestionGenerationItem
+
+
+class SentenceFillCanonicalExportView(BaseModel):
+    status: Literal["direct", "mapped", "blocked"]
+    blank_position: str | None = None
+    function_type: str | None = None
+    logic_relation: str | None = None
+    alias_trace: list[dict[str, Any]] = Field(default_factory=list)
+    blocked_reason: str | None = None
+
+
+class CenterUnderstandingExportView(BaseModel):
+    status: Literal["direct", "blocked"]
+    business_family_id: str | None = None
+    business_subtype: str | None = None
+    blocked_reason: str | None = None
+
+
+class SentenceOrderCanonicalExportView(BaseModel):
+    status: Literal["direct", "mapped", "blocked"]
+    candidate_type: str | None = None
+    opening_anchor_type: str | None = None
+    closing_anchor_type: str | None = None
+    alias_trace: list[dict[str, Any]] = Field(default_factory=list)
+    blocked_reason: str | None = None
 
 
 class SourceQuestionAssetSummary(BaseModel):
@@ -443,6 +482,8 @@ class QuestionItemSummary(BaseModel):
     material_preview: str | None = None
     created_at: str | None = None
     updated_at: str
+    sentence_fill_export_view: SentenceFillCanonicalExportView | None = None
+    sentence_order_export_view: SentenceOrderCanonicalExportView | None = None
 
 
 class QuestionItemListResponse(BaseModel):

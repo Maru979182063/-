@@ -40,7 +40,7 @@ skeleton:
   target_type: valid_bridge_sentence
 
 structure_schema:
-  position:
+  blank_position:
     type: enum
     values:
       - opening

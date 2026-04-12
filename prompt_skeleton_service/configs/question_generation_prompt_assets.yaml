@@ -11,6 +11,7 @@ question_generation:
     answer_grounding_contract: "[Answer Grounding Contract]"
     material_answer_anchor: "[Material Answer Anchor]"
     repair_requirements: "[Repair Requirements]"
+    round1_fewshot_asset: "[Round 1 Few-shot Asset]"
 
   material_readability_contract:
     - "The final displayed material must read like a natural, formal Chinese passage excerpt that a human can read directly."
@@ -28,6 +29,32 @@ question_generation:
     explanation: "For this item, the correct answer must stay semantically equivalent to the removed source span above. Do not invent a new answer basis."
 
   final_generation_instruction: "Use the provided material as the source passage and generate exactly one question."
+
+  round1_fewshot_assets:
+    enabled: true
+    packs:
+      sentence_fill:
+        question_type: sentence_fill
+        csv_path: "../../reports/round1_fewshot_sentence_fill_candidates_2026-04-12.csv"
+      center_understanding:
+        question_type: main_idea
+        business_subtype: center_understanding
+        csv_path: "../../reports/round1_fewshot_center_understanding_candidates_2026-04-12.csv"
+      sentence_order:
+        question_type: sentence_order
+        csv_path: "../../reports/round1_fewshot_sentence_order_candidates_2026-04-12.csv"
+
+  fewshot_prompt_guards:
+    sentence_fill:
+      - "If Round 1 clean few-shot coverage does not include opening or inserted blanks, do not force middle-position logic onto them."
+      - "When coverage is missing, stay structurally conservative instead of guessing a middle-like logic relation."
+      - "Keep logic_relation strict: distinguish bridge-continuation, bridge-transition, carry_previous-explanation, and lead_next-transition."
+    center_understanding:
+      - "For fen-zong-fen or middle-focus passages, do not force the answer into a high-frequency main_axis_source or argument_structure pair."
+      - "When the passage focus sits on a middle-position claim, stay cautious and avoid over-compressing it into a familiar central-meaning template."
+    sentence_order:
+      - "Prefer clean anchor combinations already covered by Round 1 few-shot assets."
+      - "If coverage is missing for an anchor combination, do not guess a new clean combination."
 
   answer_grounding:
     base:

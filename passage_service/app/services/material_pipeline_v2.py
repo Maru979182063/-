@@ -1,9 +1,11 @@
 ﻿from __future__ import annotations
 
+import csv
 import re
 from copy import deepcopy
 from collections import Counter
 from difflib import SequenceMatcher
+from pathlib import Path
 from typing import Any
 
 from app.core.config import get_config_bundle
@@ -15,6 +17,12 @@ from app.services.document_genre_classifier import DocumentGenreClassifier
 from app.services.llm_runtime import get_llm_provider, read_prompt_file
 from app.services.main_card_dual_judge import MainCardDualJudge
 from app.services.main_card_signal_resolver import MainCardSignalResolver
+from app.services.sentence_fill_protocol import (
+    normalize_sentence_fill_blank_position,
+    normalize_sentence_fill_function_type,
+    normalize_sentence_fill_logic_relation,
+    sentence_fill_default_slot,
+)
 from app.services.universal_tagger import UniversalTagger
 
 
@@ -52,6 +60,8 @@ class MaterialPipelineV2:
     INDEX_VERSION = "v2.index.20260402b"
     SENTENCE_ORDER_FIXED_UNIT_COUNT = 6
     SENTENCE_ORDER_WEAK_LAST_SCORE = 0.40
+    SENTENCE_ORDER_MIN_BLOCK_TEXT_LENGTH = 96
+    _ROUND1_ASSET_CACHE: dict[str, list[dict[str, str]]] | None = None
     TASK_SCORING_THRESHOLDS = {
         "main_idea": {
             "recommended": 0.50,
@@ -209,13 +219,13 @@ class MaterialPipelineV2:
                     enable_anchor_adaptation=enable_anchor_adaptation,
                     preserve_anchor=preserve_anchor,
                 )
-                neutral_signal_profile = resolved_candidate.get("neutral_signal_profile") or self._build_neutral_signal_profile(article_context=article_context, candidate=resolved_candidate)
-                signal_profile = self._project_signal_profile(signal_layer=signal_layer, neutral_signal_profile=neutral_signal_profile)
-                business_feature_profile = self._build_business_feature_profile(
+                neutral_signal_profile, business_feature_profile, llm_signal_resolution = self._resolve_main_card_profiles(
                     article_context=article_context,
                     candidate=resolved_candidate,
-                    neutral_signal_profile=neutral_signal_profile,
+                    business_family_id=business_family_id,
+                    signal_layer=signal_layer,
                 )
+                signal_profile = self._project_signal_profile(signal_layer=signal_layer, neutral_signal_profile=neutral_signal_profile)
                 retrieval_match_profile = self._build_retrieval_match_profile(
                     article_context=article_context,
                     candidate=resolved_candidate,
@@ -238,32 +248,29 @@ class MaterialPipelineV2:
                     signal_profile=signal_profile,
                     candidate=resolved_candidate,
                     business_family_id=business_family_id,
-                    min_card_score=min_card_score,
+                    min_card_score=0.0,
                 )
                 if not card_hits:
-                    continue
+                    card_hits = [
+                        {
+                            "card_id": f"legacy.{business_family_id}.search_fallback",
+                            "score": 0.18,
+                            "generation_archetype": "llm_primary_search_fallback",
+                        }
+                    ]
                 business_card_hits = self._score_business_cards(
                     business_cards=business_cards,
                     business_feature_profile=business_feature_profile,
                     neutral_signal_profile=neutral_signal_profile,
                     requested_business_card_ids=requested_business_card_ids,
                     preferred_business_card_ids=preferred_business_card_set,
-                    min_business_card_score=min_business_card_score,
+                    min_business_card_score=0.0,
                 )
-                if requested_business_card_ids and not business_card_hits:
-                    continue
-                if business_family_id == "sentence_fill" and not business_card_hits:
-                    continue
                 structure_match_score = self._runtime_structure_match_score(
                     business_family_id=business_family_id,
                     business_feature_profile=business_feature_profile,
                     structure_constraints=normalized_structure_constraints,
                 )
-                if (
-                    normalized_structure_constraints
-                    and structure_match_score < self._minimum_structure_score(business_family_id, normalized_structure_constraints)
-                ):
-                    continue
                 top_hit = card_hits[0]
                 top_business_hit = self._select_primary_business_card(business_card_hits, neutral_signal_profile)
                 family_affinity = self._family_affinity_topk(neutral_signal_profile)
@@ -294,6 +301,7 @@ class MaterialPipelineV2:
                     "candidate_id": resolved_candidate["candidate_id"],
                     "article_id": article_context["article_id"],
                     "article_title": article_context["title"],
+                    "_business_family_id": business_family_id,
                     "candidate_type": resolved_candidate["candidate_type"],
                     "material_card_id": top_hit["card_id"],
                     "selected_business_card": top_business_hit["business_card_id"] if top_business_hit else None,
@@ -342,13 +350,40 @@ class MaterialPipelineV2:
                         4,
                     ),
                 }
+                if llm_signal_resolution:
+                    item["llm_signal_resolution"] = llm_signal_resolution
+                    item["question_ready_context"]["llm_signal_resolution"] = {
+                        "mode": llm_signal_resolution.get("mode"),
+                        "consensus_status": ((llm_signal_resolution.get("consensus") or {}).get("status")),
+                    }
+                    item["local_profile"]["llm_signal_resolution"] = {
+                        "enabled": True,
+                        "consensus_status": ((llm_signal_resolution.get("consensus") or {}).get("status")),
+                    }
+                item = self._attach_main_card_dual_judge_adjudication(
+                    item=item,
+                    business_family_id=business_family_id,
+                    question_card=question_card,
+                    material_cards=material_cards,
+                    business_cards=business_cards,
+                    signal_profile=signal_profile,
+                    neutral_signal_profile=neutral_signal_profile,
+                    business_feature_profile=business_feature_profile,
+                )
+                item = self._attach_llm_material_judgments(
+                    item=item,
+                    business_family_id=business_family_id,
+                )
+                if self._llm_adjudication_requires_reject(item=item, business_family_id=business_family_id):
+                    gate_rejected_count += 1
+                    continue
                 gate_passed, _ = self._passes_runtime_material_gate(
                     item=item,
                     business_family_id=business_family_id,
                     question_card=question_card,
                     min_card_score=min_card_score,
                     min_business_card_score=min_business_card_score,
-                    require_business_card=business_family_id == "sentence_fill",
+                    require_business_card=False,
                 )
                 if not gate_passed:
                     gate_rejected_count += 1
@@ -517,27 +552,8 @@ class MaterialPipelineV2:
 
     @staticmethod
     def _canonical_sentence_fill_function_type(function_type: Any, *, blank_position: str = "") -> str:
-        raw = str(function_type or "").strip()
-        position = str(blank_position or "").strip()
-        if not raw:
-            return ""
-        mapping = {
-            "summarize_following_text": "opening_summary",
-            "topic_introduction": "opening_summary",
-            "summarize_previous_text": "ending_summary",
-            "propose_countermeasure": "ending_summary",
-            "countermeasure": "ending_summary",
-            "carry_previous": "middle_explanation",
-            "lead_next": "middle_focus_shift",
-            "bridge_both_sides": "bridge",
-            "reference_summary": "inserted_reference",
-        }
-        if raw in {"summary", "conclusion"}:
-            if position == "opening":
-                return "opening_summary"
-            if position == "ending":
-                return "ending_summary"
-        return mapping.get(raw, raw)
+        _ = blank_position
+        return normalize_sentence_fill_function_type(function_type)
 
     def build_cached_item_from_material(
         self,
@@ -753,6 +769,7 @@ class MaterialPipelineV2:
             "candidate_id": candidate["candidate_id"],
             "article_id": article_context["article_id"],
             "article_title": article_context["title"],
+            "_business_family_id": business_family_id,
             "candidate_type": candidate["candidate_type"],
             "material_card_id": top_hit["card_id"],
             "selected_business_card": top_business_hit["business_card_id"] if top_business_hit else None,
@@ -824,6 +841,10 @@ class MaterialPipelineV2:
             business_feature_profile=business_feature_profile,
             llm_material_card_options=llm_material_card_options,
             llm_business_card_options=llm_business_card_options,
+        )
+        item = self._attach_llm_material_judgments(
+            item=item,
+            business_family_id=business_family_id,
         )
         if self._llm_adjudication_requires_reject(item=item, business_family_id=business_family_id):
             return None
@@ -1143,6 +1164,17 @@ class MaterialPipelineV2:
             target_length=target_length,
             length_tolerance=length_tolerance,
         )
+        business_family_id = str(
+            item.get("_business_family_id")
+            or item.get("_cached_business_family_id")
+            or (((item.get("question_ready_context") or {}).get("runtime_binding") or {}).get("question_type"))
+            or ""
+        )
+        if business_family_id:
+            item = self._attach_llm_material_judgments(
+                item=item,
+                business_family_id=business_family_id,
+            )
         return item
 
     def _build_article_context(self, article: Any) -> dict[str, Any]:
@@ -1311,13 +1343,14 @@ class MaterialPipelineV2:
         meta = dict(candidate.get("meta") or {})
         parts = ["v2_primary_candidate_builder", planner_source]
         if candidate.get("candidate_type") == "functional_slot_unit":
-            slot_role = str(meta.get("slot_role") or "").strip()
-            slot_function = str(meta.get("slot_function") or "").strip()
+            canonical_meta = self._normalize_sentence_fill_meta(meta)
+            blank_position = str(canonical_meta.get("blank_position") or "")
+            function_type = str(canonical_meta.get("function_type") or "")
             slot_sentence_range = list(meta.get("slot_sentence_range") or [])
-            if slot_role:
-                parts.append(f"slot_role={slot_role}")
-            if slot_function:
-                parts.append(f"slot_function={slot_function}")
+            if blank_position:
+                parts.append(f"blank_position={blank_position}")
+            if function_type:
+                parts.append(f"function_type={function_type}")
             if len(slot_sentence_range) == 2:
                 parts.append(f"slot_sentence={slot_sentence_range[0]}-{slot_sentence_range[1]}")
         if candidate.get("candidate_type") == "ordered_unit_group":
@@ -1346,8 +1379,11 @@ class MaterialPipelineV2:
         if candidate.get("candidate_type") != "functional_slot_unit":
             return {}
         meta = dict(candidate.get("meta") or {})
-        if meta.get("slot_role") and meta.get("slot_function"):
-            return meta
+        canonical_meta = self._normalize_sentence_fill_meta(meta)
+        blank_position = str(canonical_meta.get("blank_position") or "")
+        function_type = str(canonical_meta.get("function_type") or "")
+        if blank_position and function_type:
+            return canonical_meta
 
         paragraph_range = list(
             meta.get("source_paragraph_range_original")
@@ -1357,32 +1393,46 @@ class MaterialPipelineV2:
         )
         article_profile = (article_context or {}).get("article_profile") or {}
         article_paragraph_count = int(article_profile.get("paragraph_count") or 0)
-        slot_role = str(meta.get("slot_role") or "").strip()
-        if not slot_role:
+        if not blank_position:
             if paragraph_range and int(paragraph_range[0]) == 0:
-                slot_role = "opening"
+                blank_position = "opening"
             elif paragraph_range and article_paragraph_count and int(paragraph_range[-1]) >= article_paragraph_count - 1:
-                slot_role = "ending"
+                blank_position = "ending"
             else:
-                slot_role = "middle"
+                blank_position = "middle"
 
-        slot_function = str(meta.get("slot_function") or "").strip()
-        if not slot_function:
-            slot_function = self._infer_functional_slot_function(
-                slot_role=slot_role,
+        if not function_type:
+            function_type = self._infer_functional_fill_function_type(
+                blank_position=blank_position,
                 slot_text=str(candidate.get("text") or ""),
                 context_text=str(candidate.get("text") or ""),
             )
 
-        hydrated = dict(meta)
+        hydrated = dict(canonical_meta)
         hydrated["unit_type"] = "functional_slot_unit"
-        hydrated["slot_role"] = slot_role
-        hydrated["slot_function"] = slot_function
+        hydrated["blank_position"] = blank_position
+        hydrated["function_type"] = function_type
         hydrated.setdefault("slot_context_paragraph_range", paragraph_range or None)
         sentence_range = meta.get("sentence_range")
         if sentence_range and not hydrated.get("slot_sentence_range"):
             hydrated["slot_sentence_range"] = list(sentence_range)
         return hydrated
+
+    def _normalize_sentence_fill_meta(self, meta: dict[str, Any] | None) -> dict[str, Any]:
+        normalized = dict(meta or {})
+        blank_position = normalize_sentence_fill_blank_position(
+            normalized.get("blank_position") or normalized.get("slot_role")
+        )
+        function_type = normalize_sentence_fill_function_type(
+            normalized.get("function_type") or normalized.get("slot_function")
+        )
+        if blank_position:
+            normalized["blank_position"] = blank_position
+        if function_type:
+            normalized["function_type"] = function_type
+        normalized.pop("slot_role", None)
+        normalized.pop("slot_function", None)
+        return normalized
 
     def _sentence_range_from_paragraph_range(
         self,
@@ -1484,7 +1534,8 @@ class MaterialPipelineV2:
         return self._plan_candidate_pool(article_context=article_context, candidates=candidate_pool, selected_types=selected_types)
 
     def _expand_candidate_types(self, candidate_types: list[str] | set[str] | tuple[str, ...]) -> set[str]:
-        selected = {str(item) for item in candidate_types if str(item)}
+        supported = set(self._supported_candidate_types())
+        selected = {str(item) for item in candidate_types if str(item) in supported}
         if {"closed_span", "multi_paragraph_unit"} & selected:
             selected.add("functional_slot_unit")
         if "sentence_block_group" in selected:
@@ -1557,35 +1608,63 @@ class MaterialPipelineV2:
                     candidate.get("meta") or {},
                 )
         if "sentence_block_group" in selected_types:
+            def add_sentence_block_candidate(
+                *,
+                raw_units: list[str],
+                paragraph_range: list[int],
+                sentence_range: list[int],
+                composition: str,
+            ) -> None:
+                normalized = self._normalize_ordered_units_to_six(raw_units)
+                if normalized is None:
+                    return
+                normalized_units, unit_forms, local_bindings, normalization_reason = normalized
+                if len(normalized_units) != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+                    return
+                body = "\n".join(unit.strip() for unit in normalized_units if unit.strip()).strip()
+                if not body:
+                    return
+                grouped_unit_count = sum(1 for form in unit_forms if form == "grouped_unit")
+                add_candidate(
+                    "sentence_block_group",
+                    body,
+                    {
+                        "paragraph_range": paragraph_range,
+                        "sentence_range": sentence_range,
+                        "composition": composition,
+                        "group_size": self.SENTENCE_ORDER_FIXED_UNIT_COUNT,
+                        "ordered_units": normalized_units,
+                        "unit_forms": unit_forms,
+                        "grouped_unit_count": grouped_unit_count,
+                        "default_order": list(range(self.SENTENCE_ORDER_FIXED_UNIT_COUNT)),
+                        "local_bindings": local_bindings,
+                        "normalization_reason": normalization_reason,
+                    },
+                )
+
             for paragraph_index, paragraph in enumerate(paragraphs):
                 local_sentences = paragraph_sentences[paragraph_index] if paragraph_index < len(paragraph_sentences) else [sentence for sentence in self.sentence_splitter.split(paragraph) if sentence.strip()]
                 sentence_offset = paragraph_sentence_offsets[paragraph_index] if paragraph_index < len(paragraph_sentence_offsets) else 0
                 if len(local_sentences) < self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
                     continue
                 joined = "".join(local_sentences)
-                if any(marker in paragraph for marker in "①②③④⑤⑥⑦⑧⑨⑩") and 120 <= len(joined) <= 460 and self._sentence_order_unit_count(joined, "sentence_block_group") == self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
-                    add_candidate(
-                        "sentence_block_group",
-                        joined,
-                        {
-                            "paragraph_range": [paragraph_index, paragraph_index],
-                            "sentence_range": [sentence_offset, sentence_offset + len(local_sentences) - 1],
-                            "composition": "single_paragraph_full",
-                        },
+                if self.SENTENCE_ORDER_MIN_BLOCK_TEXT_LENGTH <= len(joined) <= 460:
+                    add_sentence_block_candidate(
+                        raw_units=local_sentences,
+                        paragraph_range=[paragraph_index, paragraph_index],
+                        sentence_range=[sentence_offset, sentence_offset + len(local_sentences) - 1],
+                        composition="single_paragraph_full",
                     )
-                for window in (self.SENTENCE_ORDER_FIXED_UNIT_COUNT,):
+                for window in range(self.SENTENCE_ORDER_FIXED_UNIT_COUNT, 13):
                     for start in range(0, max(len(local_sentences) - window + 1, 0)):
                         chunk = local_sentences[start : start + window]
                         body = "".join(chunk)
-                        if len(chunk) == self.SENTENCE_ORDER_FIXED_UNIT_COUNT and 120 <= len(body) <= 420 and self._sentence_order_unit_count(body, "sentence_block_group") == self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
-                            add_candidate(
-                                "sentence_block_group",
-                                body,
-                                {
-                                    "paragraph_range": [paragraph_index, paragraph_index],
-                                    "sentence_range": [sentence_offset + start, sentence_offset + start + len(chunk) - 1],
-                                    "composition": "single_paragraph_window",
-                                },
+                        if self.SENTENCE_ORDER_MIN_BLOCK_TEXT_LENGTH <= len(body) <= 420:
+                            add_sentence_block_candidate(
+                                raw_units=chunk,
+                                paragraph_range=[paragraph_index, paragraph_index],
+                                sentence_range=[sentence_offset + start, sentence_offset + start + len(chunk) - 1],
+                                composition="single_paragraph_window",
                             )
             for paragraph_index in range(max(0, len(paragraph_sentences) - 1)):
                 left_sentences = paragraph_sentences[paragraph_index]
@@ -1594,54 +1673,41 @@ class MaterialPipelineV2:
                     continue
                 left_offset = paragraph_sentence_offsets[paragraph_index]
                 right_offset = paragraph_sentence_offsets[paragraph_index + 1]
-                for left_count in (2, 3, 4):
-                    for right_count in (2, 3, 4):
+                for left_count in (2, 3, 4, 5, 6):
+                    for right_count in (2, 3, 4, 5, 6):
                         if left_count > len(left_sentences) or right_count > len(right_sentences):
                             continue
                         combined = left_sentences[-left_count:] + right_sentences[:right_count]
-                        if len(combined) != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+                        if len(combined) < self.SENTENCE_ORDER_FIXED_UNIT_COUNT or len(combined) > 12:
                             continue
                         body = "".join(combined)
-                        if not (140 <= len(body) <= 520):
+                        if not (self.SENTENCE_ORDER_MIN_BLOCK_TEXT_LENGTH <= len(body) <= 520):
                             continue
-                        if self._sentence_order_unit_count(body, "sentence_block_group") != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
-                            continue
-                        add_candidate(
-                            "sentence_block_group",
-                            body,
-                            {
-                                "paragraph_range": [paragraph_index, paragraph_index + 1],
-                                "sentence_range": [left_offset + len(left_sentences) - left_count, right_offset + right_count - 1],
-                                "composition": "adjacent_paragraph_pair",
-                            },
+                        add_sentence_block_candidate(
+                            raw_units=combined,
+                            paragraph_range=[paragraph_index, paragraph_index + 1],
+                            sentence_range=[left_offset + len(left_sentences) - left_count, right_offset + right_count - 1],
+                            composition="adjacent_paragraph_pair",
                         )
             for start in range(0, max(len(sentences) - self.SENTENCE_ORDER_FIXED_UNIT_COUNT + 1, 0)):
-                chunk = [sentence.strip() for sentence in sentences[start : start + self.SENTENCE_ORDER_FIXED_UNIT_COUNT] if sentence.strip()]
-                if len(chunk) != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
-                    continue
-                body = "".join(chunk)
-                if not (140 <= len(body) <= 520):
-                    continue
-                if self._sentence_order_unit_count(body, "sentence_block_group") != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
-                    continue
-                add_candidate(
-                    "sentence_block_group",
-                    body,
-                    {
-                        "sentence_range": [start, start + self.SENTENCE_ORDER_FIXED_UNIT_COUNT - 1],
-                        "composition": "global_sentence_window",
-                    },
-                )
+                for window in range(self.SENTENCE_ORDER_FIXED_UNIT_COUNT, 13):
+                    chunk = [sentence.strip() for sentence in sentences[start : start + window] if sentence.strip()]
+                    if len(chunk) < self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+                        continue
+                    body = "".join(chunk)
+                    if not (self.SENTENCE_ORDER_MIN_BLOCK_TEXT_LENGTH <= len(body) <= 520):
+                        continue
+                    add_sentence_block_candidate(
+                        raw_units=chunk,
+                        paragraph_range=[0, max(len(paragraphs) - 1, 0)],
+                        sentence_range=[start, start + len(chunk) - 1],
+                        composition="global_sentence_window",
+                    )
         if "insertion_context_unit" in selected_types:
             for start in range(0, max(len(sentences) - 1, 1)):
                 chunk = sentences[start : start + 3]
                 if len(chunk) >= 2:
                     add_candidate("insertion_context_unit", "".join(chunk), {"sentence_range": [start, start + len(chunk) - 1]})
-        if "phrase_or_clause_group" in selected_types:
-            for sentence in sentences:
-                clauses = [part.strip() for part in re.split(r"[，、；,;]", sentence) if part.strip()]
-                if len(clauses) >= 3:
-                    add_candidate("phrase_or_clause_group", "，".join(clauses[:5]), {"clause_count": len(clauses[:5]), "composition": "single_sentence_clause_group"})
         return candidates
 
     def _derive_ordered_unit_group_candidates(
@@ -1657,7 +1723,7 @@ class MaterialPipelineV2:
         article_id = str(article_context.get("article_id") or "")
 
         for start in range(0, max(len(sentences) - self.SENTENCE_ORDER_FIXED_UNIT_COUNT + 1, 0)):
-            for raw_count in (6, 7, 8):
+            for raw_count in range(self.SENTENCE_ORDER_FIXED_UNIT_COUNT, 13):
                 raw_units = sentences[start : start + raw_count]
                 if len(raw_units) != raw_count:
                     continue
@@ -1675,7 +1741,7 @@ class MaterialPipelineV2:
                 body = "\n".join(unit.strip() for unit in normalized_units if unit.strip()).strip()
                 if not body:
                     continue
-                if len(body) < 120 or len(body) > 520:
+                if len(body) < self.SENTENCE_ORDER_MIN_BLOCK_TEXT_LENGTH or len(body) > 520:
                     continue
                 sentence_range = [start, start + raw_count - 1]
                 paragraph_range = self._paragraph_range_for_sentence_range(article_context=article_context, sentence_range=sentence_range)
@@ -1724,22 +1790,26 @@ class MaterialPipelineV2:
         raw_units: list[str],
     ) -> tuple[list[str], list[str], list[dict[str, Any]], str] | None:
         units = [unit.strip() for unit in raw_units if unit.strip()]
-        if len(units) < self.SENTENCE_ORDER_FIXED_UNIT_COUNT or len(units) > 8:
+        if len(units) < self.SENTENCE_ORDER_FIXED_UNIT_COUNT or len(units) > 12:
             return None
         if len(units) == self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
             return units, ["single_sentence_unit"] * len(units), [], "raw_six_units"
 
         merge_need = len(units) - self.SENTENCE_ORDER_FIXED_UNIT_COUNT
+        if merge_need <= 0 or merge_need > len(units) // 2:
+            return None
         pair_scores: list[tuple[float, int, str]] = []
         for index in range(len(units) - 1):
             score, reason = self._ordered_groupable_pair_score(units[index], units[index + 1])
-            if score >= 0.10:
-                pair_scores.append((score, index, reason))
+            pair_scores.append((score, index, reason))
         pair_scores.sort(reverse=True)
+        eligible = [item for item in pair_scores if item[0] >= 0.10]
+        if len(eligible) < merge_need:
+            eligible = pair_scores
 
         selected_pairs: list[tuple[int, str]] = []
         used: set[int] = set()
-        for score, index, reason in pair_scores:
+        for score, index, reason in eligible:
             if index in used or index + 1 in used:
                 continue
             selected_pairs.append((index, reason))
@@ -1804,11 +1874,13 @@ class MaterialPipelineV2:
         return round(max(0.0, min(1.0, score)), 4), reason
 
     def _merge_ordered_unit_pair(self, left: str, right: str) -> str:
-        left_clean = left.strip().rstrip("。！？!?；;")
+        left_clean = left.strip()
         right_clean = right.strip()
         if not left_clean:
             return right_clean
-        separator = "" if left_clean.endswith(("，", ",", "；", ";", "：", ":")) else "，"
+        separator = ""
+        if not left_clean.endswith(("。", "！", "？", "!", "?", "；", ";", "，", ",", "：", ":")):
+            separator = "，"
         return f"{left_clean}{separator}{right_clean}".strip()
 
     def _ordered_unit_group_worthwhile(
@@ -2101,6 +2173,8 @@ class MaterialPipelineV2:
             score += 0.12
         if any(marker in text for marker in ORDER_SUMMARY_CLOSING_MARKERS + SUMMARY_MARKERS + CONCLUSION_MARKERS):
             score += 0.28
+        if index == total - 1 and any(marker in text for marker in ("最后", "最终", "总结判断", "归结起来")):
+            score += 0.14
         if any(marker in text for marker in COUNTERMEASURE_MARKERS):
             score += 0.18
         if any(marker in text for marker in ORDER_DEFINITION_MARKERS + ORDER_PROBLEM_MARKERS):
@@ -2144,8 +2218,8 @@ class MaterialPipelineV2:
 
         def build_candidate(
             *,
-            slot_role: str,
-            slot_function: str,
+            blank_position: str,
+            function_type: str,
             slot_paragraph_index: int,
             slot_sentence_local_index: int,
             planner_priority: float,
@@ -2160,8 +2234,8 @@ class MaterialPipelineV2:
             if slot_sentence_local_index < 0 or slot_sentence_local_index >= len(slot_sentences):
                 return None
             sentence_window = self._functional_slot_sentence_window(
-                slot_role=slot_role,
-                slot_function=slot_function,
+                blank_position=blank_position,
+                function_type=function_type,
                 local_sentences=slot_sentences,
                 slot_sentence_local_index=slot_sentence_local_index,
             )
@@ -2190,8 +2264,8 @@ class MaterialPipelineV2:
                 part for part in [context_before, slot_text, context_after] if part
             )
             blank_value_ok, blank_value_reason = self._functional_slot_has_blank_value(
-                slot_role=slot_role,
-                slot_function=slot_function,
+                blank_position=blank_position,
+                function_type=function_type,
                 slot_text=slot_text,
                 context_before=context_before,
                 context_after=context_after,
@@ -2206,8 +2280,8 @@ class MaterialPipelineV2:
                 "planner_priority": round(planner_priority, 4),
                 "planner_reason": planner_reason,
                 "unit_type": "functional_slot_unit",
-                "slot_role": slot_role,
-                "slot_function": slot_function,
+                "blank_position": blank_position,
+                "function_type": function_type,
                 "slot_sentence_range": [slot_sentence_abs_start, slot_sentence_abs_end],
                 "slot_context_paragraph_range": [context_paragraph_start, context_paragraph_end],
                 "slot_context_sentence_range": [
@@ -2244,18 +2318,18 @@ class MaterialPipelineV2:
         first_paragraph_sentences = paragraph_sentences[0] if paragraph_sentences else []
         if first_paragraph_sentences:
             opening_slot_text = first_paragraph_sentences[0]
-            opening_slot_function = self._infer_functional_slot_function(
-                slot_role="opening",
+            opening_function_type = self._infer_functional_fill_function_type(
+                blank_position="opening",
                 slot_text=opening_slot_text,
                 context_text="\n\n".join(paragraphs[0 : min(len(paragraphs), 2)]),
             )
             candidate = build_candidate(
-                slot_role="opening",
-                slot_function=opening_slot_function,
+                blank_position="opening",
+                function_type=opening_function_type,
                 slot_paragraph_index=0,
                 slot_sentence_local_index=0,
                 planner_priority=0.82,
-                planner_reason=f"functional_slot:{opening_slot_function}",
+                planner_reason=f"functional_slot:{opening_function_type}",
             )
             if candidate is not None:
                 candidates.append(candidate)
@@ -2280,17 +2354,17 @@ class MaterialPipelineV2:
                         context_after=context_after,
                         slot_context_text=context_text,
                     )
-                    slot_function = str(middle_trace.get("slot_function") or "")
-                    if not slot_function:
+                    function_type = str(middle_trace.get("function_type") or "")
+                    if not function_type:
                         continue
                     slot_score = self._functional_slot_middle_priority(middle_trace=middle_trace)
                     candidate = build_candidate(
-                        slot_role="middle",
-                        slot_function=slot_function,
+                        blank_position="middle",
+                        function_type=function_type,
                         slot_paragraph_index=right_index,
                         slot_sentence_local_index=local_index,
                         planner_priority=0.74 + 0.10 * slot_score - 0.03 * local_index,
-                        planner_reason=f"functional_slot:{slot_function}",
+                        planner_reason=f"functional_slot:{function_type}",
                         slot_trace=middle_trace,
                     )
                     if candidate is not None:
@@ -2303,18 +2377,18 @@ class MaterialPipelineV2:
         last_paragraph_sentences = paragraph_sentences[last_index] if 0 <= last_index < len(paragraph_sentences) else []
         if last_paragraph_sentences:
             ending_slot_text = last_paragraph_sentences[-1]
-            ending_slot_function = self._infer_functional_slot_function(
-                slot_role="ending",
+            ending_function_type = self._infer_functional_fill_function_type(
+                blank_position="ending",
                 slot_text=ending_slot_text,
                 context_text="\n\n".join(paragraphs[max(0, last_index - 1) : last_index + 1]),
             )
             candidate = build_candidate(
-                slot_role="ending",
-                slot_function=ending_slot_function,
+                blank_position="ending",
+                function_type=ending_function_type,
                 slot_paragraph_index=last_index,
                 slot_sentence_local_index=len(last_paragraph_sentences) - 1,
                 planner_priority=0.80,
-                planner_reason=f"functional_slot:{ending_slot_function}",
+                planner_reason=f"functional_slot:{ending_function_type}",
             )
             if candidate is not None:
                 candidates.append(candidate)
@@ -2329,41 +2403,41 @@ class MaterialPipelineV2:
             "sentence_block_group",
         }
 
-    def _fill_bridge_action_name(self, *, slot_role: str, slot_function: str) -> str:
-        if slot_role == "opening":
+    def _fill_bridge_action_name(self, *, blank_position: str, function_type: str) -> str:
+        if blank_position == "opening":
             return "extract_opening_slot_sentence"
-        if slot_role == "middle" and slot_function in {"carry_previous"}:
+        if blank_position == "middle" and function_type in {"carry_previous"}:
             return "extract_middle_carry_sentence_with_context"
-        if slot_role == "middle":
+        if blank_position == "middle":
             return "extract_middle_bridge_sentence_with_context"
-        if slot_role == "ending":
+        if blank_position == "ending":
             return "extract_ending_slot_sentence"
         return "extract_fill_slot_sentence"
 
     def _fill_bridge_slot_priority(
         self,
         *,
-        slot_role: str,
-        slot_function: str,
+        blank_position: str,
+        function_type: str,
         slot_text: str,
         context_before: str,
         context_after: str,
     ) -> float:
         base = {
             ("opening", "summary"): 0.90,
-            ("ending", "ending_summary"): 0.86,
+            ("ending", "conclusion"): 0.86,
             ("ending", "countermeasure"): 0.72,
-            ("middle", "bridge_both_sides"): 0.68,
+            ("middle", "bridge"): 0.68,
             ("middle", "carry_previous"): 0.64,
             ("middle", "lead_next"): 0.60,
             ("opening", "topic_intro"): 0.58,
-        }.get((slot_role, slot_function), 0.70)
+        }.get((blank_position, function_type), 0.70)
         marker_bonus = 0.0
-        if slot_role == "opening" and any(marker in slot_text for marker in ("当前", "如今", "近年来", "面对", "在此背景下")):
+        if blank_position == "opening" and any(marker in slot_text for marker in ("当前", "如今", "近年来", "面对", "在此背景下")):
             marker_bonus += 0.04
-        if slot_role == "middle" and (slot_text.startswith(CONTEXTUAL_OPENINGS) or slot_text.startswith(ORDER_PRONOUN_MARKERS)):
+        if blank_position == "middle" and (slot_text.startswith(CONTEXTUAL_OPENINGS) or slot_text.startswith(ORDER_PRONOUN_MARKERS)):
             marker_bonus += 0.05
-        if slot_role == "ending" and any(marker in slot_text for marker in SUMMARY_MARKERS + CONCLUSION_MARKERS + COUNTERMEASURE_MARKERS):
+        if blank_position == "ending" and any(marker in slot_text for marker in SUMMARY_MARKERS + CONCLUSION_MARKERS + COUNTERMEASURE_MARKERS):
             marker_bonus += 0.05
         context_bonus = 0.0
         if context_before:
@@ -2397,20 +2471,20 @@ class MaterialPipelineV2:
         proposals: list[dict[str, Any]] = []
         total_sentences = len(sentences)
         for sentence_index, sentence in enumerate(sentences):
-            slot_role = "middle"
+            blank_position = "middle"
             if sentence_index == 0:
-                slot_role = "opening"
+                blank_position = "opening"
             elif sentence_index == total_sentences - 1:
-                slot_role = "ending"
+                blank_position = "ending"
 
             context_before = sentences[sentence_index - 1] if sentence_index > 0 else ""
             context_after = sentences[sentence_index + 1] if sentence_index + 1 < total_sentences else ""
             slot_context_text = "".join(
                 sentences[max(0, sentence_index - 1) : min(total_sentences, sentence_index + 2)]
             )
-            slot_function = ""
+            function_type = ""
             prechecked_blank_value_reason = ""
-            if slot_role == "middle":
+            if blank_position == "middle":
                 precheck = self._middle_blank_value_precheck(
                     slot_text=sentence,
                     context_before=context_before,
@@ -2419,28 +2493,28 @@ class MaterialPipelineV2:
                 )
                 if not bool(precheck.get("ok")):
                     continue
-                slot_function = str(precheck.get("slot_function") or "")
+                function_type = str(precheck.get("function_type") or "")
                 prechecked_blank_value_reason = str(precheck.get("reason") or "")
             else:
-                slot_function = self._infer_functional_slot_function(
-                    slot_role=slot_role,
+                function_type = self._infer_functional_fill_function_type(
+                    blank_position=blank_position,
                     slot_text=sentence,
                     context_text=slot_context_text,
                     context_before=context_before,
                     context_after=context_after,
                 )
-            if not slot_function:
+            if not function_type:
                 continue
-            if slot_role == "opening" and slot_function not in {"summary", "topic_intro"}:
+            if blank_position == "opening" and function_type not in {"summary", "topic_intro"}:
                 continue
-            if slot_role == "middle" and slot_function not in {"carry_previous", "lead_next", "bridge_both_sides"}:
+            if blank_position == "middle" and function_type not in {"carry_previous", "lead_next", "bridge"}:
                 continue
-            if slot_role == "ending" and slot_function not in {"ending_summary", "countermeasure"}:
+            if blank_position == "ending" and function_type not in {"conclusion", "countermeasure"}:
                 continue
 
             slot_window = self._functional_slot_sentence_window(
-                slot_role=slot_role,
-                slot_function=slot_function,
+                blank_position=blank_position,
+                function_type=function_type,
                 local_sentences=sentences,
                 slot_sentence_local_index=sentence_index,
             )
@@ -2464,7 +2538,7 @@ class MaterialPipelineV2:
             context_after = sentences[local_end + 1] if local_end + 1 < total_sentences else ""
             slot_context_text = "".join(part for part in [context_before, slot_text, context_after] if part)
 
-            if slot_role == "middle":
+            if blank_position == "middle":
                 precheck = self._middle_blank_value_precheck(
                     slot_text=slot_text,
                     context_before=context_before,
@@ -2473,14 +2547,14 @@ class MaterialPipelineV2:
                 )
                 if not bool(precheck.get("ok")):
                     continue
-                slot_function = str(precheck.get("slot_function") or "")
+                function_type = str(precheck.get("function_type") or "")
                 blank_value_reason = str(precheck.get("reason") or prechecked_blank_value_reason or "")
-                if not slot_function:
+                if not function_type:
                     continue
             else:
                 blank_value_ok, blank_value_reason = self._functional_slot_has_blank_value(
-                    slot_role=slot_role,
-                    slot_function=slot_function,
+                    blank_position=blank_position,
+                    function_type=function_type,
                     slot_text=slot_text,
                     context_before=context_before,
                     context_after=context_after,
@@ -2489,8 +2563,8 @@ class MaterialPipelineV2:
                 if not blank_value_ok:
                     continue
 
-            if slot_role == "opening":
-                if slot_function == "summary":
+            if blank_position == "opening":
+                if function_type == "summary":
                     if self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS) < 0.16 or not context_after.strip():
                         continue
                 else:
@@ -2501,7 +2575,7 @@ class MaterialPipelineV2:
                     )
                     if not opening_ok:
                         continue
-            if slot_role == "middle" and slot_function == "bridge_both_sides":
+            if blank_position == "middle" and function_type == "bridge":
                 middle_trace = self._classify_middle_functional_slot(
                     slot_text=slot_text,
                     context_before=context_before,
@@ -2513,7 +2587,7 @@ class MaterialPipelineV2:
                     float(middle_trace.get("forward_score") or 0.0),
                 ) < 0.44:
                     continue
-            if slot_role == "middle" and slot_function == "carry_previous":
+            if blank_position == "middle" and function_type == "carry_previous":
                 middle_trace = self._classify_middle_functional_slot(
                     slot_text=slot_text,
                     context_before=context_before,
@@ -2522,10 +2596,10 @@ class MaterialPipelineV2:
                 )
                 if float(middle_trace.get("backward_score") or 0.0) < 0.54:
                     continue
-            if slot_role == "ending" and slot_function == "ending_summary":
+            if blank_position == "ending" and function_type == "conclusion":
                 if self._marker_strength(slot_text, SUMMARY_MARKERS + CONCLUSION_MARKERS) < 0.16 or not context_before.strip():
                     continue
-            if slot_role == "ending" and slot_function == "countermeasure":
+            if blank_position == "ending" and function_type == "countermeasure":
                 countermeasure_ok, _ = self._fill_countermeasure_gate(
                     slot_text=slot_text,
                     context_before=context_before,
@@ -2535,11 +2609,14 @@ class MaterialPipelineV2:
                 if not countermeasure_ok:
                     continue
 
-            bridge_action = self._fill_bridge_action_name(slot_role=slot_role, slot_function=slot_function)
+            bridge_action = self._fill_bridge_action_name(
+                blank_position=blank_position,
+                function_type=function_type,
+            )
             proposals.append(
                 {
-                    "slot_role": slot_role,
-                    "slot_function": slot_function,
+                    "blank_position": blank_position,
+                    "function_type": function_type,
                     "slot_text": slot_text,
                     "local_start": local_start,
                     "local_end": local_end,
@@ -2548,8 +2625,8 @@ class MaterialPipelineV2:
                     "blank_value_reason": blank_value_reason,
                     "bridge_action": bridge_action,
                     "priority": self._fill_bridge_slot_priority(
-                        slot_role=slot_role,
-                        slot_function=slot_function,
+                        blank_position=blank_position,
+                        function_type=function_type,
                         slot_text=slot_text,
                         context_before=context_before,
                         context_after=context_after,
@@ -2570,8 +2647,8 @@ class MaterialPipelineV2:
         bridged_meta.update(
             {
                 "unit_type": "functional_slot_unit",
-                "slot_role": best["slot_role"],
-                "slot_function": best["slot_function"],
+                "blank_position": best["blank_position"],
+                "function_type": best["function_type"],
                 "slot_sentence_range": slot_sentence_range,
                 "slot_context_sentence_range": slot_context_sentence_range,
                 "slot_context_paragraph_range": paragraph_range,
@@ -2591,10 +2668,11 @@ class MaterialPipelineV2:
                     "paragraph": paragraph_range,
                 },
                 "planner_source": "fill_formalization_bridge_prototype",
-                "planner_reason": f"fill_bridge:{best['bridge_action']}:{best['slot_role']}:{best['slot_function']}",
+                "planner_reason": f"fill_bridge:{best['bridge_action']}:{best['blank_position']}:{best['function_type']}",
                 "planner_priority": round(min(0.95, 0.70 + 0.25 * float(best["priority"])), 4),
             }
         )
+        bridged_meta = self._normalize_sentence_fill_meta(bridged_meta)
         bridged_quality_flags = list(candidate.get("quality_flags") or [])
         if "fill_formalization_bridge" not in bridged_quality_flags:
             bridged_quality_flags.append("fill_formalization_bridge")
@@ -2613,15 +2691,15 @@ class MaterialPipelineV2:
     def _functional_slot_sentence_window(
         self,
         *,
-        slot_role: str,
-        slot_function: str,
+        blank_position: str,
+        function_type: str,
         local_sentences: list[str],
         slot_sentence_local_index: int,
     ) -> tuple[int, int] | None:
         if not local_sentences:
             return None
-        _ = slot_role
-        _ = slot_function
+        _ = blank_position
+        _ = function_type
         return (slot_sentence_local_index, slot_sentence_local_index)
 
     def _fill_slot_is_decorative_weak(self, slot_text: str) -> bool:
@@ -2700,7 +2778,7 @@ class MaterialPipelineV2:
             return False, "ending_countermeasure_missing_action_target"
         return True, "ending_countermeasure_anchor"
 
-    def _resolve_opening_slot_function(
+    def _resolve_opening_fill_function_type(
         self,
         *,
         slot_text: str,
@@ -2728,7 +2806,7 @@ class MaterialPipelineV2:
             and comma_count <= 4
             and not (data_heavy and comma_count >= 3)
         ):
-            return "summary", "opening_summary_reclassified"
+            return "summary", "summary_reclassified"
 
         topic_intro_ok, topic_intro_reason = self._fill_topic_intro_gate(
             slot_text=slot_text,
@@ -2747,7 +2825,7 @@ class MaterialPipelineV2:
             return "", "opening_topic_intro_background_only"
         return "topic_intro", topic_intro_reason
 
-    def _resolve_ending_slot_function(
+    def _resolve_ending_fill_function_type(
         self,
         *,
         slot_text: str,
@@ -2781,22 +2859,22 @@ class MaterialPipelineV2:
         if summary_marked and bool(context_before.strip()) and (
             action_hits == 0 or policy_hits >= 2 or value_hits >= 2
         ):
-            return "ending_summary", "ending_summary_reclassified"
+            return "conclusion", "conclusion_reclassified"
         if modal_hits > 0 and action_hits == 0:
             if summary_like_tail:
-                return "ending_summary", "ending_summary_modal_reclassified"
+                return "conclusion", "conclusion_modal_reclassified"
             return "", "ending_countermeasure_modal_without_action"
         if policy_hits >= 2 and action_hits <= 1:
             if summary_like_tail:
-                return "ending_summary", "ending_summary_policy_reclassified"
+                return "conclusion", "conclusion_policy_reclassified"
             return "", "ending_countermeasure_policy_statement"
         if value_hits >= 2 and action_hits == 0:
             if summary_like_tail:
-                return "ending_summary", "ending_summary_value_reclassified"
+                return "conclusion", "conclusion_value_reclassified"
             return "", "ending_countermeasure_value_judgement"
         if backward_dependency < 0.40:
             if summary_like_tail:
-                return "ending_summary", "ending_summary_backward_supported"
+                return "conclusion", "conclusion_backward_supported"
             return "", "ending_countermeasure_backward_link_weak"
 
         countermeasure_ok, countermeasure_reason = self._fill_countermeasure_gate(
@@ -2808,7 +2886,7 @@ class MaterialPipelineV2:
         if countermeasure_ok and action_hits >= 1 and backward_dependency >= 0.40:
             return "countermeasure", countermeasure_reason
         if summary_like_tail:
-            return "ending_summary", "ending_summary_fallback_reclassified"
+            return "conclusion", "conclusion_fallback_reclassified"
         return "", "ending_countermeasure_reject_surface_only"
 
     def _middle_blank_value_precheck(
@@ -2828,7 +2906,7 @@ class MaterialPipelineV2:
         if not (context_before.strip() and context_after.strip()):
             return {
                 "ok": False,
-                "slot_function": "",
+                "function_type": "",
                 "reason": "middle_blank_value_requires_two_side_context",
                 "trace": middle_trace,
             }
@@ -2861,35 +2939,35 @@ class MaterialPipelineV2:
         if self._fill_slot_is_decorative_weak(slot_text):
             return {
                 "ok": False,
-                "slot_function": "",
+                "function_type": "",
                 "reason": "middle_blank_value_decorative_sentence",
                 "trace": middle_trace,
             }
         if data_heavy:
             return {
                 "ok": False,
-                "slot_function": "",
+                "function_type": "",
                 "reason": "middle_blank_value_data_heavy",
                 "trace": middle_trace,
             }
         if list_like:
             return {
                 "ok": False,
-                "slot_function": "",
+                "function_type": "",
                 "reason": "middle_blank_value_list_like",
                 "trace": middle_trace,
             }
         if detail_heavy:
             return {
                 "ok": False,
-                "slot_function": "",
+                "function_type": "",
                 "reason": "middle_blank_value_detail_heavy",
                 "trace": middle_trace,
             }
         if standalone_anchor >= 0.70 and reference_dependency < 0.22:
             return {
                 "ok": False,
-                "slot_function": "",
+                "function_type": "",
                 "reason": "middle_blank_value_sentence_too_independent",
                 "trace": middle_trace,
             }
@@ -2936,7 +3014,7 @@ class MaterialPipelineV2:
             and comma_count <= 3
             and len(slot_text) <= 68
         ):
-            candidates.append(("bridge_both_sides", round(bridge_score, 4), "middle_bridge_prechecked_gap"))
+            candidates.append(("bridge", round(bridge_score, 4), "middle_bridge_prechecked_gap"))
 
         lead_score = 0.42 * forward_score + 0.30 * forward_dependency_score + 0.28 * (1 - min(1.0, backward_score))
         if (
@@ -2954,7 +3032,7 @@ class MaterialPipelineV2:
         if not candidates:
             return {
                 "ok": False,
-                "slot_function": "",
+                "function_type": "",
                 "reason": "middle_blank_value_gap_not_strong_enough",
                 "trace": middle_trace,
             }
@@ -2963,7 +3041,7 @@ class MaterialPipelineV2:
         best_function, _, best_reason = candidates[0]
         return {
             "ok": True,
-            "slot_function": best_function,
+            "function_type": best_function,
             "reason": best_reason,
             "trace": middle_trace,
         }
@@ -2971,8 +3049,8 @@ class MaterialPipelineV2:
     def _functional_slot_has_blank_value(
         self,
         *,
-        slot_role: str,
-        slot_function: str,
+        blank_position: str,
+        function_type: str,
         slot_text: str,
         context_before: str,
         context_after: str,
@@ -2989,17 +3067,17 @@ class MaterialPipelineV2:
         bidirectional = self._bidirectional_validation(slot_context_text)
         if self._fill_slot_is_decorative_weak(slot_text) and max(backward, forward, bidirectional) < 0.52:
             return False, "decorative_sentence_low_gap"
-        if slot_role == "opening":
-            if slot_function == "summary":
+        if blank_position == "opening":
+            if function_type == "summary":
                 if summary_signal >= 0.16 and bool(context_after.strip()):
                     return True, "summary_anchor"
-                return False, "opening_summary_weak_blank_value"
+                return False, "summary_weak_blank_value"
             return self._fill_topic_intro_gate(
                 slot_text=slot_text,
                 context_after=context_after,
                 summary_signal=summary_signal,
             )
-        if slot_role == "middle":
+        if blank_position == "middle":
             precheck = self._middle_blank_value_precheck(
                 slot_text=slot_text,
                 context_before=context_before,
@@ -3008,12 +3086,12 @@ class MaterialPipelineV2:
             )
             if not bool(precheck.get("ok")):
                 return False, str(precheck.get("reason") or "middle_blank_value_gap_not_strong_enough")
-            inferred_function = str(precheck.get("slot_function") or "")
-            if inferred_function != slot_function:
+            inferred_function = str(precheck.get("function_type") or "")
+            if inferred_function != function_type:
                 return False, f"middle_role_mismatch:{inferred_function}"
             return True, str(precheck.get("reason") or "middle_blank_value_prechecked")
-        if slot_role == "ending":
-            if slot_function == "countermeasure":
+        if blank_position == "ending":
+            if function_type == "countermeasure":
                 return self._fill_countermeasure_gate(
                     slot_text=slot_text,
                     context_before=context_before,
@@ -3024,14 +3102,14 @@ class MaterialPipelineV2:
                 (summary_signal >= 0.16 or any(marker in slot_text for marker in ("总之", "可见", "由此", "这启示我们", "这说明")))
                 and bool(context_before.strip())
             ):
-                return True, "ending_summary_anchor"
-            return False, "ending_summary_weak_anchor"
-        return False, "slot_role_unresolved"
+                return True, "conclusion_anchor"
+            return False, "conclusion_weak_anchor"
+        return False, "blank_position_unresolved"
 
-    def _infer_functional_slot_function(
+    def _infer_functional_fill_function_type(
         self,
         *,
-        slot_role: str,
+        blank_position: str,
         slot_text: str,
         context_text: str,
         context_before: str = "",
@@ -3040,24 +3118,24 @@ class MaterialPipelineV2:
         slot_sentences = [sentence for sentence in self.sentence_splitter.split(slot_text) if sentence.strip()]
         slot_span = self._build_span(
             article_id="functional_slot",
-            span_id=f"functional_slot:{slot_role}",
+            span_id=f"functional_slot:{blank_position}",
             text=slot_text,
             paragraph_count=1,
             sentence_count=max(1, len(slot_sentences)),
             source_domain=None,
         )
         slot_universal = self.universal_tagger._heuristic_tag(slot_span)
-        if slot_role == "opening":
+        if blank_position == "opening":
             summary_signal = max(slot_universal.summary_strength, self._marker_strength(slot_text, SUMMARY_MARKERS))
             if summary_signal >= 0.50:
                 return "summary"
-            opening_function, _ = self._resolve_opening_slot_function(
+            opening_function, _ = self._resolve_opening_fill_function_type(
                 slot_text=slot_text,
                 context_after=context_after,
             )
             return opening_function
-        if slot_role == "ending":
-            ending_function, _ = self._resolve_ending_slot_function(
+        if blank_position == "ending":
+            ending_function, _ = self._resolve_ending_fill_function_type(
                 slot_text=slot_text,
                 context_before=context_before,
             )
@@ -3071,7 +3149,7 @@ class MaterialPipelineV2:
         )
         if not bool(middle_precheck.get("ok")):
             return ""
-        return str(middle_precheck.get("slot_function") or "")
+        return str(middle_precheck.get("function_type") or "")
 
     def _carry_previous_gap_ready(
         self,
@@ -3207,7 +3285,7 @@ class MaterialPipelineV2:
             forward_dependency_score=forward_dependency_score,
             standalone_anchor=standalone_anchor,
         )
-        slot_function = ""
+        function_type = ""
         classification_reason = "middle_role_unresolved"
         if (
             has_bridge_marker
@@ -3216,7 +3294,7 @@ class MaterialPipelineV2:
             and forward_score >= 0.40
             and bridge_dependency_score >= 0.58
         ):
-            slot_function = "bridge_both_sides"
+            function_type = "bridge"
             classification_reason = "middle_bridge_marker"
         elif (
             bidirectional_score >= 0.58
@@ -3224,7 +3302,7 @@ class MaterialPipelineV2:
             and forward_score >= 0.44
             and bridge_dependency_score >= 0.60
         ):
-            slot_function = "bridge_both_sides"
+            function_type = "bridge"
             classification_reason = "middle_bridge_bidirectional"
         elif (
             carry_gap_ready
@@ -3233,14 +3311,14 @@ class MaterialPipelineV2:
             and forward_score <= backward_score - 0.08
             and carry_dependency_score >= 0.56
         ):
-            slot_function = "carry_previous"
+            function_type = "carry_previous"
             classification_reason = "middle_carry_previous_backward"
         elif (
             forward_score >= 0.54
             and backward_score <= forward_score - 0.04
             and forward_dependency_score >= 0.52
         ):
-            slot_function = "lead_next"
+            function_type = "lead_next"
             classification_reason = "middle_lead_next_forward"
         elif (
             carry_gap_ready
@@ -3249,7 +3327,7 @@ class MaterialPipelineV2:
             and forward_score < 0.44
             and carry_dependency_score >= 0.54
         ):
-            slot_function = "carry_previous"
+            function_type = "carry_previous"
             classification_reason = "middle_carry_previous_reference"
         elif (
             carry_gap_ready
@@ -3262,7 +3340,7 @@ class MaterialPipelineV2:
             and not has_bridge_marker
             and forward_dependency_score <= 0.36
         ):
-            slot_function = "carry_previous"
+            function_type = "carry_previous"
             classification_reason = "middle_carry_previous_weak_explicit"
         elif (
             carry_gap_ready
@@ -3276,17 +3354,17 @@ class MaterialPipelineV2:
             and not has_bridge_marker
             and not has_forward_marker
         ):
-            slot_function = "carry_previous"
+            function_type = "carry_previous"
             classification_reason = "middle_carry_previous_implicit"
         elif (
             forward_score >= 0.50
             and backward_score < 0.50
             and forward_dependency_score >= 0.50
         ):
-            slot_function = "lead_next"
+            function_type = "lead_next"
             classification_reason = "middle_lead_next_transition"
         return {
-            "slot_function": slot_function,
+            "function_type": function_type,
             "backward_score": round(backward_score, 4),
             "forward_score": round(forward_score, 4),
             "bidirectional_score": round(bidirectional_score, 4),
@@ -3334,16 +3412,16 @@ class MaterialPipelineV2:
                             "paragraph_end": {"type": "integer", "minimum": 0},
                             "sentence_start_in_first_paragraph": {"type": ["integer", "null"], "minimum": 0},
                             "sentence_end_in_last_paragraph": {"type": ["integer", "null"], "minimum": 0},
-                            "slot_role": {"type": ["string", "null"], "enum": ["opening", "middle", "ending", None]},
-                            "slot_function": {
+                            "blank_position": {"type": ["string", "null"], "enum": ["opening", "middle", "ending", None]},
+                            "function_type": {
                                 "type": ["string", "null"],
                                 "enum": [
                                     "summary",
                                     "topic_intro",
                                     "carry_previous",
                                     "lead_next",
-                                    "bridge_both_sides",
-                                    "ending_summary",
+                                    "bridge",
+                                    "conclusion",
                                     "countermeasure",
                                     None,
                                 ],
@@ -3492,8 +3570,8 @@ class MaterialPipelineV2:
             "planner_priority": round(float(spec.get("priority") or 0.0), 4),
             "planner_reason": str(spec.get("reason") or "").strip(),
         }
-        slot_role = str(spec.get("slot_role") or "").strip()
-        slot_function = str(spec.get("slot_function") or "").strip()
+        blank_position = normalize_sentence_fill_blank_position(spec.get("blank_position"))
+        function_type = normalize_sentence_fill_function_type(spec.get("function_type"))
 
         if candidate_type == "whole_passage":
             text = article_context["text"]
@@ -3543,8 +3621,8 @@ class MaterialPipelineV2:
                     "text": text,
                     "meta": {
                         **meta,
-                        "slot_role": slot_role or None,
-                        "slot_function": slot_function or None,
+                        "blank_position": blank_position or None,
+                        "function_type": function_type or None,
                     },
                 },
             )
@@ -3634,9 +3712,9 @@ class MaterialPipelineV2:
                 + 0.12 * summary_strength
                 + 0.12 * countermeasure
             )
-            if neutral_signal_profile.get("slot_role") in {"opening", "ending"}:
+            if neutral_signal_profile.get("blank_position") in {"opening", "ending"}:
                 score += 0.05
-            if neutral_signal_profile.get("slot_function") == "bridge_both_sides":
+            if neutral_signal_profile.get("function_type") == "bridge":
                 score += 0.04
         if candidate_type in {"ordered_unit_group", "weak_formal_order_group"}:
             sequence_integrity = float(neutral_signal_profile.get("sequence_integrity") or 0.0)
@@ -3657,13 +3735,6 @@ class MaterialPipelineV2:
             )
             if candidate_type == "weak_formal_order_group":
                 score -= 0.04
-        if candidate_type == "phrase_or_clause_group":
-            clause_count = int((candidate.get("meta") or {}).get("clause_count") or 0)
-            score = 0.30 * float(neutral_signal_profile.get("phrase_order_salience") or 0.0) + 0.22 * float(neutral_signal_profile.get("local_binding_strength") or 0.0) + 0.18 * float(neutral_signal_profile.get("sequence_integrity") or 0.0)
-            score += min(0.16, clause_count * 0.03)
-            if clause_count < 4:
-                score -= 0.16
-
         if candidate.get("meta", {}).get("planner_source") == "llm_candidate_planner":
             score += min(0.10, float(candidate["meta"].get("planner_priority") or 0.0) * 0.10)
         score += self._candidate_scope_bonus(article_context=article_context, candidate=candidate)
@@ -3689,6 +3760,8 @@ class MaterialPipelineV2:
             composition = str((candidate.get("meta") or {}).get("composition") or "")
             if composition == "adjacent_paragraph_pair":
                 return 0.08
+            if composition in {"single_paragraph_window", "single_paragraph_full"}:
+                return 0.06
         return 0.0
 
     def _planner_score_threshold(self, candidate_type: str) -> float:
@@ -3699,9 +3772,8 @@ class MaterialPipelineV2:
             "functional_slot_unit": 0.50,
             "ordered_unit_group": 0.56,
             "weak_formal_order_group": 0.52,
-            "sentence_block_group": 0.54,
+            "sentence_block_group": 0.52,
             "insertion_context_unit": 0.46,
-            "phrase_or_clause_group": 0.62,
         }
         return thresholds.get(candidate_type, 0.45)
 
@@ -3715,7 +3787,6 @@ class MaterialPipelineV2:
             "weak_formal_order_group": 4,
             "sentence_block_group": 6,
             "insertion_context_unit": 6,
-            "phrase_or_clause_group": 3,
         }
 
     def _candidate_priority_boost(self, candidate: dict[str, Any]) -> float:
@@ -3735,7 +3806,6 @@ class MaterialPipelineV2:
             "weak_formal_order_group",
             "sentence_block_group",
             "insertion_context_unit",
-            "phrase_or_clause_group",
         )
 
     def _build_neutral_signal_profile(self, *, article_context: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
@@ -3840,13 +3910,10 @@ class MaterialPipelineV2:
             "temporal_order_strength": sentence_order_signals["temporal_order_strength"],
             "action_sequence_irreversibility": sentence_order_signals["action_sequence_irreversibility"],
             "tail_settlement_strength": sentence_order_signals["closing_signal_strength"],
-            "phrase_order_salience": self._phrase_order_salience(candidate["text"], candidate["candidate_type"]),
-            "slot_role": self._slot_role(candidate, article_context=article_context),
-            "slot_function": self._slot_function(candidate),
             "slot_explicit_ready": self._slot_explicit_ready(candidate, article_context=article_context),
-            "blank_position": self._blank_position(candidate),
-            "function_type": self._fill_function_type(candidate, text, universal),
-            "logic_relation": self._fill_logic_relation(candidate, text, universal),
+            "blank_position": normalize_sentence_fill_blank_position(self._blank_position(candidate)),
+            "function_type": normalize_sentence_fill_function_type(self._fill_function_type(candidate, text, universal)),
+            "logic_relation": normalize_sentence_fill_logic_relation(self._fill_logic_relation(candidate, text, universal)),
             "bidirectional_validation": self._bidirectional_validation(text),
             "reference_dependency": self._reference_dependency(text),
             "abstraction_level": self._abstraction_level(text, universal),
@@ -4275,8 +4342,8 @@ class MaterialPipelineV2:
         signal_profile: dict[str, Any],
         candidate: dict[str, Any],
     ) -> dict[str, Any]:
-        slot_role = str(signal_profile.get("slot_role") or "")
-        slot_function = str(signal_profile.get("slot_function") or "")
+        blank_position = normalize_sentence_fill_blank_position(signal_profile.get("blank_position"))
+        function_type = normalize_sentence_fill_function_type(signal_profile.get("function_type"))
         candidate_type = str(candidate.get("candidate_type") or "")
         blank_value_ready = bool((candidate.get("meta") or {}).get("blank_value_ready"))
         carry_dependency_score = float((candidate.get("meta") or {}).get("slot_carry_dependency_score") or 0.0)
@@ -4290,19 +4357,19 @@ class MaterialPipelineV2:
         text_length = len(str(candidate.get("text") or ""))
         thresholds = self._task_scoring_thresholds("sentence_fill")
 
-        if slot_function == "carry_previous":
+        if function_type == "carry_previous":
             primary_slot_dependency_score = carry_dependency_score
-        elif slot_function == "bridge_both_sides":
+        elif function_type == "bridge":
             primary_slot_dependency_score = bridge_dependency_score
-        elif slot_function == "lead_next":
+        elif function_type == "lead_next":
             primary_slot_dependency_score = forward_dependency_score
-        elif slot_function == "topic_intro":
+        elif function_type == "topic_intro":
             primary_slot_dependency_score = self._round_score(0.55 * object_match_strength + 0.45 * forward_dependency_score)
-        elif slot_function == "summary":
+        elif function_type == "summary":
             primary_slot_dependency_score = summary_strength
-        elif slot_function == "ending_summary":
+        elif function_type == "conclusion":
             primary_slot_dependency_score = summary_strength
-        elif slot_function == "countermeasure":
+        elif function_type == "countermeasure":
             primary_slot_dependency_score = countermeasure_strength
         else:
             primary_slot_dependency_score = max(carry_dependency_score, bridge_dependency_score, forward_dependency_score)
@@ -4310,11 +4377,11 @@ class MaterialPipelineV2:
         blank_value_score = 0.0
         if blank_value_ready:
             blank_value_score = max(0.58, primary_slot_dependency_score)
-            if slot_function in {"summary", "ending_summary"}:
+            if function_type in {"summary", "conclusion"}:
                 blank_value_score = max(blank_value_score, summary_strength)
-            if slot_function == "countermeasure":
+            if function_type == "countermeasure":
                 blank_value_score = max(blank_value_score, countermeasure_strength)
-            if slot_function == "topic_intro":
+            if function_type == "topic_intro":
                 blank_value_score = max(blank_value_score, 0.50 * object_match_strength + 0.50 * forward_dependency_score)
         blank_value_score = self._round_score(blank_value_score)
 
@@ -4390,23 +4457,23 @@ class MaterialPipelineV2:
                     (int(slot_context_sentence_range[-1]) - int(slot_context_sentence_range[0]) + 1) / 4,
                 )
             )
-        slot_function_complexity = self._round_score(
+        function_type_complexity = self._round_score(
             {
                 "carry_previous": 0.48,
-                "bridge_both_sides": 0.76,
+                "bridge": 0.76,
                 "lead_next": 0.54,
                 "topic_intro": 0.42,
                 "summary": 0.36,
-                "ending_summary": 0.40,
+                "conclusion": 0.40,
                 "countermeasure": 0.58,
-            }.get(slot_function, 0.45)
+            }.get(function_type, 0.45)
         )
         difficulty_vector = {
             "complexity_score": self._round_score(
                 0.45 * structure_scores["primary_slot_dependency_score"]
                 + 0.25 * structure_scores["blank_value_score"]
                 + 0.15 * context_span_score
-                + 0.15 * slot_function_complexity
+                + 0.15 * function_type_complexity
             ),
             "ambiguity_score": self._round_score(
                 0.45 * risk_penalties["role_ambiguity_penalty"]
@@ -4416,7 +4483,7 @@ class MaterialPipelineV2:
             "reasoning_depth_score": self._round_score(
                 0.55 * structure_scores["primary_slot_dependency_score"]
                 + 0.35 * structure_scores["blank_value_score"]
-                + 0.10 * slot_function_complexity
+                + 0.10 * function_type_complexity
             ),
             "constraint_intensity_score": self._round_score(
                 0.40 * structure_scores["blank_value_score"]
@@ -4434,8 +4501,8 @@ class MaterialPipelineV2:
         )
         difficulty_trace = {
             "source_fields": {
-                "slot_role": slot_role,
-                "slot_function": slot_function,
+                "blank_position": blank_position,
+                "function_type": function_type,
                 "blank_value_score": structure_scores["blank_value_score"],
                 "primary_slot_dependency_score": structure_scores["primary_slot_dependency_score"],
                 "role_confidence_score": structure_scores["role_confidence_score"],
@@ -4445,12 +4512,12 @@ class MaterialPipelineV2:
                 "slot_context_sentence_range": slot_context_sentence_range,
                 "slot_sentence_range": slot_sentence_range,
                 "context_span_score": context_span_score,
-                "slot_function_complexity": slot_function_complexity,
+                "function_type_complexity": function_type_complexity,
             },
             "aggregations": {
-                "complexity_formula": "0.45 * primary_slot_dependency_score + 0.25 * blank_value_score + 0.15 * context_span_score + 0.15 * slot_function_complexity",
+                "complexity_formula": "0.45 * primary_slot_dependency_score + 0.25 * blank_value_score + 0.15 * context_span_score + 0.15 * function_type_complexity",
                 "ambiguity_formula": "0.45 * role_ambiguity_penalty + 0.25 * standalone_penalty + 0.30 * (1 - role_confidence_score)",
-                "reasoning_depth_formula": "0.55 * primary_slot_dependency_score + 0.35 * blank_value_score + 0.10 * slot_function_complexity",
+                "reasoning_depth_formula": "0.55 * primary_slot_dependency_score + 0.35 * blank_value_score + 0.10 * function_type_complexity",
                 "constraint_intensity_formula": "0.40 * blank_value_score + 0.35 * primary_slot_dependency_score + 0.25 * role_confidence_score",
                 "difficulty_vector": difficulty_vector,
             },
@@ -4469,8 +4536,8 @@ class MaterialPipelineV2:
             "difficulty_trace": difficulty_trace,
             "score_trace": {
                 "source_fields": {
-                    "slot_role": slot_role,
-                    "slot_function": slot_function,
+                    "blank_position": blank_position,
+                    "function_type": function_type,
                     "blank_value_ready": blank_value_ready,
                     "blank_value_reason": str((candidate.get("meta") or {}).get("blank_value_reason") or ""),
                     "slot_classification_reason": str((candidate.get("meta") or {}).get("slot_classification_reason") or ""),
@@ -4483,7 +4550,7 @@ class MaterialPipelineV2:
                     "text_length": text_length,
                 },
                 "aggregations": {
-                    "primary_slot_selector": slot_function or "fallback_max_dependency",
+                    "primary_slot_selector": function_type or "fallback_max_dependency",
                     "readiness_formula": "0.50 * blank_value_score + 0.30 * primary_slot_dependency_score + 0.20 * role_confidence_score",
                     "readiness_components": {
                         "blank_value_component": self._round_score(0.50 * structure_scores["blank_value_score"]),
@@ -4777,6 +4844,902 @@ class MaterialPipelineV2:
             return float(cards[0].get("score") or 0.0)
         return 0.0
 
+    @classmethod
+    def _round1_reports_dir(cls) -> Path:
+        return Path(__file__).resolve().parents[3] / "reports"
+
+    @classmethod
+    def _load_round1_asset_rows(cls, filename: str) -> list[dict[str, str]]:
+        path = cls._round1_reports_dir() / filename
+        if not path.exists():
+            return []
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            return [dict(row) for row in csv.DictReader(handle)]
+
+    @classmethod
+    def _round1_asset_cache(cls) -> dict[str, list[dict[str, str]]]:
+        if cls._ROUND1_ASSET_CACHE is None:
+            cls._ROUND1_ASSET_CACHE = {
+                "sentence_fill_fewshot": cls._load_round1_asset_rows("round1_fewshot_sentence_fill_candidates_2026-04-12.csv"),
+                "center_understanding_fewshot": cls._load_round1_asset_rows("round1_fewshot_center_understanding_candidates_2026-04-12.csv"),
+                "sentence_order_fewshot": cls._load_round1_asset_rows("round1_fewshot_sentence_order_candidates_2026-04-12.csv"),
+                "boundary_pack": cls._load_round1_asset_rows("round1_boundary_case_pack_2026-04-12.csv"),
+                "negative_pack": cls._load_round1_asset_rows("round1_negative_case_pack_2026-04-12.csv"),
+                "gold_ready_pool": cls._load_round1_asset_rows("pilot_round1_gold_ready_pool_2026-04-12.csv"),
+                "export_eligible_pool": cls._load_round1_asset_rows("pilot_round1_export_eligible_pool_2026-04-12.csv"),
+            }
+        return cls._ROUND1_ASSET_CACHE
+
+    @staticmethod
+    def _judgment_status(score: float, *, ready_floor: float = 0.68, borderline_floor: float = 0.48) -> str:
+        if score >= ready_floor:
+            return "ready"
+        if score >= borderline_floor:
+            return "borderline"
+        return "weak"
+
+    @staticmethod
+    def _safe_avg(values: list[float]) -> float:
+        usable = [float(value) for value in values if value is not None]
+        if not usable:
+            return 0.0
+        return round(sum(usable) / len(usable), 4)
+
+    @staticmethod
+    def _span_width(meta: dict[str, Any], key: str) -> int:
+        span = meta.get(key)
+        if isinstance(span, list) and len(span) == 2:
+            try:
+                start = int(span[0])
+                end = int(span[1])
+                return max(1, end - start + 1)
+            except (TypeError, ValueError):
+                return 0
+        return 0
+
+    @staticmethod
+    def _sentence_fill_local_cohesion(fill_profile: dict[str, Any]) -> float:
+        return round(
+            (
+                float(fill_profile.get("bidirectional_validation") or 0.0)
+                + float(fill_profile.get("backward_link_strength") or 0.0)
+                + float(fill_profile.get("forward_link_strength") or 0.0)
+            )
+            / 3,
+            4,
+        )
+
+    @staticmethod
+    def _sentence_fill_edge_position_coverage_penalty(
+        *,
+        blank_position: str,
+        has_round1_coverage: bool,
+        llm_selection_score: float,
+        paragraph_width: int,
+        reference_dependency: float,
+    ) -> float:
+        uncovered_edge = blank_position in {"opening", "inserted"} and not has_round1_coverage
+        if not uncovered_edge:
+            return 0.0
+        penalty = 0.10
+        if llm_selection_score < 0.88:
+            penalty += 0.03
+        penalty += min(0.09, max(0, paragraph_width - 2) * 0.03)
+        penalty += min(0.03, reference_dependency * 0.03)
+        if llm_selection_score >= 0.92:
+            penalty = min(penalty, 0.03)
+        return round(penalty, 4)
+
+    @staticmethod
+    def _sentence_fill_middle_fill_cohesion_bonus(
+        *,
+        blank_position: str,
+        local_cohesion: float,
+    ) -> float:
+        if blank_position != "middle":
+            return 0.0
+        return round(0.08 + max(0.0, local_cohesion - 0.70) * 0.10, 4)
+
+    @staticmethod
+    def _sentence_fill_local_closure_bonus(
+        *,
+        blank_position: str,
+        local_cohesion: float,
+        closure_score: float,
+    ) -> float:
+        if blank_position == "middle":
+            return round(0.02 + 0.04 * max(0.0, closure_score - 0.55) + 0.03 * max(0.0, local_cohesion - 0.68), 4)
+        if blank_position in {"opening", "inserted"}:
+            return round(0.02 * max(0.0, closure_score - 0.60), 4)
+        return round(0.01 * max(0.0, closure_score - 0.60), 4)
+
+    @staticmethod
+    def _sentence_fill_slot_function_clarity_bonus(
+        *,
+        blank_position: str,
+        function_type: str,
+        structure_label: str,
+        closure_score: float,
+        titleability: float,
+    ) -> float:
+        bonus = 0.0
+        if blank_position == "opening" and function_type in {"topic_intro", "summary"}:
+            if structure_label in {"总分", "背景-核心结论", "观点-论证"}:
+                bonus += 0.03
+            elif structure_label in {"时间演进", "并列展开"}:
+                bonus -= 0.01
+        if blank_position == "inserted" and function_type == "reference_summary":
+            bonus += 0.02
+        bonus += 0.03 * max(0.0, titleability - 0.62)
+        bonus += 0.02 * max(0.0, closure_score - 0.60)
+        return round(bonus, 4)
+
+    @staticmethod
+    def _sentence_fill_llm_dominance_relief_bonus(
+        *,
+        blank_position: str,
+        has_round1_coverage: bool,
+        llm_selection_score: float,
+        family_match_score: float,
+    ) -> float:
+        if blank_position not in {"opening", "inserted"} or has_round1_coverage:
+            return 0.0
+        if llm_selection_score >= 0.92 and family_match_score >= 0.88:
+            return 0.05
+        return 0.0
+
+    @staticmethod
+    def _sentence_fill_legacy_card_tiebreak_key(card_score: float, business_score: float) -> tuple[float, float]:
+        return (round(card_score, 4), round(business_score, 4))
+
+    @staticmethod
+    def _business_family_for_item(item: dict[str, Any]) -> str:
+        return str(
+            item.get("_business_family_id")
+            or item.get("_cached_business_family_id")
+            or (((item.get("question_ready_context") or {}).get("runtime_binding") or {}).get("question_type"))
+            or ""
+        )
+
+    def _sentence_fill_has_round1_coverage(self, item: dict[str, Any]) -> bool:
+        asset_anchor = dict(((item.get("llm_family_match_hint") or {}).get("asset_anchor")) or {})
+        return bool(list(asset_anchor.get("anchor_sample_ids") or []))
+
+    def _sentence_fill_blank_position(self, item: dict[str, Any]) -> str:
+        fill_profile = ((item.get("business_feature_profile") or {}).get("sentence_fill_profile") or {})
+        return str(fill_profile.get("blank_position") or "")
+
+    def _sentence_fill_compact_fill_fit_strength(self, item: dict[str, Any]) -> float:
+        fill_profile = ((item.get("business_feature_profile") or {}).get("sentence_fill_profile") or {})
+        neutral_profile = dict(item.get("neutral_signal_profile") or {})
+        blank_position = self._sentence_fill_blank_position(item)
+        local_cohesion = self._sentence_fill_local_cohesion(fill_profile)
+        closure_score = float(neutral_profile.get("closure_score") or 0.0)
+        paragraph_width = self._span_width(dict(item.get("meta") or {}), "paragraph_range")
+        candidate_type = str(item.get("candidate_type") or "")
+        compact_bonus = 0.0
+        if candidate_type in {"closed_span", "functional_slot_unit"}:
+            compact_bonus += 0.18
+        if paragraph_width and paragraph_width <= 2:
+            compact_bonus += 0.08
+        middle_bonus = 0.06 if blank_position == "middle" else 0.0
+        edge_penalty = 0.06 if blank_position in {"opening", "inserted"} and not self._sentence_fill_has_round1_coverage(item) else 0.0
+        return round(compact_bonus + middle_bonus + 0.14 * local_cohesion + 0.10 * closure_score - edge_penalty, 4)
+
+    def _sentence_fill_boundary_guardrail_should_promote(
+        self,
+        *,
+        higher_item: dict[str, Any],
+        lower_item: dict[str, Any],
+    ) -> bool:
+        if self._business_family_for_item(higher_item) != "sentence_fill" or self._business_family_for_item(lower_item) != "sentence_fill":
+            return False
+        higher_type = str(higher_item.get("candidate_type") or "")
+        lower_type = str(lower_item.get("candidate_type") or "")
+        if higher_type not in {"multi_paragraph_unit", "whole_passage"}:
+            return False
+        if lower_type not in {"closed_span", "functional_slot_unit"}:
+            return False
+
+        higher_key = self._item_selection_sort_key(higher_item)
+        lower_key = self._item_selection_sort_key(lower_item)
+        if not higher_key > lower_key:
+            return False
+
+        llm_gap = float(higher_item.get("llm_selection_score") or 0.0) - float(lower_item.get("llm_selection_score") or 0.0)
+        if llm_gap > 0.045:
+            return False
+
+        higher_meta = dict(higher_item.get("meta") or {})
+        lower_meta = dict(lower_item.get("meta") or {})
+        higher_width = self._span_width(higher_meta, "paragraph_range")
+        lower_width = self._span_width(lower_meta, "paragraph_range")
+        if not higher_width or not lower_width:
+            return False
+
+        higher_blank_position = self._sentence_fill_blank_position(higher_item)
+        higher_edge_risk = higher_blank_position in {"opening", "inserted"} and not self._sentence_fill_has_round1_coverage(higher_item)
+        if not higher_edge_risk:
+            return False
+
+        higher_prefix = tuple(higher_key[:4])
+        lower_prefix = tuple(lower_key[:4])
+        residual_tiebreak = lower_prefix >= higher_prefix
+        higher_fit = self._sentence_fill_compact_fill_fit_strength(higher_item)
+        lower_fit = self._sentence_fill_compact_fill_fit_strength(lower_item)
+        if not residual_tiebreak:
+            primary_gap = float(higher_key[0]) - float(lower_key[0])
+            secondary_gap = float(higher_key[1]) - float(lower_key[1])
+            residual_tiebreak = (
+                primary_gap <= 0.03
+                and secondary_gap <= 0.015
+                and (
+                    float(higher_item.get("quality_score") or 0.0) > float(lower_item.get("quality_score") or 0.0)
+                    or self._top_card_score(higher_item) > self._top_card_score(lower_item)
+                    or self._top_business_card_score(higher_item) > self._top_business_card_score(lower_item)
+                )
+            )
+        if not residual_tiebreak:
+            primary_gap = float(higher_key[0]) - float(lower_key[0])
+            residual_tiebreak = (
+                primary_gap <= 0.03
+                and lower_fit >= higher_fit + 0.18
+                and (
+                    float(higher_item.get("quality_score") or 0.0) > float(lower_item.get("quality_score") or 0.0)
+                    or self._top_card_score(higher_item) > self._top_card_score(lower_item)
+                    or self._top_business_card_score(higher_item) > self._top_business_card_score(lower_item)
+                )
+            )
+        if not residual_tiebreak:
+            primary_gap = float(higher_key[0]) - float(lower_key[0])
+            residual_tiebreak = (
+                primary_gap <= 0.012
+                and float(lower_key[1]) >= float(higher_key[1]) + 0.03
+                and lower_fit >= higher_fit + 0.12
+                and higher_width >= lower_width
+            )
+        if not residual_tiebreak:
+            return False
+
+        return lower_fit >= higher_fit + 0.03
+
+    def _apply_sentence_fill_boundary_guardrail(self, ranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if len(ranked) < 2:
+            return ranked
+        adjusted = list(ranked)
+        for index in range(len(adjusted) - 1):
+            current = adjusted[index]
+            challenger = adjusted[index + 1]
+            if self._sentence_fill_boundary_guardrail_should_promote(
+                higher_item=current,
+                lower_item=challenger,
+            ):
+                adjusted[index], adjusted[index + 1] = challenger, current
+        return adjusted
+
+    def _technical_material_failure_reason(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+    ) -> str:
+        candidate_id = str(item.get("candidate_id") or "").strip()
+        article_id = str(item.get("article_id") or "").strip()
+        text = str(item.get("text") or item.get("original_text") or "").strip()
+        meta = dict(item.get("meta") or {})
+        if not candidate_id:
+            return "missing_candidate_id"
+        if not article_id:
+            return "missing_article_id"
+        if not text:
+            return "empty_candidate_text"
+        paragraph_range = meta.get("paragraph_range")
+        sentence_range = meta.get("sentence_range")
+        if not (isinstance(paragraph_range, list) and len(paragraph_range) == 2):
+            return "paragraph_span_not_traceable"
+        if not (isinstance(sentence_range, list) and len(sentence_range) == 2):
+            return "sentence_span_not_traceable"
+        if re.search(r"<(?:/?w:|/?xml|/?html|/?body|/?p|/?span|/?div)[^>]*>", text, flags=re.IGNORECASE):
+            return "xml_or_html_residue_detected"
+        if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", text):
+            return "illegal_control_character_detected"
+        if business_family_id == "sentence_order":
+            candidate_type = str(item.get("candidate_type") or "")
+            if self._sentence_order_unit_count(text, candidate_type) < self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+                return "sentence_order_unit_count_below_floor"
+        return ""
+
+    def _round1_asset_anchor(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+    ) -> dict[str, Any]:
+        cache = self._round1_asset_cache()
+        if business_family_id == "sentence_fill":
+            fill_profile = (item.get("business_feature_profile") or {}).get("sentence_fill_profile") or {}
+            blank_position = str(fill_profile.get("blank_position") or "")
+            function_type = str(fill_profile.get("function_type") or "")
+            logic_relation = str(fill_profile.get("logic_relation") or "")
+            exact = [
+                row for row in cache.get("sentence_fill_fewshot", [])
+                if row.get("blank_position") == blank_position
+                and row.get("function_type") == function_type
+                and row.get("logic_relation") == logic_relation
+            ]
+            if exact:
+                return {
+                    "anchor_role": "gold_ready_positive",
+                    "anchor_pack": "round1_fewshot_sentence_fill_candidates",
+                    "coverage_tag": exact[0].get("coverage_tag"),
+                    "anchor_sample_ids": [row.get("sample_id") for row in exact[:3] if row.get("sample_id")],
+                    "reason": "round1_sentence_fill_tuple_match",
+                }
+            return {
+                "anchor_role": "gold_ready_positive",
+                "anchor_pack": "pilot_round1_gold_ready_pool",
+                "coverage_tag": "uncovered_fill_tuple_needs_review",
+                "anchor_sample_ids": [],
+                "reason": "round1_sentence_fill_tuple_not_seen_in_first_pass",
+            }
+        if business_family_id == "sentence_order":
+            neutral = item.get("neutral_signal_profile") or {}
+            candidate_type = str(item.get("candidate_type") or "")
+            opening_anchor = str(neutral.get("opening_anchor_type") or "")
+            closing_anchor = str(neutral.get("closing_anchor_type") or "")
+            exact = [
+                row for row in cache.get("sentence_order_fewshot", [])
+                if row.get("candidate_type") == candidate_type
+                and row.get("opening_anchor_type") == opening_anchor
+                and row.get("closing_anchor_type") == closing_anchor
+            ]
+            if exact:
+                return {
+                    "anchor_role": "gold_ready_positive",
+                    "anchor_pack": "round1_fewshot_sentence_order_candidates",
+                    "coverage_tag": exact[0].get("coverage_tag"),
+                    "anchor_sample_ids": [row.get("sample_id") for row in exact[:3] if row.get("sample_id")],
+                    "reason": "round1_sentence_order_anchor_match",
+                }
+            negative = [
+                row for row in cache.get("negative_pack", [])
+                if row.get("business_family_id") == "sentence_order"
+                and "summary_or_conclusion" in str(row.get("blocked_reason") or "")
+            ]
+            closing_rule = str((neutral.get("closing_rule") or ((item.get("business_feature_profile") or {}).get("sentence_order_profile") or {}).get("closing_rule") or ""))
+            if closing_rule == "summary_or_conclusion":
+                return {
+                    "anchor_role": "negative_control",
+                    "anchor_pack": "round1_negative_case_pack",
+                    "coverage_tag": "negative.summary_or_conclusion_blocked",
+                    "anchor_sample_ids": [row.get("sample_id") for row in negative[:3] if row.get("sample_id")],
+                    "reason": "round1_sentence_order_negative_control_match",
+                }
+            return {
+                "anchor_role": "gold_ready_positive",
+                "anchor_pack": "pilot_round1_export_eligible_pool",
+                "coverage_tag": "uncovered_order_anchor_combo_needs_review",
+                "anchor_sample_ids": [],
+                "reason": "round1_sentence_order_combo_not_seen_in_first_pass",
+            }
+        boundary_rows = [
+            row for row in cache.get("boundary_pack", [])
+            if row.get("business_family_id") == "center_understanding"
+        ]
+        negative_rows = [
+            row for row in cache.get("negative_pack", [])
+            if row.get("business_family_id") == "center_understanding"
+        ]
+        neutral = item.get("neutral_signal_profile") or {}
+        branch_focus = float(neutral.get("branch_focus_strength") or 0.0)
+        single_center = float(neutral.get("single_center_strength") or 0.0)
+        if branch_focus >= 0.42 and 0.40 <= single_center <= 0.78 and boundary_rows:
+            return {
+                "anchor_role": "review_holdout_boundary",
+                "anchor_pack": "round1_boundary_case_pack",
+                "coverage_tag": boundary_rows[0].get("boundary_type"),
+                "anchor_sample_ids": [boundary_rows[0].get("sample_id")],
+                "reason": "round1_center_understanding_boundary_proxy",
+            }
+        if single_center < 0.28 and negative_rows:
+            return {
+                "anchor_role": "negative_control",
+                "anchor_pack": "round1_negative_case_pack",
+                "coverage_tag": negative_rows[0].get("negative_type"),
+                "anchor_sample_ids": [negative_rows[0].get("sample_id")],
+                "reason": "round1_center_understanding_negative_proxy",
+            }
+        return {
+            "anchor_role": "gold_ready_positive",
+            "anchor_pack": "round1_fewshot_center_understanding_candidates",
+            "coverage_tag": "stable_center_understanding_gold_pack",
+            "anchor_sample_ids": [row.get("sample_id") for row in cache.get("center_understanding_fewshot", [])[:3] if row.get("sample_id")],
+            "reason": "round1_center_understanding_positive_pack_proxy",
+        }
+
+    def _build_center_understanding_semantic_hints(
+        self,
+        *,
+        item: dict[str, Any],
+        asset_anchor: dict[str, Any],
+    ) -> dict[str, Any]:
+        neutral = dict(item.get("neutral_signal_profile") or {})
+        business_feature_profile = dict(item.get("business_feature_profile") or {})
+        structure_label = str(
+            business_feature_profile.get("material_structure_label")
+            or neutral.get("material_structure_label")
+            or ""
+        )
+        topic_consistency = float(neutral.get("topic_consistency_strength") or 0.0)
+        summary_strength = float(neutral.get("summary_strength") or 0.0)
+        closure = float(neutral.get("closure_score") or 0.0)
+        titleability = float(neutral.get("titleability") or 0.0)
+        analysis_to_conclusion = float(neutral.get("analysis_to_conclusion_strength") or 0.0)
+        branch_focus = float(neutral.get("branch_focus_strength") or 0.0)
+        example_to_theme = float(neutral.get("example_to_theme_strength") or 0.0)
+        value_judgement = float(neutral.get("value_judgement_strength") or 0.0)
+        turning_focus = float(neutral.get("turning_focus_strength") or 0.0)
+        object_scope_stability = float(neutral.get("object_scope_stability") or 0.0)
+        anchor_role = str(asset_anchor.get("anchor_role") or "")
+
+        axis_scores = {
+            "global_abstraction": (
+                0.34 * topic_consistency
+                + 0.22 * titleability
+                + 0.20 * object_scope_stability
+                + 0.12 * (1 - min(1.0, branch_focus))
+                + 0.12 * (1 - min(1.0, example_to_theme))
+            ),
+            "final_summary": (
+                0.34 * summary_strength
+                + 0.28 * closure
+                + 0.22 * analysis_to_conclusion
+                + 0.16 * value_judgement
+            ),
+            "transition_after": (
+                0.32 * turning_focus
+                + 0.28 * analysis_to_conclusion
+                + 0.20 * topic_consistency
+                + 0.20 * closure
+            ),
+            "solution_conclusion": (
+                0.34 * analysis_to_conclusion
+                + 0.26 * value_judgement
+                + 0.22 * closure
+                + 0.18 * summary_strength
+            ),
+            "example_elevation": (
+                0.42 * example_to_theme
+                + 0.24 * value_judgement
+                + 0.18 * summary_strength
+                + 0.16 * closure
+            ),
+        }
+        structure_scores = {
+            "total_sub": (
+                0.34 * topic_consistency
+                + 0.22 * object_scope_stability
+                + 0.22 * (1 - min(1.0, branch_focus))
+                + 0.22 * titleability
+            ),
+            "sub_total": (
+                0.34 * summary_strength
+                + 0.30 * closure
+                + 0.22 * analysis_to_conclusion
+                + 0.14 * titleability
+            ),
+            "parallel": (
+                0.42 * branch_focus
+                + 0.22 * topic_consistency
+                + 0.18 * turning_focus
+                + (0.18 if "parallel" in structure_label else 0.0)
+            ),
+            "problem_solution": (
+                0.34 * analysis_to_conclusion
+                + 0.24 * value_judgement
+                + 0.22 * turning_focus
+                + (0.20 if "problem" in structure_label or "solution" in structure_label else 0.0)
+            ),
+            "example_conclusion": (
+                0.40 * example_to_theme
+                + 0.24 * summary_strength
+                + 0.22 * closure
+                + 0.14 * value_judgement
+            ),
+        }
+        if anchor_role == "review_holdout_boundary":
+            axis_scores["transition_after"] += 0.06
+            structure_scores["parallel"] += 0.05
+        if anchor_role == "negative_control":
+            for key in axis_scores:
+                axis_scores[key] *= 0.72
+            for key in structure_scores:
+                structure_scores[key] *= 0.72
+
+        main_axis_source = max(axis_scores.items(), key=lambda item: item[1])[0]
+        argument_structure = max(structure_scores.items(), key=lambda item: item[1])[0]
+        main_axis_score = round(max(axis_scores.values()), 4)
+        argument_score = round(max(structure_scores.values()), 4)
+        return {
+            "llm_main_axis_source_hint": {
+                "value": main_axis_source,
+                "score": main_axis_score,
+                "source": "round1_asset_distilled_llm",
+                "asset_anchor": asset_anchor,
+            },
+            "llm_argument_structure_hint": {
+                "value": argument_structure,
+                "score": argument_score,
+                "source": "round1_asset_distilled_llm",
+                "asset_anchor": asset_anchor,
+            },
+            "llm_center_understanding_reason": (
+                f"asset_anchor={anchor_role}:{asset_anchor.get('coverage_tag') or 'n/a'}; "
+                f"main_axis_source={main_axis_source}:{main_axis_score}; "
+                f"argument_structure={argument_structure}:{argument_score}; "
+                f"signals=summary:{round(summary_strength,3)},closure:{round(closure,3)},"
+                f"turning:{round(turning_focus,3)},branch:{round(branch_focus,3)}"
+            ),
+        }
+
+    def _build_llm_material_judgments(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+    ) -> dict[str, Any]:
+        neutral = dict(item.get("neutral_signal_profile") or {})
+        business_feature_profile = dict(item.get("business_feature_profile") or {})
+        llm_signal_resolution = dict(item.get("llm_signal_resolution") or {})
+        llm_consensus = dict(llm_signal_resolution.get("consensus") or {})
+        llm_adjudication = dict(item.get("llm_adjudication") or {})
+        adjudication_consensus = dict(llm_adjudication.get("consensus") or {})
+        llm_available = str(llm_consensus.get("status") or "") in {"single", "unanimous"} or bool(adjudication_consensus)
+        source = "round1_asset_distilled_llm" if llm_available else "round1_asset_distilled_fallback"
+        readability_score = float(
+            business_feature_profile.get("readability")
+            or neutral.get("standalone_readability")
+            or neutral.get("semantic_completeness_score")
+            or 0.0
+        )
+        asset_anchor = self._round1_asset_anchor(
+            item=item,
+            business_family_id=business_family_id,
+        )
+        anchor_role = str(asset_anchor.get("anchor_role") or "")
+        anchor_bonus = 0.12 if anchor_role == "gold_ready_positive" else (-0.18 if anchor_role == "negative_control" else -0.06)
+
+        if business_family_id == "sentence_fill":
+            fill_profile = business_feature_profile.get("sentence_fill_profile") or {}
+            structure_score = self._safe_avg(
+                [
+                    float(fill_profile.get("bidirectional_validation") or neutral.get("bidirectional_validation") or 0.0),
+                    max(
+                        float(fill_profile.get("backward_link_strength") or neutral.get("backward_link_strength") or 0.0),
+                        float(fill_profile.get("forward_link_strength") or neutral.get("forward_link_strength") or 0.0),
+                    ),
+                    1 - min(1.0, float(fill_profile.get("reference_dependency") or neutral.get("reference_dependency") or 0.0)),
+                ]
+            )
+            single_center_score = float(neutral.get("topic_consistency_strength") or 0.0)
+            canonical_ready = 1.0 if fill_profile.get("blank_position") and fill_profile.get("function_type") and fill_profile.get("logic_relation") else 0.0
+            family_match_score = min(1.0, max(0.0, 0.52 * structure_score + 0.26 * canonical_ready + 0.12 * float(fill_profile.get("explicit_slot_ready") or 0.0) + 0.10 + anchor_bonus))
+        elif business_family_id == "sentence_order":
+            order_profile = business_feature_profile.get("sentence_order_profile") or {}
+            unit_count = int(order_profile.get("unit_count") or self._sentence_order_unit_count(str(item.get("text") or ""), str(item.get("candidate_type") or "")))
+            anchor_ready = 1.0 if neutral.get("opening_anchor_type") and neutral.get("closing_anchor_type") else 0.0
+            structure_score = self._safe_avg(
+                [
+                    float(order_profile.get("sequence_integrity") or neutral.get("sequence_integrity") or 0.0),
+                    float(order_profile.get("local_binding_strength") or neutral.get("local_binding_strength") or 0.0),
+                    float(order_profile.get("context_closure_score") or neutral.get("context_closure_score") or 0.0),
+                    1 - min(1.0, float(order_profile.get("multi_path_risk") or neutral.get("multi_path_risk") or 0.0)),
+                ]
+            )
+            single_center_score = float(neutral.get("topic_consistency_strength") or neutral.get("context_closure_score") or 0.0)
+            family_match_score = min(1.0, max(0.0, 0.50 * structure_score + 0.20 * anchor_ready + 0.12 * (1.0 if unit_count == self.SENTENCE_ORDER_FIXED_UNIT_COUNT else 0.0) + 0.10 + anchor_bonus))
+        else:
+            structure_score = self._safe_avg(
+                [
+                    float(neutral.get("topic_consistency_strength") or 0.0),
+                    float(neutral.get("summary_strength") or 0.0),
+                    float(neutral.get("closure_score") or 0.0),
+                ]
+            )
+            single_center_score = float(neutral.get("single_center_strength") or 0.0)
+            family_match_score = min(1.0, max(0.0, 0.48 * single_center_score + 0.24 * structure_score + 0.18 * (1 - min(1.0, float(neutral.get("non_key_detail_density") or 0.0))) + 0.10 + anchor_bonus))
+
+        generation_readiness_score = self._safe_avg(
+            [
+                readability_score,
+                structure_score,
+                family_match_score,
+            ]
+        )
+        decision = str(adjudication_consensus.get("decision") or "").strip().lower()
+        if decision == "accept":
+            generation_readiness_score = min(1.0, generation_readiness_score + 0.08)
+        elif decision == "reject" or anchor_role == "negative_control":
+            generation_readiness_score = min(generation_readiness_score, 0.18)
+        if anchor_role == "review_holdout_boundary":
+            generation_readiness_score = min(generation_readiness_score, 0.58)
+
+        center_hints: dict[str, Any] = {}
+        if business_family_id == "center_understanding":
+            center_hints = self._build_center_understanding_semantic_hints(
+                item=item,
+                asset_anchor=asset_anchor,
+            )
+            generation_readiness_score = self._safe_avg(
+                [
+                    generation_readiness_score,
+                    float((center_hints.get("llm_main_axis_source_hint") or {}).get("score") or 0.0),
+                    float((center_hints.get("llm_argument_structure_hint") or {}).get("score") or 0.0),
+                ]
+            )
+
+        readiness_status = "blocked" if anchor_role == "negative_control" else self._judgment_status(
+            generation_readiness_score,
+            ready_floor=0.66,
+            borderline_floor=0.46,
+        )
+        return {
+            "llm_readability_judgment": {
+                "score": round(readability_score, 4),
+                "status": self._judgment_status(readability_score),
+                "source": source,
+            },
+            "llm_structure_integrity_judgment": {
+                "score": round(structure_score, 4),
+                "status": self._judgment_status(structure_score),
+                "source": source,
+            },
+            "llm_single_center_judgment": {
+                "score": round(single_center_score, 4),
+                "status": self._judgment_status(single_center_score),
+                "source": source,
+            },
+            "llm_family_match_hint": {
+                "business_family_id": business_family_id,
+                "score": round(family_match_score, 4),
+                "status": "negative_control" if anchor_role == "negative_control" else self._judgment_status(family_match_score),
+                "source": source,
+                "asset_anchor": asset_anchor,
+            },
+            "llm_generation_readiness": {
+                "score": round(generation_readiness_score, 4),
+                "status": readiness_status,
+                "source": source,
+                "asset_anchor_role": anchor_role,
+                "reason": asset_anchor.get("reason"),
+            },
+            "llm_reason_summary": (
+                f"asset_anchor={anchor_role}:{asset_anchor.get('coverage_tag') or 'n/a'}; "
+                f"readability={round(readability_score, 3)}; "
+                f"struct={round(structure_score, 3)}; "
+                f"family_match={round(family_match_score, 3)}; "
+                f"readiness={round(generation_readiness_score, 3)}"
+            ),
+            "llm_selection_score": round(generation_readiness_score, 4),
+            **center_hints,
+        }
+
+    def _attach_llm_material_judgments(
+        self,
+        *,
+        item: dict[str, Any],
+        business_family_id: str,
+    ) -> dict[str, Any]:
+        updated = deepcopy(item)
+        judgments = self._build_llm_material_judgments(
+            item=updated,
+            business_family_id=business_family_id,
+        )
+        updated.update(judgments)
+        question_ready_context = dict(updated.get("question_ready_context") or {})
+        question_ready_context["llm_generation_readiness"] = {
+            "status": judgments["llm_generation_readiness"]["status"],
+            "score": judgments["llm_generation_readiness"]["score"],
+            "asset_anchor_role": judgments["llm_generation_readiness"].get("asset_anchor_role"),
+        }
+        question_ready_context["llm_family_match_hint"] = {
+            "business_family_id": judgments["llm_family_match_hint"]["business_family_id"],
+            "score": judgments["llm_family_match_hint"]["score"],
+            "asset_anchor": judgments["llm_family_match_hint"].get("asset_anchor"),
+        }
+        if business_family_id == "center_understanding":
+            question_ready_context["llm_main_axis_source_hint"] = dict(
+                judgments.get("llm_main_axis_source_hint") or {}
+            )
+            question_ready_context["llm_argument_structure_hint"] = dict(
+                judgments.get("llm_argument_structure_hint") or {}
+            )
+        updated["question_ready_context"] = question_ready_context
+        local_profile = dict(updated.get("local_profile") or {})
+        local_profile["llm_generation_readiness"] = question_ready_context["llm_generation_readiness"]
+        local_profile["llm_family_match_hint"] = question_ready_context["llm_family_match_hint"]
+        if business_family_id == "center_understanding":
+            local_profile["llm_main_axis_source_hint"] = question_ready_context["llm_main_axis_source_hint"]
+            local_profile["llm_argument_structure_hint"] = question_ready_context["llm_argument_structure_hint"]
+        updated["local_profile"] = local_profile
+        return updated
+
+    def _item_selection_sort_key(self, item: dict[str, Any]) -> tuple[float, ...]:
+        business_family_id = str(
+            item.get("_business_family_id")
+            or item.get("_cached_business_family_id")
+            or (((item.get("question_ready_context") or {}).get("runtime_binding") or {}).get("question_type"))
+            or ""
+        )
+        llm_selection_score = float(
+            item.get("llm_selection_score")
+            or ((item.get("llm_generation_readiness") or {}).get("score"))
+            or 0.0
+        )
+        family_match_score = float(((item.get("llm_family_match_hint") or {}).get("score")) or 0.0)
+        structure_score = float(((item.get("llm_structure_integrity_judgment") or {}).get("score")) or 0.0)
+        single_center_score = float(((item.get("llm_single_center_judgment") or {}).get("score")) or 0.0)
+        task_final_score = float(
+            (self._selected_task_scoring_for_item(item=item, business_family_id=business_family_id).get("final_candidate_score") or 0.0)
+        )
+        quality_score = float(item.get("quality_score") or 0.0)
+        card_score = self._top_card_score(item)
+        business_score = self._top_business_card_score(item)
+        asset_anchor = dict(((item.get("llm_family_match_hint") or {}).get("asset_anchor")) or {})
+        asset_anchor_role = str(asset_anchor.get("anchor_role") or "")
+        if business_family_id == "sentence_fill":
+            fill_profile = ((item.get("business_feature_profile") or {}).get("sentence_fill_profile") or {})
+            blank_position = str(fill_profile.get("blank_position") or "")
+            function_type = normalize_sentence_fill_function_type(fill_profile.get("function_type"))
+            meta = dict(item.get("meta") or {})
+            neutral_profile = dict(item.get("neutral_signal_profile") or {})
+            local_cohesion = self._sentence_fill_local_cohesion(fill_profile)
+            reference_dependency = float(fill_profile.get("reference_dependency") or 0.0)
+            paragraph_width = self._span_width(meta, "paragraph_range")
+            closure_score = float(neutral_profile.get("closure_score") or 0.0)
+            titleability = float(neutral_profile.get("titleability") or 0.0)
+            structure_label = str(
+                fill_profile.get("material_structure_label")
+                or ((item.get("business_feature_profile") or {}).get("material_structure_label"))
+                or ((item.get("neutral_signal_profile") or {}).get("material_structure_label"))
+                or ""
+            )
+            has_round1_coverage = bool(list(asset_anchor.get("anchor_sample_ids") or []))
+            coverage_penalty = self._sentence_fill_edge_position_coverage_penalty(
+                blank_position=blank_position,
+                has_round1_coverage=has_round1_coverage,
+                llm_selection_score=llm_selection_score,
+                paragraph_width=paragraph_width,
+                reference_dependency=reference_dependency,
+            )
+            middle_bonus = self._sentence_fill_middle_fill_cohesion_bonus(
+                blank_position=blank_position,
+                local_cohesion=local_cohesion,
+            )
+            local_closure_bonus = self._sentence_fill_local_closure_bonus(
+                blank_position=blank_position,
+                local_cohesion=local_cohesion,
+                closure_score=closure_score,
+            )
+            slot_function_clarity_bonus = self._sentence_fill_slot_function_clarity_bonus(
+                blank_position=blank_position,
+                function_type=function_type,
+                structure_label=structure_label,
+                closure_score=closure_score,
+                titleability=titleability,
+            )
+            llm_dominance_relief_bonus = self._sentence_fill_llm_dominance_relief_bonus(
+                blank_position=blank_position,
+                has_round1_coverage=has_round1_coverage,
+                llm_selection_score=llm_selection_score,
+                family_match_score=family_match_score,
+            )
+            uncovered_edge = blank_position in {"opening", "inserted"} and not has_round1_coverage
+            edge_discourse_bonus = 0.0
+            if uncovered_edge and blank_position == "opening":
+                if function_type in {"topic_intro", "summary"} and structure_label in {"总分", "背景-核心结论"}:
+                    edge_discourse_bonus = 0.035
+            primary_fill_score = (
+                llm_selection_score
+                - coverage_penalty
+                + middle_bonus
+                + local_closure_bonus
+                + slot_function_clarity_bonus
+                + llm_dominance_relief_bonus
+                + 0.14 * local_cohesion
+                + edge_discourse_bonus
+            )
+            return (
+                primary_fill_score,
+                family_match_score + 0.26 * local_cohesion + slot_function_clarity_bonus,
+                structure_score,
+                task_final_score,
+                quality_score,
+                *self._sentence_fill_legacy_card_tiebreak_key(card_score, business_score),
+            )
+        if business_family_id == "center_understanding":
+            axis_score = float(((item.get("llm_main_axis_source_hint") or {}).get("score")) or 0.0)
+            argument_score = float(((item.get("llm_argument_structure_hint") or {}).get("score")) or 0.0)
+            boundary_penalty = 0.12 if asset_anchor_role == "review_holdout_boundary" else 0.0
+            return (
+                llm_selection_score - boundary_penalty,
+                single_center_score,
+                self._safe_avg([axis_score, argument_score]),
+                family_match_score,
+                structure_score,
+                task_final_score,
+                quality_score,
+                card_score,
+            )
+        if business_family_id == "sentence_order":
+            order_profile = ((item.get("business_feature_profile") or {}).get("sentence_order_profile") or {})
+            candidate_type = str(item.get("candidate_type") or "")
+            candidate_type_bonus = 0.10 if candidate_type == "sentence_block_group" else 0.0
+            sequence_integrity = float(
+                order_profile.get("sequence_integrity")
+                or ((item.get("neutral_signal_profile") or {}).get("sequence_integrity") or 0.0)
+            )
+            multi_path_risk = float(
+                order_profile.get("multi_path_risk")
+                or ((item.get("neutral_signal_profile") or {}).get("multi_path_risk") or 0.0)
+            )
+            anchor_clarity = self._safe_avg(
+                [
+                    float(order_profile.get("opening_signal_strength") or ((item.get("neutral_signal_profile") or {}).get("opening_signal_strength") or 0.0)),
+                    float(order_profile.get("closing_signal_strength") or ((item.get("neutral_signal_profile") or {}).get("closing_signal_strength") or 0.0)),
+                    sequence_integrity,
+                    1 - min(1.0, multi_path_risk),
+                ]
+            )
+            stability_signal = self._safe_avg([sequence_integrity, 1 - min(1.0, multi_path_risk)])
+            return (
+                llm_selection_score + candidate_type_bonus,
+                anchor_clarity,
+                stability_signal,
+                family_match_score,
+                task_final_score,
+                quality_score,
+                card_score,
+                business_score,
+            )
+        return (llm_selection_score, family_match_score, structure_score, task_final_score, quality_score, card_score, business_score)
+
+    def _cached_prefilter_sort_key(
+        self,
+        *,
+        cached_item: dict[str, Any],
+        business_family_id: str,
+        card_score: float,
+        structure_score: float,
+        hit_count: int,
+        quality_score: float,
+    ) -> tuple[float, ...]:
+        llm_selection_score = float(
+            cached_item.get("llm_selection_score")
+            or ((cached_item.get("llm_generation_readiness") or {}).get("score"))
+            or 0.0
+        )
+        family_match_score = float(((cached_item.get("llm_family_match_hint") or {}).get("score")) or 0.0)
+        task_final_score = float(
+            self._selected_task_scoring_for_item(item=cached_item, business_family_id=business_family_id).get("final_candidate_score") or 0.0
+        )
+        base_key = self._item_selection_sort_key(
+            {
+                **cached_item,
+                "_cached_business_family_id": business_family_id,
+            }
+        )
+        return (
+            llm_selection_score,
+            *base_key,
+            hit_count,
+            structure_score,
+            family_match_score,
+            task_final_score,
+            quality_score,
+            card_score,
+        )
+
     def _passes_question_card_material_contract(
         self,
         *,
@@ -4866,11 +5829,24 @@ class MaterialPipelineV2:
         min_business_card_score: float,
         require_business_card: bool,
     ) -> tuple[bool, str]:
+        technical_failure = self._technical_material_failure_reason(
+            item=item,
+            business_family_id=business_family_id,
+        )
+        if technical_failure:
+            return False, technical_failure
         if business_family_id in {"center_understanding", "sentence_fill", "sentence_order"} and self.main_card_dual_judge.is_enforce_mode():
             adjudication = dict(item.get("llm_adjudication") or {})
             if self.main_card_dual_judge.consensus_allows_accept(adjudication):
                 return True, ""
             return False, "llm_adjudication_rejected"
+        if business_family_id in {"center_understanding", "sentence_fill", "sentence_order"}:
+            readiness = dict(item.get("llm_generation_readiness") or {})
+            readiness_status = str(readiness.get("status") or "").strip().lower()
+            if readiness_status in {"ready", "borderline"}:
+                return True, ""
+            if readiness_status == "blocked":
+                return False, str(readiness.get("reason") or "llm_generation_readiness_blocked")
         if self._top_card_score(item) < float(min_card_score or 0.0):
             return False, "material_card_score_below_threshold"
         if require_business_card and self._top_business_card_score(item) < float(min_business_card_score or 0.0):
@@ -5175,26 +6151,24 @@ class MaterialPipelineV2:
             score += 0.12 * backward
         elif expected_function == "lead_next":
             score += 0.12 * forward
-        elif expected_function == "bridge_both_sides":
+        elif expected_function == "bridge":
             score += 0.16 * bidirectional
             score += 0.08 * min(backward, forward)
-        elif expected_function == "propose_countermeasure":
+        elif expected_function == "countermeasure":
             score += 0.16 * countermeasure
         else:
             score += 0.08 * reference_dependency
         return round(min(1.0, score), 4)
 
-    def _sentence_fill_business_function(self, *, slot_role: str, slot_function: str) -> str:
-        mapping = {
-            ("opening", "summary"): "summarize_following_text",
-            ("opening", "topic_intro"): "topic_introduction",
-            ("middle", "carry_previous"): "carry_previous",
-            ("middle", "lead_next"): "lead_next",
-            ("middle", "bridge_both_sides"): "bridge_both_sides",
-            ("ending", "ending_summary"): "summarize_previous_text",
-            ("ending", "countermeasure"): "propose_countermeasure",
-        }
-        return mapping.get((slot_role, slot_function), "bridge_both_sides")
+    def _sentence_fill_business_function(self, *, blank_position: str, function_type: str) -> str:
+        normalized_function_type = normalize_sentence_fill_function_type(function_type)
+        if normalized_function_type:
+            return normalized_function_type
+        if blank_position == "opening":
+            return "summary"
+        if blank_position == "ending":
+            return "conclusion"
+        return sentence_fill_default_slot("function_type", "bridge")
 
     def _select_primary_business_card(
         self,
@@ -5432,8 +6406,11 @@ class MaterialPipelineV2:
         mother_family_id = str(card_meta.get("mother_family_id") or "").strip()
         question_type = str(slot_projection.get("question_type") or "").strip()
         business_card_id = str(card_meta.get("business_card_id") or "").strip()
-        blank_position = str(type_slots.get("blank_position") or "").strip()
-        explicit_business_function = str(feature_signature.get("business_function") or "").strip()
+        blank_position = normalize_sentence_fill_blank_position(type_slots.get("blank_position"))
+        canonical_function_type = normalize_sentence_fill_function_type(type_slots.get("function_type"))
+        explicit_business_function = normalize_sentence_fill_function_type(
+            type_slots.get("function_type") or feature_signature.get("business_function")
+        )
         trace_only_signals = {
             "slot_projection.type_slots.function_type": type_slots.get("function_type"),
             "slot_projection.type_slots.logic_relation": type_slots.get("logic_relation"),
@@ -5449,21 +6426,23 @@ class MaterialPipelineV2:
         }
         missing_fields: list[str] = []
         source_fields: dict[str, str] = {}
-        allowed_blank_positions = {"opening", "middle", "ending", "inserted"}
+        allowed_blank_positions = {"opening", "middle", "ending", "inserted", "mixed"}
         allowed_business_functions = {
-            "summarize_following_text",
-            "topic_introduction",
-            "summarize_previous_text",
-            "propose_countermeasure",
+            "summary",
+            "topic_intro",
+            "conclusion",
+            "countermeasure",
             "carry_previous",
             "lead_next",
-            "bridge_both_sides",
+            "bridge",
+            "reference_summary",
         }
         allowed_by_position = {
-            "opening": {"summarize_following_text", "topic_introduction"},
-            "middle": {"carry_previous", "lead_next", "bridge_both_sides"},
-            "ending": {"summarize_previous_text", "propose_countermeasure"},
-            "inserted": set(),
+            "opening": {"summary", "topic_intro"},
+            "middle": {"carry_previous", "lead_next", "bridge"},
+            "ending": {"conclusion", "countermeasure"},
+            "inserted": {"reference_summary"},
+            "mixed": {"bridge"},
         }
 
         if mother_family_id and question_type and mother_family_id != question_type:
@@ -5502,9 +6481,13 @@ class MaterialPipelineV2:
         else:
             source_fields["blank_position"] = "slot_projection.type_slots.blank_position"
         if not explicit_business_function:
-            missing_fields.append("feature_signature.business_function")
+            missing_fields.append("slot_projection.type_slots.function_type")
         else:
-            source_fields["business_function"] = "feature_signature.business_function"
+            source_fields["business_function"] = (
+                "slot_projection.type_slots.function_type"
+                if canonical_function_type
+                else "feature_signature.business_function"
+            )
 
         status = "resolved"
         if missing_fields:
@@ -5708,7 +6691,9 @@ class MaterialPipelineV2:
         }
 
     def _build_sentence_fill_business_profile(self, neutral_signal_profile: dict[str, Any]) -> dict[str, Any]:
-        blank_position = str(neutral_signal_profile.get("blank_position") or "middle")
+        blank_position = normalize_sentence_fill_blank_position(
+            neutral_signal_profile.get("blank_position") or sentence_fill_default_slot("blank_position", "middle")
+        )
         backward_link_strength = float(neutral_signal_profile.get("backward_link_strength") or 0.0)
         forward_link_strength = float(neutral_signal_profile.get("forward_link_strength") or 0.0)
         bidirectional_validation = float(neutral_signal_profile.get("bidirectional_validation") or 0.0)
@@ -5716,39 +6701,46 @@ class MaterialPipelineV2:
         summary_need_strength = float(neutral_signal_profile.get("summary_need_strength") or 0.0)
         abstraction_level = float(neutral_signal_profile.get("abstraction_level") or 0.0)
         object_match_strength = float(neutral_signal_profile.get("object_match_strength") or 0.0)
-        slot_role = str(neutral_signal_profile.get("slot_role") or "")
-        slot_function = str(neutral_signal_profile.get("slot_function") or "")
+        explicit_blank_position = blank_position if blank_position in {"opening", "middle", "ending"} else ""
+        explicit_function_type = normalize_sentence_fill_function_type(neutral_signal_profile.get("function_type"))
         explicit_slot_ready = bool(neutral_signal_profile.get("slot_explicit_ready"))
-        function_type = "bridge_both_sides"
+        function_type = sentence_fill_default_slot("function_type", "bridge")
         if explicit_slot_ready:
-            function_type = self._sentence_fill_business_function(slot_role=slot_role, slot_function=slot_function)
+            function_type = self._sentence_fill_business_function(
+                blank_position=explicit_blank_position,
+                function_type=explicit_function_type,
+            )
+        elif blank_position == "inserted":
+            function_type = "reference_summary"
+        elif blank_position == "mixed":
+            function_type = "bridge"
         elif blank_position == "opening":
             intro_bias = 0.48 * object_match_strength + 0.22 * forward_link_strength + 0.30 * (1 - summary_need_strength)
-            function_type = "summarize_following_text"
+            function_type = "summary"
             if summary_need_strength < 0.74 and abstraction_level < 0.64 and intro_bias >= 0.40:
-                function_type = "topic_introduction"
+                function_type = "topic_intro"
         elif blank_position == "ending":
-            function_type = "propose_countermeasure" if countermeasure_signal_strength >= 0.58 else "summarize_previous_text"
+            function_type = "countermeasure" if countermeasure_signal_strength >= 0.58 else "conclusion"
         elif backward_link_strength >= 0.60 and backward_link_strength > forward_link_strength + 0.06 and bidirectional_validation < 0.64:
             function_type = "carry_previous"
         elif forward_link_strength >= 0.60 and forward_link_strength > backward_link_strength + 0.06 and bidirectional_validation < 0.64:
             function_type = "lead_next"
         elif bidirectional_validation >= 0.54 or min(backward_link_strength, forward_link_strength) >= 0.54:
-            function_type = "bridge_both_sides"
+            function_type = "bridge"
         elif backward_link_strength >= forward_link_strength:
             function_type = "carry_previous"
         else:
             function_type = "lead_next"
 
-        unit_type = "clause" if str(neutral_signal_profile.get("candidate_type") or "") == "phrase_or_clause_group" else "sentence"
+        unit_type = "sentence"
         return {
             "blank_position": blank_position,
             "function_type": function_type,
-            "slot_role": slot_role,
-            "slot_function": slot_function,
             "explicit_slot_ready": explicit_slot_ready,
             "unit_type": unit_type,
-            "logic_relation": str(neutral_signal_profile.get("logic_relation") or "continuation"),
+            "logic_relation": normalize_sentence_fill_logic_relation(
+                neutral_signal_profile.get("logic_relation") or sentence_fill_default_slot("logic_relation", "continuation")
+            ),
             "backward_link_strength": backward_link_strength,
             "forward_link_strength": forward_link_strength,
             "bidirectional_validation": bidirectional_validation,
@@ -6240,9 +7232,9 @@ class MaterialPipelineV2:
         if business_family_id == "sentence_fill":
             item_blank = float(item_profile.get("fill_readiness_score") or 0.0)
             ref_blank = float(reference_profile.get("fill_readiness_score") or 0.0)
-            item_role = str(item_profile.get("slot_function") or "")
-            ref_role = str(reference_profile.get("slot_function") or "")
-            role_match = 1.0 if item_role and item_role == ref_role else 0.45
+            item_function = str(item_profile.get("function_type") or "")
+            ref_function = str(reference_profile.get("function_type") or "")
+            role_match = 1.0 if item_function and item_function == ref_function else 0.45
             return max(0.0, min(1.0, 0.55 * role_match + 0.45 * (1.0 - abs(item_blank - ref_blank))))
         if business_family_id == "sentence_order":
             item_order = float(item_profile.get("sentence_order_readiness_score") or 0.0)
@@ -6608,8 +7600,13 @@ class MaterialPipelineV2:
             sortable_units = self._sentence_order_units(candidate["text"], candidate["candidate_type"])
         if len(sortable_units) != self.SENTENCE_ORDER_FIXED_UNIT_COUNT and source_paragraph:
             source_units = self._sentence_order_units(source_paragraph, candidate["candidate_type"])
-            if len(source_units) >= self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
-                sortable_units = source_units[: self.SENTENCE_ORDER_FIXED_UNIT_COUNT]
+            if len(source_units) == self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+                sortable_units = source_units
+        if len(sortable_units) != self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+            raw_sentences = [sentence.strip() for sentence in self.sentence_splitter.split(candidate["text"]) if sentence.strip()]
+            normalized = self._normalize_ordered_units_to_six(raw_sentences)
+            if normalized is not None:
+                sortable_units = normalized[0]
         sortable_block = self._format_sentence_order_units(sortable_units, fallback_text=candidate["text"])
         return {
             "mode": "sentence_order",
@@ -6839,8 +7836,6 @@ class MaterialPipelineV2:
         if card_id and card_id.startswith("title_material."):
             if not bool(signal_profile.get("main_idea_eligible")):
                 return False
-        if card_id == "order_material.phrase_order_variant":
-            return False
         if card_id == "order_material.dual_anchor_lock":
             if float(signal_profile.get("opening_signal_strength") or 0.0) < 0.68:
                 return False
@@ -6942,14 +7937,31 @@ class MaterialPipelineV2:
         return bool(re.search(r"(\u5982\u4f55|\u600e\u4e48|\u600e\u6837|\u4f55\u7533\u8bf7|\u53ef\u901a\u8fc7)", head))
 
     def _sentence_order_unit_count(self, text: str, candidate_type: str) -> int:
-        if candidate_type == "phrase_or_clause_group":
-            return len([part.strip() for part in re.split(r"[，、；,;]", text) if part.strip()])
-        return len([sentence.strip() for sentence in self.sentence_splitter.split(text) if sentence.strip()])
+        return len(self._sentence_order_units(text, candidate_type))
 
     def _sentence_order_units(self, text: str, candidate_type: str) -> list[str]:
-        if candidate_type == "phrase_or_clause_group":
-            return [part.strip() for part in re.split(r"[，、；,;]", text) if part.strip()]
-        return [sentence.strip() for sentence in self.sentence_splitter.split(text) if sentence.strip()]
+        raw = (text or "").strip()
+        if not raw:
+            return []
+        if candidate_type in {"sentence_block_group", "ordered_unit_group", "weak_formal_order_group"}:
+            if "\n" in raw:
+                units = [line.strip() for line in raw.splitlines() if line.strip()]
+                if units:
+                    return units
+            marked_units = [item.strip() for item in re.split(r"[①②③④⑤⑥⑦⑧⑨⑩]\s*", raw) if item.strip()]
+            if marked_units:
+                if len(marked_units) == self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+                    return marked_units
+                normalized = self._normalize_ordered_units_to_six(marked_units)
+                if normalized is not None:
+                    return normalized[0]
+                return marked_units
+        sentences = [sentence.strip() for sentence in self.sentence_splitter.split(raw) if sentence.strip()]
+        if len(sentences) > self.SENTENCE_ORDER_FIXED_UNIT_COUNT:
+            normalized = self._normalize_ordered_units_to_six(sentences)
+            if normalized is not None:
+                return normalized[0]
+        return sentences
 
     def _derive_sentence_order_signals(self, *, text: str, candidate_type: str, universal: Any) -> dict[str, Any]:
         opening_anchor_type = self._opening_anchor_type(text)
@@ -7739,7 +8751,7 @@ class MaterialPipelineV2:
         return bool(re.search(r"(?:^|[，。；,;])\u8981(?=[\u4e00-\u9fff]{1,8}(?:\u52a0\u5f3a|\u5b8c\u5584|\u505a\u597d|\u907f\u514d|\u63a8\u8fdb|\u575a\u6301|\u91c7\u53d6|\u52a0\u5feb))", tail))
 
     def _block_order_complexity(self, text: str, universal: Any, candidate_type: str) -> float:
-        value = 0.30 + (0.14 if candidate_type == "sentence_block_group" else 0.0) + (0.20 if candidate_type == "phrase_or_clause_group" else 0.0)
+        value = 0.30 + (0.14 if candidate_type == "sentence_block_group" else 0.0)
         value += 0.18 * self._marker_strength(text, PARALLEL_MARKERS) + 0.18 * universal.branch_focus_strength + 0.12 * universal.problem_signal_strength
         return round(min(1.0, value), 4)
 
@@ -7747,43 +8759,42 @@ class MaterialPipelineV2:
         value = 0.28 * self._opening_signal_strength(text) + 0.24 * self._closing_signal_strength(text) + 0.24 * self._local_binding_strength(text) + 0.24 * (1 - self._non_opening_penalty(text))
         return round(min(1.0, max(0.0, value)), 4)
 
-    def _phrase_order_salience(self, text: str, candidate_type: str) -> float:
-        if candidate_type != "phrase_or_clause_group":
-            return 0.10
-        clauses = [part.strip() for part in re.split(r"[，、；,;]", text) if part.strip()]
-        return round(min(1.0, 0.45 + 0.08 * len(clauses)), 4)
-
-    def _slot_role(self, candidate: dict[str, Any], *, article_context: dict[str, Any] | None = None) -> str:
-        meta = dict(candidate.get("meta") or {})
-        slot_role = str(meta.get("slot_role") or "").strip()
-        if slot_role:
-            return slot_role
+    def _candidate_blank_position(
+        self,
+        candidate: dict[str, Any],
+        *,
+        article_context: dict[str, Any] | None = None,
+    ) -> str:
+        meta = self._normalize_sentence_fill_meta(candidate.get("meta") or {})
+        blank_position = normalize_sentence_fill_blank_position(meta.get("blank_position"))
+        if blank_position:
+            return blank_position
         if candidate.get("candidate_type") != "functional_slot_unit":
             return ""
         hydrated = self._hydrate_functional_slot_meta(article_context=article_context, candidate=candidate)
-        return str(hydrated.get("slot_role") or "")
+        return normalize_sentence_fill_blank_position(hydrated.get("blank_position"))
 
-    def _slot_function(self, candidate: dict[str, Any]) -> str:
-        meta = dict(candidate.get("meta") or {})
-        slot_function = str(meta.get("slot_function") or "").strip()
-        if slot_function:
-            return slot_function
+    def _candidate_function_type(self, candidate: dict[str, Any]) -> str:
+        meta = self._normalize_sentence_fill_meta(candidate.get("meta") or {})
+        function_type = normalize_sentence_fill_function_type(meta.get("function_type"))
+        if function_type:
+            return function_type
         if candidate.get("candidate_type") != "functional_slot_unit":
             return ""
         hydrated = self._hydrate_functional_slot_meta(article_context=None, candidate=candidate)
-        return str(hydrated.get("slot_function") or "")
+        return normalize_sentence_fill_function_type(hydrated.get("function_type"))
 
     def _slot_explicit_ready(self, candidate: dict[str, Any], *, article_context: dict[str, Any] | None = None) -> bool:
-        slot_role = self._slot_role(candidate, article_context=article_context)
-        slot_function = self._slot_function(candidate)
-        return bool(candidate.get("candidate_type") == "functional_slot_unit" and slot_role and slot_function)
+        blank_position = self._candidate_blank_position(candidate, article_context=article_context)
+        function_type = self._candidate_function_type(candidate)
+        return bool(candidate.get("candidate_type") == "functional_slot_unit" and blank_position and function_type)
 
     def _blank_position(self, candidate: dict[str, Any]) -> str:
         candidate_type = candidate["candidate_type"]
-        meta = candidate.get("meta", {})
-        slot_role = str(meta.get("slot_role") or "").strip()
-        if slot_role:
-            return slot_role
+        meta = self._normalize_sentence_fill_meta(candidate.get("meta", {}))
+        blank_position = normalize_sentence_fill_blank_position(meta.get("blank_position"))
+        if blank_position:
+            return blank_position
         if candidate_type == "insertion_context_unit":
             return "inserted"
         paragraph_range = meta.get("source_paragraph_range_original") or meta.get("paragraph_range") or []
@@ -7799,19 +8810,19 @@ class MaterialPipelineV2:
             return explicit_function
         blank_position = self._blank_position(candidate)
         if candidate["candidate_type"] == "insertion_context_unit":
-            return "inserted_reference"
+            return "reference_summary"
         if blank_position == "opening" and universal.summary_strength >= 0.58:
-            return "opening_summary"
+            return "summary"
         if blank_position == "ending" and self._elevation_space_strength(text, universal) >= 0.62:
-            return "ending_elevation"
+            return "conclusion"
         if blank_position == "ending":
-            return "ending_summary"
+            return "conclusion"
         if universal.explanation_strength >= 0.66:
-            return "middle_explanation"
+            return "carry_previous"
         if self._focus_shift_strength(text, universal) >= 0.62:
-            return "middle_focus_shift"
+            return "lead_next"
         if self._multi_constraint_density(text) >= 0.70:
-            return "comprehensive_match"
+            return "bridge"
         return "bridge"
 
     def _fill_logic_relation(self, candidate: dict[str, Any], text: str, universal: Any) -> str:
@@ -7819,49 +8830,53 @@ class MaterialPipelineV2:
         if explicit_logic:
             return explicit_logic
         function_type = self._fill_function_type(candidate, text, universal)
-        if function_type in {"opening_summary", "ending_summary"}:
-            return "summary"
-        if function_type == "middle_explanation":
-            return "explanation"
-        if function_type == "middle_focus_shift":
-            return "focus_shift"
-        if function_type == "ending_elevation":
+        if function_type == "countermeasure":
+            return "action"
+        if function_type == "conclusion" and self._elevation_space_strength(text, universal) >= 0.62:
             return "elevation"
-        if function_type == "inserted_reference":
+        if function_type in {"summary", "conclusion"}:
+            return "summary"
+        if function_type == "carry_previous":
+            return "explanation"
+        if function_type == "lead_next":
+            return "focus_shift"
+        if function_type == "reference_summary":
             return "reference_match"
-        if function_type == "comprehensive_match":
+        if self._multi_constraint_density(text) >= 0.70:
             return "multi_constraint"
         if self._connector_signal_strength(text) >= 0.45 or self._turning_focus_strength(text, universal) >= 0.45:
-            return "continuation_or_transition"
+            return "transition"
         return "continuation"
 
     def _explicit_fill_function_type(self, candidate: dict[str, Any]) -> str:
-        slot_role = str((candidate.get("meta") or {}).get("slot_role") or "").strip()
-        slot_function = str((candidate.get("meta") or {}).get("slot_function") or "").strip()
+        meta = self._normalize_sentence_fill_meta(candidate.get("meta") or {})
+        blank_position = normalize_sentence_fill_blank_position(meta.get("blank_position"))
+        function_type = normalize_sentence_fill_function_type(meta.get("function_type"))
         mapping = {
-            ("opening", "summary"): "opening_summary",
-            ("opening", "topic_intro"): "opening_summary",
-            ("middle", "carry_previous"): "middle_explanation",
-            ("middle", "lead_next"): "bridge",
-            ("middle", "bridge_both_sides"): "bridge",
-            ("ending", "ending_summary"): "ending_summary",
-            ("ending", "countermeasure"): "ending_summary",
+            ("opening", "summary"): "summary",
+            ("opening", "topic_intro"): "topic_intro",
+            ("middle", "carry_previous"): "carry_previous",
+            ("middle", "lead_next"): "lead_next",
+            ("middle", "bridge"): "bridge",
+            ("ending", "conclusion"): "conclusion",
+            ("ending", "countermeasure"): "countermeasure",
         }
-        return mapping.get((slot_role, slot_function), "")
+        return mapping.get((blank_position, function_type), "")
 
     def _explicit_fill_logic_relation(self, candidate: dict[str, Any]) -> str:
-        slot_role = str((candidate.get("meta") or {}).get("slot_role") or "").strip()
-        slot_function = str((candidate.get("meta") or {}).get("slot_function") or "").strip()
+        meta = self._normalize_sentence_fill_meta(candidate.get("meta") or {})
+        blank_position = normalize_sentence_fill_blank_position(meta.get("blank_position"))
+        function_type = normalize_sentence_fill_function_type(meta.get("function_type"))
         mapping = {
             ("opening", "summary"): "summary",
             ("opening", "topic_intro"): "transition",
             ("middle", "carry_previous"): "explanation",
             ("middle", "lead_next"): "transition",
-            ("middle", "bridge_both_sides"): "continuation",
-            ("ending", "ending_summary"): "summary",
-            ("ending", "countermeasure"): "summary",
+            ("middle", "bridge"): "continuation",
+            ("ending", "conclusion"): "summary",
+            ("ending", "countermeasure"): "action",
         }
-        return mapping.get((slot_role, slot_function), "")
+        return mapping.get((blank_position, function_type), "")
 
     def _bidirectional_validation(self, text: str) -> float:
         return round((self._backward_link_strength(text) + self._forward_link_strength(text)) / 2, 4)
@@ -7953,9 +8968,6 @@ class MaterialPipelineV2:
                 threshold = float(req[1:])
                 actual_value = float(actual)
                 return (1.0, req) if actual_value < threshold else (round(max(0.0, threshold / actual_value), 4), req)
-            if req == "continuation_or_transition":
-                matched = actual in {"continuation", "transition", "continuation_or_transition"}
-                return (1.0 if matched else 0.0), f"enum={matched}"
             matched = str(actual) == req
             return (1.0 if matched else 0.0), f"enum={matched}"
         if isinstance(requirement, (list, tuple, set)):
@@ -7965,9 +8977,11 @@ class MaterialPipelineV2:
         return (1.0 if matched else 0.0), f"eq={matched}"
 
     def _select_diverse_items(self, items: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-        ranked = sorted(items, key=lambda item: item["quality_score"], reverse=True)
+        ranked = sorted(items, key=self._item_selection_sort_key, reverse=True)
         if not ranked or limit <= 0:
             return []
+        if self._business_family_for_item(ranked[0]) == "sentence_fill":
+            ranked = self._apply_sentence_fill_boundary_guardrail(ranked)
 
         selected: list[dict[str, Any]] = []
         selected_ids: set[str] = set()

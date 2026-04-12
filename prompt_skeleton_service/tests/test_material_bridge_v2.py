@@ -41,6 +41,12 @@ class MaterialBridgeV2UnitTest(TestCase):
                     "business_family_id": "title_selection",
                     "runtime_binding": {"question_type": "main_idea", "business_subtype": "title_selection"},
                 },
+                "question.center_understanding.standard_v1": {
+                    "card_id": "question.center_understanding.standard_v1",
+                    "business_family_id": "center_understanding",
+                    "runtime_binding": {"question_type": "main_idea", "business_subtype": "center_understanding"},
+                    "compatibility_backbone": {"material_signal_family_id": "title_selection"},
+                },
                 "question.sentence_order.standard_v1": {
                     "card_id": "question.sentence_order.standard_v1",
                     "business_family_id": "sentence_order",
@@ -53,6 +59,14 @@ class MaterialBridgeV2UnitTest(TestCase):
                         "card_id": "question.title_selection.standard_v1",
                         "business_family_id": "title_selection",
                         "runtime_binding": {"question_type": "main_idea", "business_subtype": "title_selection"},
+                    }
+                ],
+                ("main_idea", "center_understanding"): [
+                    {
+                        "card_id": "question.center_understanding.standard_v1",
+                        "business_family_id": "center_understanding",
+                        "runtime_binding": {"question_type": "main_idea", "business_subtype": "center_understanding"},
+                        "compatibility_backbone": {"material_signal_family_id": "title_selection"},
                     }
                 ],
                 ("sentence_order", None): [
@@ -124,12 +138,21 @@ class MaterialBridgeV2UnitTest(TestCase):
         family_id = self.service._resolve_business_family_id(binding)
         self.assertEqual(family_id, "title_selection")
 
-    def test_resolve_business_family_id_rejects_unbound_main_idea_subtype(self) -> None:
-        with self.assertRaises(DomainError):
-            self.service._resolve_question_card_binding(
-                question_type="main_idea",
-                business_subtype="center_understanding",
-            )
+    def test_resolve_business_family_id_keeps_center_understanding_semantic_family(self) -> None:
+        binding = self.service._resolve_question_card_binding(
+            question_type="main_idea",
+            business_subtype="center_understanding",
+        )
+        family_id = self.service._resolve_business_family_id(binding)
+        self.assertEqual(family_id, "center_understanding")
+
+    def test_resolve_material_search_family_id_uses_explicit_compatibility_backbone(self) -> None:
+        binding = self.service._resolve_question_card_binding(
+            question_type="main_idea",
+            business_subtype="center_understanding",
+        )
+        family_id = self.service._resolve_material_search_family_id(binding)
+        self.assertEqual(family_id, "title_selection")
 
     def test_to_material_selection_adapts_v2_candidate_shape(self) -> None:
         item = {
@@ -178,16 +201,20 @@ class MaterialBridgeV2UnitTest(TestCase):
             business_card_ids=["theme_word_focus__main_idea"],
             preferred_business_card_ids=["turning_relation_focus__main_idea"],
             query_terms=["主题"],
+            topic=None,
+            text_direction=None,
+            document_genre=None,
+            material_structure_label=None,
             target_length=220,
             length_tolerance=120,
             structure_constraints={},
             enable_anchor_adaptation=True,
         )
 
-        self.assertEqual(items, [{"candidate_id": "mat-1"}])
+        self.assertEqual(items["items"], [{"candidate_id": "mat-1"}])
         self.assertEqual(payloads[0]["business_card_ids"], ["theme_word_focus__main_idea"])
         self.assertEqual(payloads[0]["preferred_business_card_ids"], ["turning_relation_focus__main_idea"])
-        self.assertEqual(payloads[1]["business_card_ids"], [])
+        self.assertEqual(payloads[1]["business_card_ids"], ["theme_word_focus__main_idea"])
         self.assertEqual(payloads[1]["preferred_business_card_ids"], ["turning_relation_focus__main_idea"])
 
     def test_structure_constraints_do_not_hard_reject_without_explicit_business_card(self) -> None:
@@ -245,13 +272,17 @@ class MaterialBridgeV2UnitTest(TestCase):
             business_card_ids=[],
             preferred_business_card_ids=[],
             query_terms=[],
+            topic=None,
+            text_direction=None,
+            document_genre=None,
+            material_structure_label=None,
             target_length=None,
             length_tolerance=120,
             structure_constraints={},
             enable_anchor_adaptation=True,
         )
 
-        self.assertEqual(items, [{"candidate_id": "mat-ok", "review_status": "auto_tagged"}])
+        self.assertEqual(items["items"], [{"candidate_id": "mat-ok", "review_status": "auto_tagged"}])
 
     def test_search_candidates_retries_remote_search_after_timeout(self) -> None:
         payloads: list[tuple[dict, int | None]] = []
@@ -278,18 +309,22 @@ class MaterialBridgeV2UnitTest(TestCase):
             business_card_ids=["sentence_fill__opening_topic_intro__abstract"],
             preferred_business_card_ids=[],
             query_terms=["总起"],
+            topic=None,
+            text_direction=None,
+            document_genre=None,
+            material_structure_label=None,
             target_length=220,
             length_tolerance=120,
             structure_constraints={"blank_position": "opening"},
             enable_anchor_adaptation=True,
         )
 
-        self.assertEqual(items, [{"candidate_id": "mat-recovered", "review_status": "auto_tagged"}])
+        self.assertEqual(items["items"], [{"candidate_id": "mat-recovered", "review_status": "auto_tagged"}])
         self.assertEqual(len(payloads), 2)
         self.assertEqual(payloads[0][1], None)
         self.assertEqual(payloads[1][1], self.service.SEARCH_RETRY_TIMEOUT_SECONDS)
         self.assertEqual(payloads[1][0]["query_terms"], [])
-        self.assertEqual(payloads[1][0]["business_card_ids"], [])
+        self.assertEqual(payloads[1][0]["business_card_ids"], ["sentence_fill__opening_topic_intro__abstract"])
         self.assertEqual(payloads[1][0]["structure_constraints"], {"blank_position": "opening"})
 
     def test_local_sqlite_fallback_excludes_review_pending_materials(self) -> None:

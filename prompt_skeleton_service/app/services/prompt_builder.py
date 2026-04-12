@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.schemas.config import BusinessSubtypeConfig, FewshotExampleConfig, PatternConfig, QuestionTypeConfig
+from app.services.question_generation_prompt_assets import (
+    get_round1_family_prompt_guards,
+    get_round1_fewshot_examples,
+)
+from app.services.text_readability import normalize_prompt_text
 
 
 class PromptBuilderService:
@@ -38,6 +43,11 @@ class PromptBuilderService:
             use_fewshot=use_fewshot,
             fewshot_mode=fewshot_mode,
         )
+        fewshot_guard_lines = self._resolve_round1_fewshot_guard_lines(
+            question_type_config=question_type_config,
+            business_subtype_config=business_subtype_config,
+            use_fewshot=use_fewshot,
+        )
 
         slots_summary = self.summarize_slots(resolved_slots)
         control_summary = self.summarize_control_logic(control_logic)
@@ -50,6 +60,7 @@ class PromptBuilderService:
             control_summary=control_summary,
             generation_summary=generation_summary,
             difficulty_target=difficulty_target,
+            fewshot_guard_lines=fewshot_guard_lines,
         )
         user_prompt = self._build_user_prompt(
             question_type=question_type_config.type_id,
@@ -64,12 +75,16 @@ class PromptBuilderService:
             generation_summary=generation_summary,
             extra_constraints=extra_constraints,
         )
-        merged_prompt = self._merge_prompt(system_prompt, fewshot_examples, user_prompt)
+        system_prompt = normalize_prompt_text(system_prompt)
+        user_prompt = normalize_prompt_text(user_prompt)
+        merged_prompt = normalize_prompt_text(self._merge_prompt(system_prompt, fewshot_examples, user_prompt))
+        fewshot_text_block = normalize_prompt_text(self._render_fewshot_block(fewshot_examples))
 
         return {
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
             "fewshot_examples": [example.model_dump(exclude_none=True) for example in fewshot_examples],
+            "fewshot_text_block": fewshot_text_block,
             "merged_prompt": merged_prompt,
         }
 
@@ -112,6 +127,19 @@ class PromptBuilderService:
         if not use_fewshot or fewshot_mode != "structure_only":
             return []
 
+        round1_candidates = get_round1_fewshot_examples(
+            question_type=question_type_config.type_id,
+            business_subtype=business_subtype_config.subtype_id if business_subtype_config else None,
+        )
+        selected = self._pick_best_fewshot(
+            round1_candidates,
+            resolved_slots,
+            pattern.pattern_id,
+            require_positive_score=True,
+        )
+        if selected:
+            return [selected]
+
         candidates: list[FewshotExampleConfig] = []
         if business_subtype_config and self._fewshot_enabled(business_subtype_config.fewshot_policy):
             candidates = self._collect_fewshots(
@@ -153,6 +181,7 @@ class PromptBuilderService:
         examples: list[FewshotExampleConfig],
         resolved_slots: dict[str, Any],
         selected_pattern_id: str,
+        require_positive_score: bool = False,
     ) -> FewshotExampleConfig | None:
         if not examples:
             return None
@@ -169,6 +198,8 @@ class PromptBuilderService:
             if score > best_score:
                 best_score = score
                 best_example = example
+        if require_positive_score and best_score <= 0:
+            return None
         return best_example
 
     def _build_system_prompt(
@@ -180,6 +211,7 @@ class PromptBuilderService:
         control_summary: dict[str, str],
         generation_summary: dict[str, str],
         difficulty_target: str,
+        fewshot_guard_lines: list[str] | None = None,
     ) -> str:
         parts = [
             "You are building a prompt skeleton for question generation.",
@@ -215,6 +247,9 @@ class PromptBuilderService:
                 "Output contract: return the structured fields required by the caller.",
             ]
         )
+        if fewshot_guard_lines:
+            parts.append("Round 1 few-shot guardrails:")
+            parts.extend(f"- {line}" for line in fewshot_guard_lines)
         return "\n".join(parts)
 
     def _build_user_prompt(
@@ -285,6 +320,14 @@ class PromptBuilderService:
             ]
         )
 
+    def _render_fewshot_block(self, fewshot_examples: list[FewshotExampleConfig]) -> str:
+        if not fewshot_examples:
+            return "None"
+        return "\n\n".join(
+            self._render_fewshot_example(example, index)
+            for index, example in enumerate(fewshot_examples, start=1)
+        )
+
     def _render_fewshot_example(self, example: FewshotExampleConfig, index: int) -> str:
         if example.input or example.output:
             return (
@@ -331,3 +374,17 @@ class PromptBuilderService:
 
     def _summarize_difficulty_target(self, difficulty_target: str) -> str:
         return str(difficulty_target or "not specified")
+
+    def _resolve_round1_fewshot_guard_lines(
+        self,
+        *,
+        question_type_config: QuestionTypeConfig,
+        business_subtype_config: BusinessSubtypeConfig | None,
+        use_fewshot: bool,
+    ) -> list[str]:
+        if not use_fewshot:
+            return []
+        return get_round1_family_prompt_guards(
+            question_type=question_type_config.type_id,
+            business_subtype=business_subtype_config.subtype_id if business_subtype_config else None,
+        )

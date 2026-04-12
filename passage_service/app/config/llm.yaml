@@ -160,7 +160,7 @@ main_card_signal_resolver:
       goal: |
         判断这条候选是否真的有槽位句价值，而不是表面像连接句。
       signal_goal: |
-        重新判断 slot_role、slot_function、blank_position，以及承前/启后/双向依赖强度、blank-value 就绪度。
+        重新判断 blank_position、function_type、logic_relation，以及承前/启后/双向依赖强度、blank-value 就绪度。
     sentence_order:
       label: "语句排序"
       goal: |

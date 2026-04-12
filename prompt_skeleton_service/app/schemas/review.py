@@ -4,6 +4,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.schemas.question import CenterUnderstandingExportView
+from app.schemas.question import SentenceFillCanonicalExportView
+from app.schemas.question import SentenceOrderCanonicalExportView
+
 
 class ReviewItemSummary(BaseModel):
     item_id: str
@@ -19,6 +23,9 @@ class ReviewItemSummary(BaseModel):
     updated_at: str
     stem_preview: str | None = None
     material_preview: str | None = None
+    sentence_fill_export_view: SentenceFillCanonicalExportView | None = None
+    center_understanding_export_view: CenterUnderstandingExportView | None = None
+    sentence_order_export_view: SentenceOrderCanonicalExportView | None = None
 
 
 class ReviewItemListResponse(BaseModel):
@@ -78,6 +85,9 @@ class ReviewVersionSummary(BaseModel):
     diff_summary: dict[str, Any] = Field(default_factory=dict)
     runtime_snapshot: dict[str, Any] = Field(default_factory=dict)
     created_at: str
+    sentence_fill_export_view: SentenceFillCanonicalExportView | None = None
+    center_understanding_export_view: CenterUnderstandingExportView | None = None
+    sentence_order_export_view: SentenceOrderCanonicalExportView | None = None
 
 
 class ReviewItemHistoryResponse(BaseModel):
@@ -117,6 +127,8 @@ class DeliveryVersionRecord(BaseModel):
     document_genre: str | None = None
     prompt_template_name: str | None = None
     prompt_template_version: str | None = None
+    sentence_fill_export_view: SentenceFillCanonicalExportView | None = None
+    sentence_order_export_view: SentenceOrderCanonicalExportView | None = None
 
 
 class DeliveryBatchResponse(BaseModel):

@@ -314,6 +314,10 @@ class QuestionValidatorUnitTest(TestCase):
             result.checks["sentence_fill_bridge_reasoning"]["source"],
             "material_source.prompt_extras",
         )
+        self.assertEqual(
+            result.checks["sentence_fill_bridge_reasoning"]["function_type"],
+            "bridge",
+        )
         self.assertTrue(result.checks["sentence_fill_bridge_reasoning"]["passed"])
 
     def test_sentence_order_contract_values_override_source_question_analysis(self) -> None:
@@ -397,7 +401,7 @@ class QuestionValidatorUnitTest(TestCase):
             validator_contract={
                 "sentence_fill": {
                     "blank_position": "middle",
-                    "function_type": "bridge_both_sides",
+                    "function_type": "bridge",
                 }
             },
             source_question_analysis={
@@ -416,6 +420,10 @@ class QuestionValidatorUnitTest(TestCase):
         self.assertEqual(
             result.checks["sentence_fill_bridge_reasoning"]["source"],
             "validator_contract",
+        )
+        self.assertEqual(
+            result.checks["sentence_fill_bridge_reasoning"]["function_type"],
+            "bridge",
         )
         self.assertTrue(result.checks["sentence_fill_bridge_reasoning"]["passed"])
 

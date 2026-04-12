@@ -140,12 +140,6 @@ signals:
   range:
   - 0
   - 1
-- signal_id: phrase_order_salience
-  type: float
-  description: 是否更像句内/短语内部排序题
-  range:
-  - 0
-  - 1
 derived_signals:
 - signal_id: family_affinity_topk
   type: array
@@ -155,7 +149,6 @@ derived_signals:
   description: 一期候选材料类型
   allowed_values:
   - sentence_block_group
-  - phrase_or_clause_group
 - signal_id: recommended_generation_archetype
   type: enum
   description: 问题侧五大生成原型之一
@@ -164,7 +157,6 @@ derived_signals:
   - carry_parallel_expand
   - viewpoint_reason_action
   - problem_solution_case_blocks
-  - phrase_order_variant
 - signal_id: recommended_material_cards
   type: array
   description: Top-N中间结构卡建议
@@ -172,3 +164,4 @@ derived_signals:
   type: object
   description: 建议的错误项破坏方向
 normalized_from: sentence_order_signal_layer.yaml
+

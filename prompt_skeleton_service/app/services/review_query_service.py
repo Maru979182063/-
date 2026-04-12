@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from app.core.exceptions import DomainError
+from app.services.delivery_service import build_center_understanding_export_view
 from app.services.delivery_service import DeliveryService
 from app.services.question_repository import QuestionRepository
+from app.services.sentence_order_protocol import project_sentence_order_strict_export_view
+from app.services.sentence_fill_protocol import project_sentence_fill_strict_export_view
 
 
 class ReviewQueryService:
@@ -29,7 +32,17 @@ class ReviewQueryService:
             page=page,
             page_size=page_size,
         )
-        return {"count": total, "page": page, "page_size": page_size, "items": items}
+        return {
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "items": [
+                self._attach_sentence_order_review_view(
+                    self._attach_center_understanding_review_view(self._attach_sentence_fill_review_view(item))
+                )
+                for item in items
+            ],
+        }
 
     def list_batches(self, *, status: str | None, created_by: str | None, page: int, page_size: int) -> dict:
         items, total = self.repository.list_review_batches(
@@ -55,7 +68,13 @@ class ReviewQueryService:
             "created_at": batch.get("created_at"),
             "updated_at": batch["updated_at"],
             "items": [
-                self.repository._item_to_review_summary(self.repository.get_item(item["item_id"]))  # noqa: SLF001
+                self._attach_sentence_order_review_view(
+                    self._attach_center_understanding_review_view(
+                        self._attach_sentence_fill_review_view(
+                            self.repository._item_to_review_summary(self.repository.get_item(item["item_id"]))  # noqa: SLF001
+                        )
+                    )
+                )
                 for item in batch.get("items", [])
             ],
         }
@@ -64,6 +83,19 @@ class ReviewQueryService:
         history = self.repository.get_item_history(item_id)
         if history is None:
             raise DomainError("Question item not found.", status_code=404, details={"item_id": item_id})
+        item = self.repository.get_item(item_id)
+        sentence_fill_view = self._build_sentence_fill_review_view(item)
+        center_view = self._build_center_understanding_review_view(item)
+        sentence_order_view = self._build_sentence_order_review_view(item)
+        history["item"] = self._attach_sentence_fill_review_view(history["item"])
+        history["item"] = self._attach_center_understanding_review_view(history["item"])
+        history["item"] = self._attach_sentence_order_review_view(history["item"])
+        if history.get("current_version") is not None and sentence_fill_view is not None:
+            history["current_version"]["sentence_fill_export_view"] = sentence_fill_view
+        if history.get("current_version") is not None and center_view is not None:
+            history["current_version"]["center_understanding_export_view"] = center_view
+        if history.get("current_version") is not None and sentence_order_view is not None:
+            history["current_version"]["sentence_order_export_view"] = sentence_order_view
         return history
 
     def get_item_diff(self, item_id: str, from_version: int, to_version: int) -> dict:
@@ -78,3 +110,44 @@ class ReviewQueryService:
 
     def get_batch_delivery(self, batch_id: str) -> dict:
         return DeliveryService(self.repository).get_batch_delivery(batch_id)
+
+    def _attach_sentence_fill_review_view(self, item_summary: dict) -> dict:
+        payload = dict(item_summary)
+        full_item = self.repository.get_item(payload["item_id"])
+        view = self._build_sentence_fill_review_view(full_item)
+        if view is not None:
+            payload["sentence_fill_export_view"] = view
+        return payload
+
+    def _build_sentence_fill_review_view(self, item: dict | None) -> dict | None:
+        view = project_sentence_fill_strict_export_view(item)
+        if view:
+            view.pop("field_results", None)
+        return view
+
+    def _attach_sentence_order_review_view(self, item_summary: dict) -> dict:
+        payload = dict(item_summary)
+        full_item = self.repository.get_item(payload["item_id"])
+        view = self._build_sentence_order_review_view(full_item)
+        if view is not None:
+            payload["sentence_order_export_view"] = view
+        return payload
+
+    def _build_sentence_order_review_view(self, item: dict | None) -> dict | None:
+        view = project_sentence_order_strict_export_view(item)
+        if view:
+            view.pop("field_results", None)
+            view.pop("alias_trace", None)
+        return view
+
+    def _attach_center_understanding_review_view(self, item_summary: dict) -> dict:
+        payload = dict(item_summary)
+        full_item = self.repository.get_item(payload["item_id"])
+        view = self._build_center_understanding_review_view(full_item)
+        if view is not None:
+            payload["center_understanding_export_view"] = view
+            payload["business_subtype"] = view.get("business_subtype")
+        return payload
+
+    def _build_center_understanding_review_view(self, item: dict | None) -> dict | None:
+        return build_center_understanding_export_view(item)

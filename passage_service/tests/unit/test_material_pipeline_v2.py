@@ -150,15 +150,16 @@ def test_sentence_order_pipeline_prefers_sentence_block_group_with_complete_unit
     article = SimpleNamespace(
         id="article-order",
         title="\u6807\u51c6\u6392\u5e8f",
-        clean_text=(
-            "\u8fd9\u4e00\u6bb5\u5148\u4ea4\u4ee3\u8ba8\u8bba\u80cc\u666f\u4e0e\u95ee\u9898\u4e3b\u4f53\uff0c\u4e3a\u540e\u6587\u7684\u6392\u5e8f\u53e5\u7ec4\u63d0\u4f9b\u8bed\u5883\u4e0e\u8bdd\u9898\u6a21\u677f\u3002"
-            "\n\n"
-            "\u7b2c\u4e00\u53e5\u63d0\u51fa\u89c2\u70b9\u5e76\u6982\u62ec\u8fd9\u4e00\u6bb5\u7684\u8ba8\u8bba\u91cd\u5fc3\u4e0e\u6838\u5fc3\u5bf9\u8c61\uff0c\u4e3a\u540e\u7eed\u53e5\u7ec4\u786e\u5b9a\u8d77\u70b9\u3002"
-            "\u7b2c\u4e8c\u53e5\u9996\u5148\u8865\u8db3\u4ea7\u751f\u8fd9\u4e00\u95ee\u9898\u7684\u73b0\u5b9e\u80cc\u666f\u3001\u57fa\u672c\u539f\u56e0\u4e0e\u76f8\u5173\u6761\u4ef6\u3002"
-            "\u7b2c\u4e09\u53e5\u5176\u6b21\u6307\u51fa\u5176\u4e2d\u7684\u5173\u952e\u5236\u7ea6\u4e0e\u903b\u8f91\u9547\u70b9\uff0c\u8ba9\u53e5\u7ec4\u4e4b\u95f4\u4fdd\u6301\u8fde\u52a8\u548c\u9012\u8fdb\u3002"
-            "\u7b2c\u56db\u53e5\u56e0\u6b64\u628a\u524d\u6587\u4fe1\u606f\u6536\u675f\u5230\u53ef\u4ee5\u6267\u884c\u7684\u7ed3\u8bba\u4e0a\uff0c\u8ba9\u903b\u8f91\u65b9\u5411\u8fdb\u4e00\u6b65\u6e05\u6670\u3002"
-            "\u7b2c\u4e94\u53e5\u603b\u4e4b\u518d\u5bf9\u8fd9\u4e00\u89c2\u70b9\u8fdb\u884c\u63d0\u70bc\uff0c\u8ba9\u6574\u4e2a\u53e5\u7ec4\u66f4\u9002\u5408\u4ee5\u72ec\u7acb\u6bb5\u843d\u7684\u5f62\u6001\u88ab\u9605\u8bfb\u3002"
-        ),
+            clean_text=(
+                "\u8fd9\u4e00\u6bb5\u5148\u4ea4\u4ee3\u8ba8\u8bba\u80cc\u666f\u4e0e\u95ee\u9898\u4e3b\u4f53\uff0c\u4e3a\u540e\u6587\u7684\u6392\u5e8f\u53e5\u7ec4\u63d0\u4f9b\u8bed\u5883\u4e0e\u8bdd\u9898\u6a21\u677f\u3002"
+                "\n\n"
+                "\u7b2c\u4e00\u53e5\u63d0\u51fa\u89c2\u70b9\u5e76\u6982\u62ec\u8fd9\u4e00\u6bb5\u7684\u8ba8\u8bba\u91cd\u5fc3\u4e0e\u6838\u5fc3\u5bf9\u8c61\uff0c\u4e3a\u540e\u7eed\u53e5\u7ec4\u786e\u5b9a\u8d77\u70b9\u3002"
+                "\u7b2c\u4e8c\u53e5\u9996\u5148\u8865\u8db3\u4ea7\u751f\u8fd9\u4e00\u95ee\u9898\u7684\u73b0\u5b9e\u80cc\u666f\u3001\u57fa\u672c\u539f\u56e0\u4e0e\u76f8\u5173\u6761\u4ef6\u3002"
+                "\u7b2c\u4e09\u53e5\u5176\u6b21\u6307\u51fa\u5176\u4e2d\u7684\u5173\u952e\u5236\u7ea6\u4e0e\u903b\u8f91\u9547\u70b9\uff0c\u8ba9\u53e5\u7ec4\u4e4b\u95f4\u4fdd\u6301\u8fde\u52a8\u548c\u9012\u8fdb\u3002"
+                "\u7b2c\u56db\u53e5\u56e0\u6b64\u628a\u524d\u6587\u4fe1\u606f\u6536\u675f\u5230\u53ef\u4ee5\u6267\u884c\u7684\u7ed3\u8bba\u4e0a\uff0c\u8ba9\u903b\u8f91\u65b9\u5411\u8fdb\u4e00\u6b65\u6e05\u6670\u3002"
+                "\u7b2c\u4e94\u53e5\u603b\u4e4b\u518d\u5bf9\u8fd9\u4e00\u89c2\u70b9\u8fdb\u884c\u63d0\u70bc\uff0c\u8ba9\u6574\u4e2a\u53e5\u7ec4\u66f4\u9002\u5408\u4ee5\u72ec\u7acb\u6bb5\u843d\u7684\u5f62\u6001\u88ab\u9605\u8bfb\u3002"
+                "\u7b2c\u516d\u53e5\u8fdb\u4e00\u6b65\u8868\u660e\u8be5\u7ed3\u8bba\u5bf9\u540e\u7eed\u8ba8\u8bba\u7684\u4f5c\u7528\uff0c\u8ba9\u7ed3\u5c40\u66f4\u5b8c\u6574\u3002"
+            ),
         raw_text=None,
         source="old",
         source_url="http://example.com/order",
@@ -203,6 +204,687 @@ def test_select_diverse_items_reduces_same_article_concentration() -> None:
 
     assert len(selected) == 3
     assert len({item["article_id"] for item in selected}) >= 2
+
+
+def test_attach_llm_material_judgments_records_round1_anchor_trace() -> None:
+    pipeline = MaterialPipelineV2()
+    item = {
+        "candidate_id": "fill-anchor-1",
+        "article_id": "article-1",
+        "candidate_type": "functional_slot_unit",
+        "text": "这句话承接前文并继续解释原因。",
+        "meta": {"paragraph_range": [0, 0], "sentence_range": [0, 0]},
+        "business_feature_profile": {
+            "readability": 0.82,
+            "sentence_fill_profile": {
+                "blank_position": "middle",
+                "function_type": "carry_previous",
+                "logic_relation": "explanation",
+                "explicit_slot_ready": True,
+                "bidirectional_validation": 0.78,
+                "backward_link_strength": 0.80,
+                "forward_link_strength": 0.64,
+                "reference_dependency": 0.18,
+            },
+        },
+        "neutral_signal_profile": {
+            "topic_consistency_strength": 0.76,
+            "bidirectional_validation": 0.78,
+            "backward_link_strength": 0.80,
+            "forward_link_strength": 0.64,
+            "reference_dependency": 0.18,
+        },
+        "question_ready_context": {},
+        "local_profile": {},
+    }
+
+    updated = pipeline._attach_llm_material_judgments(
+        item=item,
+        business_family_id="sentence_fill",
+    )
+
+    assert updated["llm_generation_readiness"]["status"] in {"ready", "borderline"}
+    assert updated["llm_family_match_hint"]["asset_anchor"]["anchor_role"] == "gold_ready_positive"
+    assert updated["llm_family_match_hint"]["asset_anchor"]["coverage_tag"] == "core_available.middle_carry_previous_explanation"
+
+
+def test_runtime_material_gate_allows_llm_ready_main_family_item_without_task_scoring() -> None:
+    class _FakeJudge:
+        def is_enforce_mode(self) -> bool:
+            return False
+
+    pipeline = MaterialPipelineV2.__new__(MaterialPipelineV2)
+    pipeline.main_card_dual_judge = _FakeJudge()
+
+    passed, reason = pipeline._passes_runtime_material_gate(
+        item={
+            "candidate_id": "cu-1",
+            "article_id": "article-1",
+            "candidate_type": "closed_span",
+            "text": "这段材料围绕同一主轴展开，论证完整。",
+            "meta": {"paragraph_range": [0, 1], "sentence_range": [0, 4]},
+            "llm_generation_readiness": {"status": "ready", "score": 0.82, "reason": "round1_anchor_match"},
+        },
+        business_family_id="center_understanding",
+        question_card={"card_id": "question.center_understanding.standard_v1"},
+        min_card_score=0.55,
+        min_business_card_score=0.45,
+        require_business_card=False,
+    )
+
+    assert passed is True
+    assert reason == ""
+
+
+def test_runtime_material_gate_keeps_sentence_order_technical_floor() -> None:
+    class _FakeJudge:
+        def is_enforce_mode(self) -> bool:
+            return False
+
+    pipeline = MaterialPipelineV2()
+    pipeline.main_card_dual_judge = _FakeJudge()
+
+    passed, reason = pipeline._passes_runtime_material_gate(
+        item={
+            "candidate_id": "so-1",
+            "article_id": "article-1",
+            "candidate_type": "sentence_block_group",
+            "text": "第一句说明背景。第二句补充原因。第三句简单收束。",
+            "meta": {"paragraph_range": [0, 0], "sentence_range": [0, 2]},
+            "llm_generation_readiness": {"status": "ready", "score": 0.88},
+        },
+        business_family_id="sentence_order",
+        question_card={"card_id": "question.sentence_order.standard_v1"},
+        min_card_score=0.55,
+        min_business_card_score=0.45,
+        require_business_card=False,
+    )
+
+    assert passed is False
+    assert reason == "sentence_order_unit_count_below_floor"
+
+
+def test_runtime_material_gate_does_not_require_sentence_fill_business_card_anymore() -> None:
+    class _FakeJudge:
+        def is_enforce_mode(self) -> bool:
+            return False
+
+    pipeline = MaterialPipelineV2.__new__(MaterialPipelineV2)
+    pipeline.main_card_dual_judge = _FakeJudge()
+
+    passed, reason = pipeline._passes_runtime_material_gate(
+        item={
+            "candidate_id": "sf-1",
+            "article_id": "article-1",
+            "candidate_type": "functional_slot_unit",
+            "text": "这句话承接前文并继续解释。",
+            "meta": {"paragraph_range": [0, 0], "sentence_range": [0, 0]},
+            "llm_generation_readiness": {"status": "ready", "score": 0.79, "reason": "round1_sentence_fill_tuple_match"},
+        },
+        business_family_id="sentence_fill",
+        question_card={"card_id": "question.sentence_fill.standard_v1"},
+        min_card_score=0.55,
+        min_business_card_score=0.45,
+        require_business_card=False,
+    )
+
+    assert passed is True
+    assert reason == ""
+
+
+def test_select_diverse_items_prefers_round1_llm_selection_score() -> None:
+    pipeline = MaterialPipelineV2()
+    items = [
+        {
+            "candidate_id": "high-quality-low-llm",
+            "article_id": "article-1",
+            "source": {"source_name": "source-1"},
+            "text": "材料一，质量分高但与Round1锚点不够接近。",
+            "quality_score": 0.96,
+            "llm_selection_score": 0.42,
+            "llm_family_match_hint": {"score": 0.40},
+            "question_ready_context": {"selected_material_card": "card-a"},
+        },
+        {
+            "candidate_id": "lower-quality-high-llm",
+            "article_id": "article-2",
+            "source": {"source_name": "source-2"},
+            "text": "材料二，与Round1锚点更接近，适配更稳定。",
+            "quality_score": 0.71,
+            "llm_selection_score": 0.88,
+            "llm_family_match_hint": {"score": 0.84},
+            "question_ready_context": {"selected_material_card": "card-b"},
+        },
+    ]
+
+    selected = pipeline._select_diverse_items(items, limit=2)
+
+    assert selected[0]["candidate_id"] == "lower-quality-high-llm"
+
+
+def test_attach_center_understanding_semantic_hints_from_round1_assets() -> None:
+    pipeline = MaterialPipelineV2()
+    item = {
+        "candidate_id": "cu-hint-1",
+        "article_id": "article-1",
+        "candidate_type": "closed_span",
+        "text": "材料先铺陈背景，最后集中收束出核心判断。",
+        "meta": {"paragraph_range": [0, 1], "sentence_range": [0, 4]},
+        "business_feature_profile": {
+            "readability": 0.83,
+            "material_structure_label": "sub_total",
+        },
+        "neutral_signal_profile": {
+            "single_center_strength": 0.78,
+            "topic_consistency_strength": 0.74,
+            "summary_strength": 0.82,
+            "closure_score": 0.84,
+            "titleability": 0.62,
+            "analysis_to_conclusion_strength": 0.79,
+            "branch_focus_strength": 0.16,
+            "example_to_theme_strength": 0.20,
+            "turning_focus_strength": 0.34,
+            "value_judgement_strength": 0.41,
+            "object_scope_stability": 0.72,
+            "material_structure_label": "sub_total",
+        },
+        "question_ready_context": {},
+        "local_profile": {},
+    }
+
+    updated = pipeline._attach_llm_material_judgments(
+        item=item,
+        business_family_id="center_understanding",
+    )
+
+    assert updated["llm_main_axis_source_hint"]["value"] in {"final_summary", "solution_conclusion"}
+    assert updated["llm_argument_structure_hint"]["value"] == "sub_total"
+    assert "llm_center_understanding_reason" in updated
+
+
+def test_sentence_fill_sort_key_prefers_stable_middle_over_uncovered_opening() -> None:
+    pipeline = MaterialPipelineV2()
+    stable_middle = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-middle",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "middle",
+                "bidirectional_validation": 0.82,
+                "backward_link_strength": 0.80,
+                "forward_link_strength": 0.73,
+            }
+        },
+        "llm_selection_score": 0.78,
+        "llm_family_match_hint": {
+            "score": 0.79,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": ["pilot.r1.sentence_fill.2012582"]},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.80},
+        "selected_task_scoring": {"final_candidate_score": 0.74},
+        "quality_score": 0.71,
+    }
+    uncovered_opening = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-opening",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "bidirectional_validation": 0.83,
+                "backward_link_strength": 0.79,
+                "forward_link_strength": 0.75,
+            }
+        },
+        "llm_selection_score": 0.80,
+        "llm_family_match_hint": {
+            "score": 0.78,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.81},
+        "selected_task_scoring": {"final_candidate_score": 0.75},
+        "quality_score": 0.72,
+    }
+
+    assert pipeline._item_selection_sort_key(stable_middle) > pipeline._item_selection_sort_key(uncovered_opening)
+
+
+def test_sentence_fill_sort_key_demotes_wider_uncovered_opening_when_llm_gap_is_small() -> None:
+    pipeline = MaterialPipelineV2()
+    tighter_opening = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-opening-tight",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "meta": {"paragraph_range": [0, 1]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.56,
+                "backward_link_strength": 0.42,
+                "forward_link_strength": 0.69,
+                "reference_dependency": 0.0,
+                "material_structure_label": "总分",
+            }
+        },
+        "llm_selection_score": 0.8263,
+        "llm_family_match_hint": {
+            "score": 0.8696,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.7493},
+        "selected_task_scoring": {"final_candidate_score": 0.0},
+        "quality_score": 0.5224,
+    }
+    wider_opening = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-opening-wide",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "meta": {"paragraph_range": [0, 2]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.56,
+                "backward_link_strength": 0.42,
+                "forward_link_strength": 0.69,
+                "reference_dependency": 0.0,
+                "material_structure_label": "观点-论证",
+            }
+        },
+        "llm_selection_score": 0.8263,
+        "llm_family_match_hint": {
+            "score": 0.8696,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.7493},
+        "selected_task_scoring": {"final_candidate_score": 0.0},
+        "quality_score": 0.5540,
+    }
+
+    assert pipeline._item_selection_sort_key(tighter_opening) > pipeline._item_selection_sort_key(wider_opening)
+
+
+def test_sentence_fill_sort_key_keeps_strong_opening_when_llm_clearly_dominates() -> None:
+    pipeline = MaterialPipelineV2()
+    dominant_opening = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-opening-dominant",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "meta": {"paragraph_range": [0, 2]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.63,
+                "backward_link_strength": 0.46,
+                "forward_link_strength": 0.74,
+                "reference_dependency": 0.0,
+                "material_structure_label": "观点-论证",
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.66, "titleability": 0.74},
+        "llm_selection_score": 0.94,
+        "llm_family_match_hint": {
+            "score": 0.90,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.82},
+        "selected_task_scoring": {"final_candidate_score": 0.74},
+        "quality_score": 0.70,
+    }
+    stable_middle = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-middle-strong",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "middle",
+                "bidirectional_validation": 0.81,
+                "backward_link_strength": 0.79,
+                "forward_link_strength": 0.74,
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.62, "titleability": 0.66},
+        "llm_selection_score": 0.81,
+        "llm_family_match_hint": {
+            "score": 0.82,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": ["pilot.r1.sentence_fill.2012582"]},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.81},
+        "selected_task_scoring": {"final_candidate_score": 0.74},
+        "quality_score": 0.71,
+    }
+
+    assert pipeline._item_selection_sort_key(dominant_opening) > pipeline._item_selection_sort_key(stable_middle)
+
+
+def test_sentence_fill_sort_key_keeps_card_score_as_late_tiebreak_only() -> None:
+    pipeline = MaterialPipelineV2()
+    stable_middle = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-middle-card-weak",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "middle",
+                "bidirectional_validation": 0.82,
+                "backward_link_strength": 0.81,
+                "forward_link_strength": 0.75,
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.67, "titleability": 0.66},
+        "llm_selection_score": 0.79,
+        "llm_family_match_hint": {
+            "score": 0.80,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": ["pilot.r1.sentence_fill.2012582"]},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.80},
+        "selected_task_scoring": {"final_candidate_score": 0.74},
+        "quality_score": 0.69,
+    }
+    uncovered_opening_with_better_cards = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-opening-card-strong",
+        "question_ready_context": {
+            "runtime_binding": {"question_type": "sentence_fill"},
+            "material_card_matches": [{"score": 0.99}],
+            "business_card_matches": [{"score": 0.99}],
+        },
+        "meta": {"paragraph_range": [0, 3]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.58,
+                "backward_link_strength": 0.44,
+                "forward_link_strength": 0.68,
+                "reference_dependency": 0.0,
+                "material_structure_label": "时间演进",
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.60, "titleability": 0.64},
+        "llm_selection_score": 0.79,
+        "llm_family_match_hint": {
+            "score": 0.80,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.80},
+        "selected_task_scoring": {"final_candidate_score": 0.74},
+        "quality_score": 0.72,
+    }
+
+    assert pipeline._item_selection_sort_key(stable_middle) > pipeline._item_selection_sort_key(
+        uncovered_opening_with_better_cards
+    )
+
+
+def test_sentence_fill_boundary_guardrail_promotes_compact_closed_span_in_low_gap_pair() -> None:
+    pipeline = MaterialPipelineV2()
+    broader_top = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-broad-top",
+        "candidate_type": "multi_paragraph_unit",
+        "article_id": "article-fill-broad",
+        "text": "第一段提出背景。第二段继续补充背景，并把话题拉长。",
+        "question_ready_context": {
+            "runtime_binding": {"question_type": "sentence_fill"},
+            "material_card_matches": [{"score": 0.93}],
+            "business_card_matches": [{"score": 0.91}],
+        },
+        "meta": {"paragraph_range": [0, 2]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.60,
+                "backward_link_strength": 0.47,
+                "forward_link_strength": 0.66,
+                "reference_dependency": 0.0,
+                "material_structure_label": "时间演进",
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.58, "titleability": 0.60},
+        "llm_selection_score": 0.602,
+        "llm_family_match_hint": {
+            "score": 0.63,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.62},
+        "selected_task_scoring": {"final_candidate_score": 0.60},
+        "quality_score": 0.76,
+        "eligible_material_cards": [{"score": 0.93}],
+        "eligible_business_cards": [{"score": 0.91}],
+    }
+    compact_challenger = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-compact-challenger",
+        "candidate_type": "closed_span",
+        "article_id": "article-fill-compact",
+        "text": "承上启下的一句更紧，空位消费形态更集中。",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "meta": {"paragraph_range": [0, 1]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.44,
+                "backward_link_strength": 0.37,
+                "forward_link_strength": 0.48,
+                "reference_dependency": 0.0,
+                "material_structure_label": "时间演进",
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.66, "titleability": 0.60},
+        "llm_selection_score": 0.565,
+        "llm_family_match_hint": {
+            "score": 0.61,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.64},
+        "selected_task_scoring": {"final_candidate_score": 0.61},
+        "quality_score": 0.58,
+    }
+
+    assert pipeline._item_selection_sort_key(broader_top) > pipeline._item_selection_sort_key(compact_challenger)
+
+    selected = pipeline._select_diverse_items([broader_top, compact_challenger], 2)
+
+    assert [item["candidate_id"] for item in selected[:2]] == [
+        "sf-compact-challenger",
+        "sf-broad-top",
+    ]
+
+
+def test_sentence_fill_boundary_guardrail_does_not_override_llm_dominant_broader_candidate() -> None:
+    pipeline = MaterialPipelineV2()
+    llm_dominant_broad = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-broad-dominant",
+        "candidate_type": "multi_paragraph_unit",
+        "article_id": "article-fill-dominant",
+        "text": "这一组候选虽然更宽，但 LLM 主判断明显更强，而且结构完成度也更高。",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "meta": {"paragraph_range": [0, 2]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.64,
+                "backward_link_strength": 0.50,
+                "forward_link_strength": 0.72,
+                "reference_dependency": 0.0,
+                "material_structure_label": "观点-论证",
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.66, "titleability": 0.70},
+        "llm_selection_score": 0.95,
+        "llm_family_match_hint": {
+            "score": 0.90,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.79},
+        "selected_task_scoring": {"final_candidate_score": 0.74},
+        "quality_score": 0.73,
+    }
+    compact_but_weaker = {
+        "_business_family_id": "sentence_fill",
+        "candidate_id": "sf-compact-weaker",
+        "candidate_type": "closed_span",
+        "article_id": "article-fill-weaker",
+        "text": "这条更紧，但整体主判断没有明显压过前者。",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_fill"}},
+        "meta": {"paragraph_range": [0, 1]},
+        "business_feature_profile": {
+            "sentence_fill_profile": {
+                "blank_position": "opening",
+                "function_type": "topic_introduction",
+                "bidirectional_validation": 0.50,
+                "backward_link_strength": 0.42,
+                "forward_link_strength": 0.54,
+                "reference_dependency": 0.0,
+                "material_structure_label": "观点-论证",
+            }
+        },
+        "neutral_signal_profile": {"closure_score": 0.72, "titleability": 0.66},
+        "llm_selection_score": 0.80,
+        "llm_family_match_hint": {
+            "score": 0.79,
+            "asset_anchor": {"anchor_role": "gold_ready_positive", "anchor_sample_ids": []},
+        },
+        "llm_structure_integrity_judgment": {"score": 0.76},
+        "selected_task_scoring": {"final_candidate_score": 0.72},
+        "quality_score": 0.61,
+    }
+
+    selected = pipeline._select_diverse_items([llm_dominant_broad, compact_but_weaker], 2)
+
+    assert [item["candidate_id"] for item in selected[:2]] == [
+        "sf-broad-dominant",
+        "sf-compact-weaker",
+    ]
+
+
+def test_center_understanding_sort_key_demotes_boundary_holdout_anchor() -> None:
+    pipeline = MaterialPipelineV2()
+    stable = {
+        "_business_family_id": "center_understanding",
+        "candidate_id": "cu-stable",
+        "question_ready_context": {"runtime_binding": {"question_type": "center_understanding"}},
+        "llm_selection_score": 0.78,
+        "llm_single_center_judgment": {"score": 0.82},
+        "llm_main_axis_source_hint": {"score": 0.76},
+        "llm_argument_structure_hint": {"score": 0.74},
+        "llm_family_match_hint": {"score": 0.80, "asset_anchor": {"anchor_role": "gold_ready_positive"}},
+        "llm_structure_integrity_judgment": {"score": 0.79},
+        "selected_task_scoring": {"final_candidate_score": 0.72},
+        "quality_score": 0.70,
+    }
+    boundary = {
+        "_business_family_id": "center_understanding",
+        "candidate_id": "cu-boundary",
+        "question_ready_context": {"runtime_binding": {"question_type": "center_understanding"}},
+        "llm_selection_score": 0.80,
+        "llm_single_center_judgment": {"score": 0.81},
+        "llm_main_axis_source_hint": {"score": 0.77},
+        "llm_argument_structure_hint": {"score": 0.75},
+        "llm_family_match_hint": {"score": 0.79, "asset_anchor": {"anchor_role": "review_holdout_boundary"}},
+        "llm_structure_integrity_judgment": {"score": 0.80},
+        "selected_task_scoring": {"final_candidate_score": 0.73},
+        "quality_score": 0.71,
+    }
+
+    assert pipeline._item_selection_sort_key(stable) > pipeline._item_selection_sort_key(boundary)
+
+
+def test_sentence_order_sort_key_prefers_sentence_block_group_with_clearer_anchor_signals() -> None:
+    pipeline = MaterialPipelineV2()
+    clean_block = {
+        "_business_family_id": "sentence_order",
+        "candidate_id": "so-clean",
+        "candidate_type": "sentence_block_group",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_order"}},
+        "business_feature_profile": {
+            "sentence_order_profile": {
+                "opening_signal_strength": 0.84,
+                "closing_signal_strength": 0.78,
+                "sequence_integrity": 0.82,
+                "multi_path_risk": 0.12,
+            }
+        },
+        "llm_selection_score": 0.79,
+        "llm_family_match_hint": {"score": 0.80, "asset_anchor": {"anchor_role": "gold_ready_positive"}},
+        "selected_task_scoring": {"final_candidate_score": 0.73},
+        "quality_score": 0.70,
+    }
+    weak_group = {
+        "_business_family_id": "sentence_order",
+        "candidate_id": "so-weak",
+        "candidate_type": "ordered_unit_group",
+        "question_ready_context": {"runtime_binding": {"question_type": "sentence_order"}},
+        "business_feature_profile": {
+            "sentence_order_profile": {
+                "opening_signal_strength": 0.62,
+                "closing_signal_strength": 0.58,
+                "sequence_integrity": 0.63,
+                "multi_path_risk": 0.31,
+            }
+        },
+        "llm_selection_score": 0.80,
+        "llm_family_match_hint": {"score": 0.78, "asset_anchor": {"anchor_role": "gold_ready_positive"}},
+        "selected_task_scoring": {"final_candidate_score": 0.72},
+        "quality_score": 0.72,
+    }
+
+    assert pipeline._item_selection_sort_key(clean_block) > pipeline._item_selection_sort_key(weak_group)
+
+
+def test_cached_prefilter_sort_key_puts_llm_before_card_score() -> None:
+    pipeline = MaterialPipelineV2()
+    weak_card_strong_llm = {
+        "_cached_business_family_id": "center_understanding",
+        "question_ready_context": {"runtime_binding": {"question_type": "center_understanding"}},
+        "llm_selection_score": 0.84,
+        "llm_single_center_judgment": {"score": 0.82},
+        "llm_main_axis_source_hint": {"score": 0.76},
+        "llm_argument_structure_hint": {"score": 0.74},
+        "llm_family_match_hint": {"score": 0.80, "asset_anchor": {"anchor_role": "gold_ready_positive"}},
+        "llm_structure_integrity_judgment": {"score": 0.78},
+        "selected_task_scoring": {"final_candidate_score": 0.72},
+        "quality_score": 0.70,
+    }
+    strong_card_weaker_llm = {
+        "_cached_business_family_id": "center_understanding",
+        "question_ready_context": {"runtime_binding": {"question_type": "center_understanding"}},
+        "llm_selection_score": 0.68,
+        "llm_single_center_judgment": {"score": 0.80},
+        "llm_main_axis_source_hint": {"score": 0.73},
+        "llm_argument_structure_hint": {"score": 0.70},
+        "llm_family_match_hint": {"score": 0.74, "asset_anchor": {"anchor_role": "gold_ready_positive"}},
+        "llm_structure_integrity_judgment": {"score": 0.75},
+        "selected_task_scoring": {"final_candidate_score": 0.71},
+        "quality_score": 0.72,
+    }
+
+    key_a = pipeline._cached_prefilter_sort_key(
+        cached_item=weak_card_strong_llm,
+        business_family_id="center_understanding",
+        card_score=0.2,
+        structure_score=0.4,
+        hit_count=0,
+        quality_score=0.70,
+    )
+    key_b = pipeline._cached_prefilter_sort_key(
+        cached_item=strong_card_weaker_llm,
+        business_family_id="center_understanding",
+        card_score=2.0,
+        structure_score=0.4,
+        hit_count=0,
+        quality_score=0.72,
+    )
+
+    assert key_a > key_b
 
 
 def test_title_selection_skips_long_whole_passage_candidates_from_very_long_articles() -> None:
@@ -289,7 +971,7 @@ def test_sentence_order_skips_fragmentary_three_sentence_blocks() -> None:
 
     candidates = pipeline._derive_candidates(
         article_context=pipeline._build_article_context(article),
-        required_candidate_types=["sentence_block_group", "phrase_or_clause_group"],
+        required_candidate_types=["sentence_block_group"],
         business_family_id="sentence_order",
     )
 
@@ -302,12 +984,14 @@ def test_sentence_order_can_derive_adjacent_paragraph_pair_blocks() -> None:
         id="article-order-adjacent",
         title="\u76f8\u90bb\u6bb5\u843d\u8054\u5408",
         clean_text=(
-            "\u7b2c\u4e00\u6bb5\u7b2c\u4e00\u53e5\u5148\u63d0\u51fa\u8fd9\u4e00\u90e8\u5206\u8ba8\u8bba\u7684\u80cc\u666f\u3001\u95ee\u9898\u4e3b\u4f53\u4e0e\u6574\u4f53\u89c2\u5bdf\u89d2\u5ea6\uff0c\u4e3a\u540e\u7eed\u53e5\u7ec4\u94fa\u57ab\u8db3\u591f\u7684\u8bed\u4e49\u7a7a\u95f4\u3002"
-            "\u7b2c\u4e00\u6bb5\u7b2c\u4e8c\u53e5\u518d\u8865\u8db3\u5173\u952e\u539f\u56e0\u3001\u53d8\u5316\u6761\u4ef6\u4e0e\u73b0\u5b9e\u5236\u7ea6\uff0c\u8ba9\u524d\u4e00\u90e8\u5206\u7684\u95ee\u9898\u5448\u73b0\u5f97\u66f4\u52a0\u5b8c\u6574\u3002"
-            "\n\n"
-            "\u7b2c\u4e8c\u6bb5\u7b2c\u4e00\u53e5\u987a\u7740\u524d\u6587\u5c55\u5f00\u89e3\u51b3\u601d\u8def\u3001\u63a8\u8fdb\u8def\u5f84\u4e0e\u5177\u4f53\u6267\u884c\u65b9\u5f0f\uff0c\u8ba9\u6574\u4e2a\u53e5\u7ec4\u51fa\u73b0\u8fde\u7eed\u9012\u8fdb\u7684\u7ed3\u6784\u3002"
-            "\u7b2c\u4e8c\u6bb5\u7b2c\u4e8c\u53e5\u5bf9\u524d\u6587\u4fe1\u606f\u8fdb\u884c\u5c0f\u7ed3\u5e76\u6536\u675f\u672c\u6bb5\u903b\u8f91\uff0c\u4f7f\u8fd9\u4e00\u8054\u5408\u53e5\u7ec4\u53ef\u4ee5\u88ab\u76f4\u63a5\u5f53\u6210\u4e00\u6bb5\u5b8c\u6574\u6750\u6599\u6765\u9605\u8bfb\u3002"
-        ),
+                "\u7b2c\u4e00\u6bb5\u7b2c\u4e00\u53e5\u5148\u63d0\u51fa\u8fd9\u4e00\u90e8\u5206\u8ba8\u8bba\u7684\u80cc\u666f\u3001\u95ee\u9898\u4e3b\u4f53\u4e0e\u6574\u4f53\u89c2\u5bdf\u89d2\u5ea6\uff0c\u4e3a\u540e\u7eed\u53e5\u7ec4\u94fa\u57ab\u8db3\u591f\u7684\u8bed\u4e49\u7a7a\u95f4\u3002"
+                "\u7b2c\u4e00\u6bb5\u7b2c\u4e8c\u53e5\u518d\u8865\u8db3\u5173\u952e\u539f\u56e0\u3001\u53d8\u5316\u6761\u4ef6\u4e0e\u73b0\u5b9e\u5236\u7ea6\uff0c\u8ba9\u524d\u4e00\u90e8\u5206\u7684\u95ee\u9898\u5448\u73b0\u5f97\u66f4\u52a0\u5b8c\u6574\u3002"
+                "\u7b2c\u4e00\u6bb5\u7b2c\u4e09\u53e5\u7b80\u8981\u5f52\u7eb3\u8fd9\u4e00\u90e8\u5206\u7684\u610f\u4e49\u7ebf\u7d22\uff0c\u4e3a\u540e\u7eed\u8f6c\u5165\u4e0b\u4e00\u6bb5\u57cb\u4e0b\u7ebf\u7d22\u3002"
+                "\n\n"
+                "\u7b2c\u4e8c\u6bb5\u7b2c\u4e00\u53e5\u987a\u7740\u524d\u6587\u5c55\u5f00\u89e3\u51b3\u601d\u8def\u3001\u63a8\u8fdb\u8def\u5f84\u4e0e\u5177\u4f53\u6267\u884c\u65b9\u5f0f\uff0c\u8ba9\u6574\u4e2a\u53e5\u7ec4\u51fa\u73b0\u8fde\u7eed\u9012\u8fdb\u7684\u7ed3\u6784\u3002"
+                "\u7b2c\u4e8c\u6bb5\u7b2c\u4e8c\u53e5\u5bf9\u524d\u6587\u4fe1\u606f\u8fdb\u884c\u5c0f\u7ed3\u5e76\u6536\u675f\u672c\u6bb5\u903b\u8f91\uff0c\u4f7f\u8fd9\u4e00\u8054\u5408\u53e5\u7ec4\u53ef\u4ee5\u88ab\u76f4\u63a5\u5f53\u6210\u4e00\u6bb5\u5b8c\u6574\u6750\u6599\u6765\u9605\u8bfb\u3002"
+                "\u7b2c\u4e8c\u6bb5\u7b2c\u4e09\u53e5\u518d\u5c06\u903b\u8f91\u7ed3\u5c40\u4e0e\u7ed3\u8bba\u63a8\u5230\u53ef\u6267\u884c\u5c42\u9762\uff0c\u4f7f\u53e5\u7ec4\u5b8c\u6574\u76f8\u7cfb\u3002"
+            ),
         raw_text=None,
         source="old",
         source_url="http://example.com/order-adjacent",
@@ -316,7 +1000,7 @@ def test_sentence_order_can_derive_adjacent_paragraph_pair_blocks() -> None:
 
     candidates = pipeline._derive_candidates(
         article_context=pipeline._build_article_context(article),
-        required_candidate_types=["sentence_block_group", "phrase_or_clause_group"],
+        required_candidate_types=["sentence_block_group"],
         business_family_id="sentence_order",
     )
 
@@ -337,6 +1021,7 @@ def test_sentence_order_result_contains_support_context_presentation() -> None:
             "\u7b2c\u4e09\u53e5\u5176\u6b21\u6307\u51fa\u5176\u4e2d\u7684\u5173\u952e\u5236\u7ea6\u4e0e\u903b\u8f91\u9547\u70b9\uff0c\u8ba9\u53e5\u7ec4\u4e4b\u95f4\u4fdd\u6301\u8fde\u52a8\u548c\u9012\u8fdb\u3002"
             "\u7b2c\u56db\u53e5\u56e0\u6b64\u628a\u524d\u6587\u4fe1\u606f\u6536\u675f\u5230\u53ef\u4ee5\u6267\u884c\u7684\u7ed3\u8bba\u4e0a\uff0c\u8ba9\u903b\u8f91\u65b9\u5411\u8fdb\u4e00\u6b65\u6e05\u6670\u3002"
             "\u7b2c\u4e94\u53e5\u603b\u4e4b\u518d\u5bf9\u8fd9\u4e00\u89c2\u70b9\u8fdb\u884c\u63d0\u70bc\uff0c\u8ba9\u6574\u4e2a\u53e5\u7ec4\u66f4\u9002\u5408\u4ee5\u72ec\u7acb\u6bb5\u843d\u7684\u5f62\u6001\u88ab\u9605\u8bfb\u3002"
+            "\u7b2c\u516d\u53e5\u8fdb\u4e00\u6b65\u8868\u660e\u8be5\u7ed3\u8bba\u5bf9\u540e\u7eed\u8ba8\u8bba\u7684\u4f5c\u7528\uff0c\u8ba9\u7ed3\u5c40\u66f4\u5b8c\u6574\u3002"
         ),
         raw_text=None,
         source="old",
@@ -367,6 +1052,41 @@ def test_sentence_order_result_contains_support_context_presentation() -> None:
     assert presentation["mode"] == "sentence_order"
     assert presentation["sortable_block"]
     assert presentation["lead_context"]
+
+
+def test_sentence_order_pipeline_can_merge_adjacent_sentences_into_six_units() -> None:
+    pipeline = MaterialPipelineV2()
+    article = SimpleNamespace(
+        id="article-order-six-units",
+        title="六单元排序",
+        clean_text=(
+            "第一句先提出本段讨论的背景。"
+            "第二句补充现实限制，因此要重新安排执行节奏。"
+            "第三句接着说明推进思路。"
+            "第四句同时补充配套条件，让方案更具可行性。"
+            "第五句然后归纳阶段重点。"
+            "第六句再提示后续衔接方向。"
+            "第七句最后给出总结判断。"
+        ),
+        raw_text=None,
+        source="old",
+        source_url="http://example.com/order-six-units",
+        domain="example.com",
+    )
+
+    candidates = pipeline._derive_candidates(
+        article_context=pipeline._build_article_context(article),
+        required_candidate_types=["sentence_block_group"],
+        business_family_id="sentence_order",
+    )
+
+    block_candidates = [item for item in candidates if item["candidate_type"] == "sentence_block_group"]
+    assert block_candidates
+    merged = next(item for item in block_candidates if (item.get("meta") or {}).get("grouped_unit_count"))
+    meta = merged.get("meta") or {}
+    assert len(meta.get("ordered_units") or []) == 6
+    assert meta.get("grouped_unit_count", 0) >= 1
+    assert pipeline._sentence_order_unit_count(merged["text"], merged["candidate_type"]) == 6
 
 
 def test_sentence_fill_result_contains_blanked_consumable_text() -> None:
@@ -414,6 +1134,7 @@ def test_sentence_order_dual_anchor_lock_rejects_qa_style_blocks() -> None:
         signal_profile=signal_profile,
         candidate=candidate,
         min_card_score=0.35,
+        business_family_id="sentence_order",
     )
 
     assert "order_material.dual_anchor_lock" not in {item["card_id"] for item in hits}

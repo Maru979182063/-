@@ -20,6 +20,55 @@ class _FakePipeline:
 
 
 class RecentV2IndexingTests(unittest.TestCase):
+    def test_refresh_cached_item_rehydrates_round1_llm_material_judgments(self) -> None:
+        pipeline = MaterialPipelineV2()
+        refreshed = pipeline.refresh_cached_item(
+            cached_item={
+                "candidate_id": "cached-fill-1",
+                "article_id": "article-1",
+                "_cached_business_family_id": "sentence_fill",
+                "candidate_type": "functional_slot_unit",
+                "text": "承接前文并进一步解释原因。",
+                "original_text": "承接前文并进一步解释原因。",
+                "meta": {"paragraph_range": [0, 0], "sentence_range": [0, 0]},
+                "source": {"source_name": "source-1"},
+                "question_ready_context": {
+                    "runtime_binding": {"question_type": "sentence_fill"},
+                    "selected_business_card": "sentence_fill__bridge",
+                },
+                "local_profile": {},
+                "business_feature_profile": {
+                    "readability": 0.80,
+                    "theme_words": ["原因"],
+                    "sentence_fill_profile": {
+                        "blank_position": "middle",
+                        "function_type": "carry_previous",
+                        "logic_relation": "explanation",
+                        "explicit_slot_ready": True,
+                        "bidirectional_validation": 0.76,
+                        "backward_link_strength": 0.79,
+                        "forward_link_strength": 0.61,
+                        "reference_dependency": 0.20,
+                    },
+                },
+                "neutral_signal_profile": {
+                    "topic_consistency_strength": 0.73,
+                    "bidirectional_validation": 0.76,
+                    "backward_link_strength": 0.79,
+                    "forward_link_strength": 0.61,
+                    "reference_dependency": 0.20,
+                },
+            },
+            query_terms=[],
+        )
+
+        self.assertIn("llm_generation_readiness", refreshed)
+        self.assertIn("llm_family_match_hint", refreshed)
+        self.assertEqual(
+            refreshed["llm_family_match_hint"]["asset_anchor"]["anchor_role"],
+            "gold_ready_positive",
+        )
+
     def test_main_card_family_landing_resolver_supports_single_judge_mode(self) -> None:
         class _FakeProvider:
             def is_enabled(self) -> bool:
@@ -86,9 +135,9 @@ class RecentV2IndexingTests(unittest.TestCase):
     def test_sentence_order_material_bridge_normalizes_seven_units_to_six(self) -> None:
         pipeline = MaterialPipelineV2.__new__(MaterialPipelineV2)
         pipeline.SENTENCE_ORDER_FIXED_UNIT_COUNT = 6
-        pipeline._sentence_order_units = lambda text, candidate_type: [f"绗瑊i}鍙ャ€? for i in range(1, 8)]  # type: ignore[method-assign]
+        pipeline._sentence_order_units = lambda text, candidate_type: [f"第{i}句。" for i in range(1, 8)]  # type: ignore[method-assign]
         pipeline._normalize_ordered_units_to_six = lambda raw_units: (  # type: ignore[method-assign]
-            ["绗?鍙ャ€?, "绗?鍙ワ紝绗?鍙ャ€?, "绗?鍙ャ€?, "绗?鍙ャ€?, "绗?鍙ャ€?, "绗?鍙ャ€?],
+            ["第1句。", "第2句，第3句。", "第4句。", "第5句。", "第6句。", "第7句。"],
             [
                 "single_sentence_unit",
                 "grouped_unit",
@@ -113,7 +162,7 @@ class RecentV2IndexingTests(unittest.TestCase):
             candidate={
                 "candidate_id": "cand-1",
                 "candidate_type": "sentence_group",
-                "text": "绗?鍙ャ€傜2鍙ャ€傜3鍙ャ€傜4鍙ャ€傜5鍙ャ€傜6鍙ャ€傜7鍙ャ€?,
+                "text": "第1句。第2句。第3句。第4句。第5句。第6句。第7句。",
                 "meta": {"sentence_range": [0, 6], "paragraph_range": [0, 1]},
                 "quality_flags": [],
             },
@@ -202,7 +251,7 @@ class RecentV2IndexingTests(unittest.TestCase):
         result = resolver.resolve(
             business_family_id="sentence_order",
             article_context={"title": "鎺掑簭鏉愭枡", "source": {"domain": "example.com"}},
-            candidate={"candidate_type": "weak_formal_order_group", "text": "鐢层€備箼銆備笝銆備竵銆傛垔銆傚繁銆?, "meta": {}},
+            candidate={"candidate_type": "weak_formal_order_group", "text": "甲。乙。丙。丁。戊。己。", "meta": {}},
             neutral_signal_profile={},
             business_feature_profile={},
         )
@@ -227,10 +276,8 @@ class RecentV2IndexingTests(unittest.TestCase):
                 self.calls += 1
                 if self.calls == 1:
                     return {
-                        "slot_role": "opening",
-                        "slot_function": "summary",
                         "blank_position": "opening",
-                        "function_type": "summarize_following_text",
+                        "function_type": "summary",
                         "logic_relation": "summary",
                         "bidirectional_validation": 0.71,
                         "backward_link_strength": 0.22,
@@ -242,11 +289,9 @@ class RecentV2IndexingTests(unittest.TestCase):
                         "reason": "judge-a",
                     }
                 return {
-                    "slot_role": "opening",
-                    "slot_function": "topic_intro",
                     "blank_position": "opening",
-                    "function_type": "topic_introduction",
-                    "logic_relation": "introduction",
+                    "function_type": "topic_intro",
+                    "logic_relation": "transition",
                     "bidirectional_validation": 0.69,
                     "backward_link_strength": 0.18,
                     "forward_link_strength": 0.84,
@@ -274,7 +319,7 @@ class RecentV2IndexingTests(unittest.TestCase):
         result = resolver.resolve(
             business_family_id="sentence_fill",
             article_context={"title": "濉┖鏉愭枡", "source": {"domain": "example.com"}},
-            candidate={"candidate_type": "functional_slot_unit", "text": "杩欐槸涓€鍙ュ緟濉┖鍙ャ€?, "meta": {}},
+            candidate={"candidate_type": "functional_slot_unit", "text": "这是一句待填空句。", "meta": {}},
             neutral_signal_profile={},
             business_feature_profile={},
         )
@@ -315,7 +360,7 @@ class RecentV2IndexingTests(unittest.TestCase):
 
         neutral, business, resolution = pipeline._resolve_main_card_profiles(
             article_context={"title": "鎺掑簭鏉愭枡"},
-            candidate={"candidate_type": "weak_formal_order_group", "text": "鐢层€備箼銆備笝銆備竵銆傛垔銆傚繁銆?, "meta": {}},
+            candidate={"candidate_type": "weak_formal_order_group", "text": "甲。乙。丙。丁。戊。己。", "meta": {}},
             business_family_id="sentence_order",
             signal_layer={},
         )
@@ -734,7 +779,14 @@ class RecentV2IndexingTests(unittest.TestCase):
         pipeline.main_card_dual_judge = _FakeJudge()
 
         passed, reason = pipeline._passes_runtime_material_gate(
-            item={"llm_adjudication": {"consensus": {"status": "unanimous", "decision": "accept"}}},
+            item={
+                "candidate_id": "runtime-gate-1",
+                "article_id": "article-1",
+                "candidate_type": "sentence_block_group",
+                "text": "第一句。第二句。第三句。第四句。第五句。第六句。",
+                "meta": {"paragraph_range": [0, 0], "sentence_range": [0, 5]},
+                "llm_adjudication": {"consensus": {"status": "unanimous", "decision": "accept"}},
+            },
             business_family_id="sentence_order",
             question_card={"card_id": "question.sentence_order.standard_v1"},
             min_card_score=0.55,
@@ -1116,10 +1168,10 @@ class RecentV2IndexingTests(unittest.TestCase):
                     "question_type": "sentence_fill",
                     "business_subtype": "sentence_fill",
                     "pattern_candidates": ["opening_summary"],
-                    "type_slots": {"slot_role": "opening"},
-                    "prompt_extras": {"slot_function": "summary"},
+                    "type_slots": {"blank_position": "opening"},
+                    "prompt_extras": {"function_type": "summary"},
                 },
-                "feature_signature": {"slot_role": "opening"},
+                "feature_signature": {"blank_position": "opening"},
             }
         ]
 

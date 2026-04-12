@@ -1,11 +1,14 @@
 schema_version: question_card.v1
 card_id: question.center_understanding.standard_v1
 card_type: question
-business_family_id: title_selection
+business_family_id: center_understanding
 business_subtype_id: center_understanding
 runtime_binding:
   question_type: main_idea
   business_subtype: center_understanding
+compatibility_backbone:
+  material_signal_family_id: title_selection
+  answer_grounding_asset_family_id: title_selection
 display_name: 中心理解标准题卡
 description: 基于整篇/闭合材料，为文段选择最能覆盖论证主轴与表达任务的中心理解项。为了兼容现有材料族，暂沿用 title_selection 材料家族，但题卡语义按 center_understanding 独立建模。
 structure_schema:
@@ -48,7 +51,6 @@ legacy_slot_mapping:
   structure_type: argument_structure
   main_point_source: main_axis_source
   distractor_modes: distractor_types
-  business_family_id: title_selection
 upstream_contract:
   required_candidate_types:
   - closed_span
@@ -85,7 +87,7 @@ base_slots:
   - topic_shift
   - overgeneralization
   distractor_strength: high
-  statement_visibility: medium
+  statement_visibility: high
   argument_structure: phenomenon_analysis
   main_axis_source: global_abstraction
   distractor_types:
@@ -196,5 +198,5 @@ answer_grounding:
 normalized_from: center_understanding_standard_question_card.yaml
 normalization_notes:
 - center_understanding runtime binding is now explicitly normalized instead of falling through title_selection only
-- business_family_id temporarily reuses title_selection for material compatibility; schema semantics are center_understanding-specific
+- center_understanding keeps a canonical business_family_id and reuses the title_selection material/signal and answer-grounding backbone only through compatibility_backbone
 - required_profiles intentionally stay close to the existing title_selection material family to avoid tightening runtime contracts before main-chain consumption is updated

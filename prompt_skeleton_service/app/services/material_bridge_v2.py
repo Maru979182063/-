@@ -61,6 +61,7 @@ class MaterialBridgeV2Service:
         )
         resolved_question_card_id = binding.get("question_card_id")
         business_family_id = self._resolve_business_family_id(binding)
+        search_business_family_id = self._resolve_material_search_family_id(binding)
         warnings: list[str] = []
         binding_warning = self._missing_question_card_warning(
             requested_question_card_id=question_card_id,
@@ -70,7 +71,7 @@ class MaterialBridgeV2Service:
             warnings.append(binding_warning)
         requested_candidate_limit = max(min(self.config.candidate_pool_size, 16), count * 4)
         search_result = self._search_candidates(
-            business_family_id=business_family_id,
+            business_family_id=search_business_family_id,
             question_card_id=resolved_question_card_id,
             article_ids=article_ids or [],
             article_limit=article_limit,
@@ -205,6 +206,7 @@ class MaterialBridgeV2Service:
         )
         resolved_question_card_id = binding.get("question_card_id")
         business_family_id = self._resolve_business_family_id(binding)
+        search_business_family_id = self._resolve_material_search_family_id(binding)
         self._log_missing_question_card_binding(
             requested_question_card_id=question_card_id,
             resolved_question_card_id=resolved_question_card_id,
@@ -212,7 +214,7 @@ class MaterialBridgeV2Service:
         )
         items = self._attach_local_usage_stats(
             (self._search_candidates(
-                business_family_id=business_family_id,
+                business_family_id=search_business_family_id,
                 question_card_id=resolved_question_card_id,
                 article_ids=article_ids or [],
                 article_limit=article_limit,
@@ -295,12 +297,13 @@ class MaterialBridgeV2Service:
         )
         resolved_question_card_id = binding.get("question_card_id")
         business_family_id = self._resolve_business_family_id(binding)
+        search_business_family_id = self._resolve_material_search_family_id(binding)
         binding_warning = self._missing_question_card_warning(
             requested_question_card_id=question_card_id,
             resolved_question_card_id=resolved_question_card_id,
         )
         search_result = self._search_candidates(
-            business_family_id=business_family_id,
+            business_family_id=search_business_family_id,
             question_card_id=resolved_question_card_id,
             article_ids=article_ids or [],
             article_limit=article_limit,
@@ -385,6 +388,14 @@ class MaterialBridgeV2Service:
                 "business_subtype": runtime_binding.get("business_subtype"),
             },
         )
+
+    def _resolve_material_search_family_id(self, binding: dict[str, Any]) -> str:
+        question_card = binding.get("question_card") or {}
+        compatibility_backbone = question_card.get("compatibility_backbone") or {}
+        search_family_id = str(compatibility_backbone.get("material_signal_family_id") or "").strip()
+        if search_family_id:
+            return search_family_id
+        return self._resolve_business_family_id(binding)
 
     def _min_card_score(self, difficulty_target: str) -> float:
         return {

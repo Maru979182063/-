@@ -76,6 +76,57 @@ class ReviewWorkbenchSmokeTest(TestCase):
 
         self.assertEqual(edit.status_code, 422)
 
+    def test_distractor_patch_creates_new_version_with_single_option_scope(self) -> None:
+        item = self._save_base_review_item(item_id="dp-1")
+        item_id = item["item_id"]
+        original_question = deepcopy(item["generated_question"])
+        response = self.client.post(
+            f"/api/v1/questions/{item_id}/review-actions",
+            json={
+                "action": "distractor_patch",
+                "target_option": "B",
+                "option_text": "脱离材料主旨的干扰项",
+                "analysis": "A项正确，因为“正确概括主旨”最能概括材料主旨；B项属于脱离材料的无关干扰。",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["action"], "distractor_patch")
+        revised = payload["item"]
+        self.assertEqual(revised["generated_question"]["answer"], original_question["answer"])
+        self.assertEqual(revised["generated_question"]["options"]["A"], original_question["options"]["A"])
+        self.assertEqual(revised["generated_question"]["options"]["C"], original_question["options"]["C"])
+        self.assertEqual(revised["generated_question"]["options"]["D"], original_question["options"]["D"])
+        self.assertNotEqual(revised["generated_question"]["options"]["B"], original_question["options"]["B"])
+        self.assertEqual(revised["current_version_no"], 2)
+        self.assertEqual(revised["latest_action"], "distractor_patch")
+        self.assertIn("evaluation_result", revised)
+        self.assertIn("validation_result", revised)
+        latest_action = self.client.get(f"/api/v1/questions/{item_id}/review-actions").json()[0]
+        self.assertEqual(latest_action["action_type"], "distractor_patch")
+        self.assertEqual(latest_action["payload"]["semantic_class"], "targeted_repair")
+        self.assertEqual(latest_action["payload"]["changed_fields"], ["analysis", "options"])
+        self.assertFalse(latest_action["payload"]["truth_touched"])
+        self.assertFalse(latest_action["payload"]["material_boundary_crossed"])
+        history = self.client.get(f"/api/v1/review/items/{item_id}/history").json()
+        self.assertEqual(history["current_version_no"], 2)
+        self.assertEqual(history["review_actions"][0]["action_type"], "distractor_patch")
+
+    def test_distractor_patch_rejects_answer_option_target(self) -> None:
+        item_id = self._save_base_review_item(item_id="dp-2")["item_id"]
+        response = self.client.post(
+            f"/api/v1/questions/{item_id}/review-actions",
+            json={
+                "action": "distractor_patch",
+                "target_option": "A",
+                "option_text": "试图改正确项",
+                "analysis": "A项正确，因为A项最能概括材料主旨。",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+
     def _legacy_minor_edit_result_truth_change_is_upgraded_by_result_audit(self) -> None:
         with self._patched_runtime():
             item_id = self._generate_one().json()["items"][0]["item_id"]
@@ -623,6 +674,56 @@ class ReviewWorkbenchSmokeTest(TestCase):
         self.assertEqual(payload["approved_count"], 1)
         self.assertEqual(len(payload["items"]), 1)
 
+    def test_review_history_marks_sentence_fill_item_blocked_without_crashing(self) -> None:
+        self._save_sentence_fill_item(
+            item_id="sf-1",
+            resolved_slots={
+                "blank_position": "middle",
+                "function_type": "legacy_new_name",
+                "logic_relation": "continuation",
+            },
+        )
+
+        history = self.client.get("/api/v1/review/items/sf-1/history")
+        self.assertEqual(history.status_code, 200)
+        view = history.json()["item"]["sentence_fill_export_view"]
+        self.assertEqual(view["status"], "blocked")
+        self.assertEqual(view["blocked_reason"], "unknown_sentence_fill_function_type_alias:legacy_new_name")
+
+    def test_review_history_marks_center_understanding_item_blocked_without_crashing(self) -> None:
+        self._save_center_understanding_item(
+            item_id="center-1",
+            item_business_subtype="title_selection",
+            request_business_subtype="center_understanding",
+        )
+
+        history = self.client.get("/api/v1/review/items/center-1/history")
+        self.assertEqual(history.status_code, 200)
+        view = history.json()["item"]["center_understanding_export_view"]
+        self.assertEqual(view["status"], "blocked")
+        self.assertEqual(
+            view["blocked_reason"],
+            "title_selection_leaked_to_center_understanding_export:item.business_subtype",
+        )
+
+    def test_review_history_marks_sentence_order_item_blocked_without_crashing(self) -> None:
+        self._save_sentence_order_item(
+            item_id="so-1",
+            material_resolved_slots={"candidate_type": "ordered_unit_group"},
+            runtime_binding={
+                "opening_rule": "explicit_opening",
+                "closing_rule": "summary_or_conclusion",
+            },
+        )
+
+        history = self.client.get("/api/v1/review/items/so-1/history")
+        self.assertEqual(history.status_code, 200)
+        view = history.json()["item"]["sentence_order_export_view"]
+        self.assertEqual(view["status"], "blocked")
+        self.assertEqual(view["blocked_reason"], "ambiguous_sentence_order_closing_anchor:summary_or_conclusion")
+        self.assertIsNone(view["closing_anchor_type"])
+        self.assertNotIn("closing_rule", view)
+
     def test_material_policy_affects_selection(self) -> None:
         with self._patched_runtime(material_policy_sensitive=True):
             response = self.client.post(
@@ -671,6 +772,264 @@ class ReviewWorkbenchSmokeTest(TestCase):
             **(item.get("validation_result") or {}),
             "passed": True,
             "validation_status": "passed",
+        }
+        self.repository.save_item(item)
+
+    def _save_base_review_item(self, *, item_id: str) -> dict:
+        item = {
+            "item_id": item_id,
+            "batch_id": "batch-dp",
+            "question_type": "main_idea",
+            "business_subtype": "title_selection",
+            "pattern_id": "pattern-1",
+            "difficulty_target": "medium",
+            "resolved_slots": {},
+            "skeleton": {},
+            "control_logic": {},
+            "generation_logic": {},
+            "prompt_package": {
+                "system_prompt": "sys",
+                "user_prompt": "user",
+                "fewshot_examples": [],
+                "merged_prompt": "sys\nuser",
+            },
+            "generated_question": {
+                "question_type": "main_idea",
+                "business_subtype": "title_selection",
+                "pattern_id": "pattern-1",
+                "stem": "以下哪一项最能概括材料主旨？",
+                "options": {"A": "正确概括主旨", "B": "原始干扰项B", "C": "原始干扰项C", "D": "原始干扰项D"},
+                "answer": "A",
+                "analysis": "A项正确，因为A项最能概括材料主旨。",
+            },
+            "material_selection": {
+                "material_id": "mat-dp-1",
+                "article_id": "art-dp-1",
+                "text": "材料原文",
+                "source": {"site": "demo"},
+                "selection_reason": "test seed",
+            },
+            "material_text": "材料原文",
+            "material_source": {"site": "demo"},
+            "request_snapshot": {
+                "question_type": "main_idea",
+                "business_subtype": "title_selection",
+                "pattern_id": "pattern-1",
+                "difficulty_target": "medium",
+                "source_form": {},
+                "type_slots": {},
+                "extra_constraints": {},
+            },
+            "statuses": {
+                "build_status": "success",
+                "review_status": "waiting_review",
+                "generation_status": "success",
+                "validation_status": "passed",
+            },
+            "validation_result": {
+                "passed": True,
+                "validation_status": "passed",
+                "checks": {
+                    "analysis_answer_consistency": {"passed": True},
+                    "analysis_mentions_correct_option_text": {"passed": True},
+                },
+            },
+            "evaluation_result": {"overall_score": 80, "provider": "openai", "raw": {"judge_prompt": "demo"}},
+            "current_version_no": 1,
+            "current_status": "pending_review",
+            "revision_count": 0,
+            "notes": [],
+            "selected_pattern": "pattern-1",
+        }
+        self.repository.save_item(item)
+        return item
+
+    def _save_sentence_fill_item(self, *, item_id: str, resolved_slots: dict[str, str]) -> None:
+        self.repository.save_batch(
+            "batch-sf",
+            {
+                "batch_meta": {
+                    "requested_count": 1,
+                    "effective_count": 1,
+                    "question_type": "sentence_fill",
+                    "business_subtype": "sentence_fill_selection",
+                    "difficulty_target": "medium",
+                }
+            },
+        )
+        item = {
+            "item_id": item_id,
+            "batch_id": "batch-sf",
+            "question_type": "sentence_fill",
+            "business_subtype": "sentence_fill_selection",
+            "pattern_id": "bridge_transition",
+            "difficulty_target": "medium",
+            "resolved_slots": dict(resolved_slots),
+            "skeleton": {},
+            "control_logic": {},
+            "generation_logic": {},
+            "prompt_package": {},
+            "generated_question": {
+                "question_type": "sentence_fill",
+                "business_subtype": "sentence_fill_selection",
+                "pattern_id": "bridge_transition",
+                "stem": "填入画横线部分最恰当的一项是（ ）。",
+                "options": {"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+                "answer": "A",
+                "analysis": "解析",
+            },
+            "material_selection": {
+                "material_id": "mat-sf-1",
+                "article_id": "art-sf-1",
+                "text": "材料",
+                "resolved_slots": dict(resolved_slots),
+                "source": {"site": "demo"},
+            },
+            "request_snapshot": {
+                "type_slots": {
+                    "blank_position": "opening",
+                    "function_type": "summary",
+                    "logic_relation": "summary",
+                }
+            },
+            "statuses": {
+                "review_status": "waiting_review",
+                "generation_status": "success",
+                "validation_status": "passed",
+            },
+            "validation_result": {"passed": True, "validation_status": "passed"},
+            "current_version_no": 1,
+            "current_status": "pending_review",
+            "selected_pattern": "bridge_transition",
+        }
+        self.repository.save_item(item)
+
+    def _save_center_understanding_item(
+        self,
+        *,
+        item_id: str,
+        item_business_subtype: str,
+        request_business_subtype: str,
+    ) -> None:
+        self.repository.save_batch(
+            "batch-center",
+            {
+                "batch_meta": {
+                    "requested_count": 1,
+                    "effective_count": 1,
+                    "question_type": "main_idea",
+                    "business_subtype": "center_understanding",
+                    "difficulty_target": "medium",
+                }
+            },
+        )
+        item = {
+            "item_id": item_id,
+            "batch_id": "batch-center",
+            "question_type": "main_idea",
+            "business_subtype": item_business_subtype,
+            "pattern_id": "whole_passage_integration",
+            "difficulty_target": "medium",
+            "resolved_slots": {},
+            "skeleton": {},
+            "control_logic": {},
+            "generation_logic": {},
+            "prompt_package": {},
+            "generated_question": {
+                "question_type": "main_idea",
+                "business_subtype": item_business_subtype,
+                "pattern_id": "whole_passage_integration",
+                "stem": "主旨是？",
+                "options": {"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+                "answer": "A",
+                "analysis": "解析",
+            },
+            "material_selection": {
+                "material_id": "mat-center-1",
+                "article_id": "art-center-1",
+                "text": "材料",
+                "source": {"site": "demo"},
+            },
+            "request_snapshot": {
+                "business_subtype": request_business_subtype,
+                "question_card_id": "question.center_understanding.standard_v1",
+            },
+            "statuses": {
+                "review_status": "waiting_review",
+                "generation_status": "success",
+                "validation_status": "passed",
+            },
+            "validation_result": {"passed": True, "validation_status": "passed"},
+            "current_version_no": 1,
+            "current_status": "pending_review",
+            "selected_pattern": "whole_passage_integration",
+        }
+        self.repository.save_item(item)
+
+    def _save_sentence_order_item(
+        self,
+        *,
+        item_id: str,
+        material_resolved_slots: dict[str, str] | None = None,
+        runtime_binding: dict[str, str] | None = None,
+    ) -> None:
+        self.repository.save_batch(
+            "batch-so",
+            {
+                "batch_meta": {
+                    "requested_count": 1,
+                    "effective_count": 1,
+                    "question_type": "sentence_order",
+                    "business_subtype": "sentence_order_selection",
+                    "difficulty_target": "medium",
+                }
+            },
+        )
+        item = {
+            "item_id": item_id,
+            "batch_id": "batch-so",
+            "question_type": "sentence_order",
+            "business_subtype": "sentence_order_selection",
+            "pattern_id": "dual_anchor_lock",
+            "difficulty_target": "medium",
+            "resolved_slots": {},
+            "skeleton": {},
+            "control_logic": {},
+            "generation_logic": {},
+            "prompt_package": {},
+            "generated_question": {
+                "question_type": "sentence_order",
+                "business_subtype": "sentence_order_selection",
+                "pattern_id": "dual_anchor_lock",
+                "stem": "将以下6个句子重新排列，语序正确的是：",
+                "options": {"A": "1-2-3-4-5-6", "B": "1-3-2-4-5-6", "C": "2-1-3-4-5-6", "D": "1-2-4-3-5-6"},
+                "answer": "A",
+                "analysis": "先看首句和尾句，再看中间衔接。",
+            },
+            "material_selection": {
+                "material_id": "mat-so-1",
+                "article_id": "art-so-1",
+                "text": "①先交代背景。②再说明问题。③随后分析原因。④接着提出对策。⑤再补充条件。⑥最后总结判断。",
+                "resolved_slots": dict(material_resolved_slots or {}),
+                "runtime_binding": dict(runtime_binding or {}),
+                "source": {"site": "demo"},
+            },
+            "request_snapshot": {
+                "type_slots": {
+                    "candidate_type": "sentence_block_group",
+                    "opening_anchor_type": "explicit_topic",
+                    "closing_anchor_type": "conclusion",
+                }
+            },
+            "statuses": {
+                "review_status": "approved",
+                "generation_status": "success",
+                "validation_status": "passed",
+            },
+            "validation_result": {"passed": True, "validation_status": "passed"},
+            "current_version_no": 1,
+            "current_status": "approved",
+            "selected_pattern": "dual_anchor_lock",
         }
         self.repository.save_item(item)
 

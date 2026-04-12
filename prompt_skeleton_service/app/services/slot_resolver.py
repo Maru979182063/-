@@ -200,24 +200,6 @@ class SlotResolverService:
     ) -> dict[str, Any]:
         return dict(resolved_slots)
 
-    def _pick_difficulty_value(
-        self,
-        *,
-        current_value: Any,
-        allowed_values: list[Any],
-        ordered_values: list[str],
-        target_level: int,
-    ) -> Any | None:
-        normalized_allowed = [str(value) for value in allowed_values]
-        available = [value for value in ordered_values if value in normalized_allowed]
-        if not available:
-            return None
-
-        if target_level <= 0:
-            return available[0]
-        if target_level == 1:
-            return available[min(len(available) // 2, len(available) - 1)]
-        return available[-1]
 
     def _coerce_value(self, slot_name: str, value: Any, slot_config: SlotFieldConfig) -> Any:
         expected_type = slot_config.type

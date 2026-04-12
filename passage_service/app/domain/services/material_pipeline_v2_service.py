@@ -18,6 +18,7 @@ from app.infra.crawl.extractors.readability_extractor import ReadabilityLikeExtr
 from app.infra.crawl.fetchers.http_fetcher import HttpCrawlerFetcher
 from app.infra.ingest.cleaners.basic_cleaner import BasicCleaner
 from app.domain.services.material_v2_index_service import MaterialV2IndexService
+from app.services.sentence_fill_protocol import normalize_sentence_fill_function_type
 from app.services.material_pipeline_v2 import MaterialPipelineV2
 
 
@@ -218,16 +219,23 @@ class MaterialPipelineV2Service(ServiceBase):
                     card_score = 0.5
             else:
                 card_score = 1
+            llm_selection_score = float(
+                cached_item.get("llm_selection_score")
+                or ((cached_item.get("llm_generation_readiness") or {}).get("score"))
+                or 0.0
+            )
             quality_score = float(cached_item.get("quality_score") or getattr(material, "quality_score", 0.0) or 0.0)
-            entry = (material, cached_item, (card_score, structure_score, hit_count, quality_score))
+            sort_key = self.pipeline._cached_prefilter_sort_key(
+                cached_item=cached_item,
+                business_family_id=business_family_id,
+                card_score=card_score,
+                structure_score=structure_score,
+                hit_count=hit_count,
+                quality_score=quality_score,
+            )
+            entry = (material, cached_item, sort_key)
             relaxed_card_candidates.append(entry)
 
-            if requested_business_card_ids:
-                cached_recommended = set(cached_item.get("business_card_recommendations") or [])
-                if selected_business_card:
-                    cached_recommended.add(selected_business_card)
-                if not requested_business_card_ids.intersection(cached_recommended):
-                    continue
             tier_candidates.append(entry)
 
         if not tier_candidates and requested_business_card_ids:
@@ -235,38 +243,18 @@ class MaterialPipelineV2Service(ServiceBase):
         if not tier_candidates:
             return None
 
-        if requested_business_card_ids and business_family_id in {"sentence_fill", "sentence_order"}:
-            exact_card_matches = [entry for entry in tier_candidates if entry[2][0] >= 2]
-            if exact_card_matches:
-                tier_candidates = exact_card_matches
-
         strict = [
             entry for entry in tier_candidates
-            if (
-                (entry[2][0] > 0 or not requested_business_card_ids)
-                and (entry[2][2] > 0 or not query_terms)
-                and (
-                    not enforce_structure_gate
-                    or entry[2][1] >= self._minimum_structure_score(business_family_id, structure_constraints)
-                )
-            )
+            if (entry[2][3] > 0 or not query_terms)
         ]
         relaxed = [
             entry for entry in tier_candidates
-            if (
-                (entry[2][0] > 0 or not requested_business_card_ids)
-                and (
-                    not enforce_structure_gate
-                    or entry[2][1] >= self._minimum_structure_score(business_family_id, structure_constraints)
-                )
-            )
+            if True
         ]
         if strict:
             prefiltered = strict
         elif relaxed:
             prefiltered = relaxed
-        elif enforce_structure_gate:
-            return None
         else:
             prefiltered = tier_candidates
 
@@ -428,7 +416,7 @@ class MaterialPipelineV2Service(ServiceBase):
             question_card=question_card,
             min_card_score=float(payload.get("min_card_score", 0.55) or 0.55),
             min_business_card_score=float(payload.get("min_business_card_score", 0.45) or 0.45),
-            require_business_card=business_family_id == "sentence_fill",
+            require_business_card=False,
         )
         if gate_passed:
             return refreshed
@@ -453,7 +441,7 @@ class MaterialPipelineV2Service(ServiceBase):
             question_card=question_card,
             min_card_score=float(payload.get("min_card_score", 0.55) or 0.55),
             min_business_card_score=float(payload.get("min_business_card_score", 0.45) or 0.45),
-            require_business_card=business_family_id == "sentence_fill",
+            require_business_card=False,
         )
         if not gate_passed:
             return None
@@ -745,27 +733,8 @@ class MaterialPipelineV2Service(ServiceBase):
 
     @staticmethod
     def _canonical_sentence_fill_function_type(function_type: Any, *, blank_position: str = "") -> str:
-        raw = str(function_type or "").strip()
-        position = str(blank_position or "").strip()
-        if not raw:
-            return ""
-        mapping = {
-            "summarize_following_text": "opening_summary",
-            "topic_introduction": "opening_summary",
-            "summarize_previous_text": "ending_summary",
-            "propose_countermeasure": "ending_summary",
-            "countermeasure": "ending_summary",
-            "carry_previous": "middle_explanation",
-            "lead_next": "middle_focus_shift",
-            "bridge_both_sides": "bridge",
-            "reference_summary": "inserted_reference",
-        }
-        if raw in {"summary", "conclusion"}:
-            if position == "opening":
-                return "opening_summary"
-            if position == "ending":
-                return "ending_summary"
-        return mapping.get(raw, raw)
+        _ = blank_position
+        return normalize_sentence_fill_function_type(function_type)
 
     def _apply_external_fallback_if_needed(self, *, payload: dict, base_result: dict) -> dict:
         should_fallback, reason = self._should_trigger_external_fallback(payload=payload, base_result=base_result)

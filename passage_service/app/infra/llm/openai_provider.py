@@ -26,7 +26,7 @@ class OpenAIResponsesProvider(BaseLLMProvider):
         if not self.is_enabled():
             raise RuntimeError("OpenAI API key is not configured.")
 
-        payload = {
+        responses_payload = {
             "model": model,
             "input": [
                 {
@@ -47,7 +47,42 @@ class OpenAIResponsesProvider(BaseLLMProvider):
                 }
             },
         }
+        chat_payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": input_payload["prompt"]},
+            ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": input_payload["schema_name"],
+                    "schema": input_payload["schema"],
+                    "strict": True,
+                },
+            },
+        }
 
+        try:
+            data = self._request_with_retry("/responses", responses_payload, allow_fallback=True)
+            text_output = self._extract_responses_text(data)
+        except httpx.HTTPStatusError as exc:
+            if not self._should_fallback_to_chat(exc):
+                raise
+            data = self._request_with_retry("/chat/completions", chat_payload, allow_fallback=False)
+            text_output = self._extract_chat_text(data)
+
+        if not text_output:
+            raise RuntimeError("No structured output returned by model.")
+        return json.loads(text_output)
+
+    def _request_with_retry(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        allow_fallback: bool,
+    ) -> dict[str, Any]:
         last_error: Exception | None = None
         for attempt in range(1, self.max_attempts + 1):
             try:
@@ -59,16 +94,15 @@ class OpenAIResponsesProvider(BaseLLMProvider):
                         "Content-Type": "application/json",
                     },
                 ) as client:
-                    response = client.post("/responses", json=payload)
-                    if response.status_code in {429, 500, 502, 503, 504}:
+                    response = client.post(path, json=payload)
+                    if response.status_code >= 400:
                         response.raise_for_status()
-                    elif response.status_code >= 400:
-                        response.raise_for_status()
-                    data = response.json()
-                break
+                    return response.json()
             except httpx.HTTPStatusError as exc:
                 last_error = exc
                 status_code = exc.response.status_code if exc.response is not None else None
+                if allow_fallback and self._should_fallback_to_chat(exc):
+                    raise
                 if status_code not in {429, 500, 502, 503, 504} or attempt >= self.max_attempts:
                     raise
                 time.sleep(min(0.8 * attempt, 2.0))
@@ -77,19 +111,50 @@ class OpenAIResponsesProvider(BaseLLMProvider):
                 if attempt >= self.max_attempts:
                     raise
                 time.sleep(min(0.8 * attempt, 2.0))
-        else:
-            if last_error is not None:
-                raise last_error
-            raise RuntimeError("No response returned by provider.")
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("No response returned by provider.")
 
+    def _extract_responses_text(self, data: dict[str, Any]) -> str:
         text_output = ""
         for item in data.get("output", []):
             for content in item.get("content", []):
                 if content.get("type") == "output_text":
                     text_output += content.get("text", "")
-        if not text_output:
-            raise RuntimeError("No structured output returned by model.")
-        return json.loads(text_output)
+        return text_output
+
+    def _extract_chat_text(self, data: dict[str, Any]) -> str:
+        choices = list(data.get("choices") or [])
+        if not choices:
+            return ""
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if text:
+                        parts.append(str(text))
+            return "".join(parts)
+        return ""
+
+    def _should_fallback_to_chat(self, exc: httpx.HTTPStatusError) -> bool:
+        response = exc.response
+        if response is None:
+            return False
+        if response.status_code in {404, 405, 415, 422}:
+            return True
+        if response.status_code in {500, 502, 503, 504}:
+            body_preview = ""
+            try:
+                body_preview = response.text[:400].lower()
+            except Exception:
+                body_preview = ""
+            return "bad gateway" in body_preview or "<html" in body_preview or "cf-error" in body_preview
+        return False
 
     def _resolved_api_key(self) -> str | None:
         return (

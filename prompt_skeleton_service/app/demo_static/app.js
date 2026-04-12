@@ -260,20 +260,6 @@ async function executeResultMutation(task) {
   switchScreen("result");
 }
 
-async function generateQuestionsLegacy() {
-  try {
-    const response = await apiFetch("/api/v1/questions/generate", {
-      method: "POST",
-      body: JSON.stringify(buildGeneratePayload()),
-    });
-    state.batchId = response.batch_id;
-    state.items = response.items || [];
-    await renderResults();
-    switchScreen("result");
-  } catch (error) {
-    alert(`生成失败：${error.message}`);
-  }
-}
 
 async function renderResults() {
   $("resultBatchInfo").textContent = state.batchId
