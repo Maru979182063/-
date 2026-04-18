@@ -1,0 +1,83 @@
+﻿llm:
+  active_provider: generation_llm
+
+  providers:
+    generation_llm:
+      api_key_env: GENERATION_LLM_API_KEY
+      base_url_env: GENERATION_LLM_BASE_URL
+      default_base_url: https://api.openai.com/v1
+      models:
+        default_generation: gpt-5.4-mini
+        question_generation: gpt-5.4
+        question_repair: gpt-5.4
+        minor_edit: gpt-5.4-mini
+        question_modify: gpt-5.4-mini
+        text_modify: gpt-5.4-mini
+        judge_review: gpt-5.4-mini
+        reference_parse: gpt-5.4-mini
+      params:
+        temperature: 0.7
+        max_output_tokens: 10800
+        timeout_seconds: 120
+    material_llm:
+      api_key_env: MATERIAL_LLM_API_KEY
+      base_url_env: MATERIAL_LLM_BASE_URL
+      default_base_url: https://api.openai.com/v1
+      models:
+        default_generation: gpt-5.4-mini
+        question_generation: gpt-5.4-mini
+        question_repair: gpt-5.4-mini
+        minor_edit: gpt-5.4-mini
+        question_modify: gpt-5.4-mini
+        text_modify: gpt-5.4-mini
+        judge_review: gpt-5.4-mini
+        reference_parse: gpt-5.4-mini
+      params:
+        temperature: 0.7
+        max_output_tokens: 10800
+        timeout_seconds: 120
+
+  routing:
+    generate_question:
+      provider: generation_llm
+      model_key: question_generation
+    question_generation:
+      provider: generation_llm
+      model_key: question_generation
+    question_repair:
+      provider: generation_llm
+      model_key: question_repair
+    material_refinement:
+      provider: material_llm
+      model_key: minor_edit
+    source_question_parse:
+      provider: generation_llm
+      model_key: reference_parse
+    review_actions:
+      minor_edit:
+        provider: generation_llm
+        model_key: minor_edit
+      question_modify:
+        provider: generation_llm
+        model_key: question_modify
+      text_modify:
+        provider: generation_llm
+        model_key: text_modify
+
+materials:
+  base_url: http://127.0.0.1:8001
+  search_path: /materials/search
+  v2_search_path: /materials/v2/search
+  default_status: promoted
+  default_release_channel: stable
+  candidate_pool_size: 24
+
+persistence:
+  sqlite_path: data/question_workbench.mvp.db
+
+evaluation:
+  judge:
+    provider: generation_llm
+    enabled: false
+    model_key: judge_review
+

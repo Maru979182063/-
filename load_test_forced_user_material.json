@@ -1,0 +1,605 @@
+{
+  "base_url": "http://127.0.0.1:8111",
+  "endpoint": "/api/v1/questions/generate",
+  "preset": "forced_user_material",
+  "requests": 5,
+  "concurrency": 5,
+  "timeout_seconds": 300.0,
+  "payload": {
+    "question_focus": "center_understanding",
+    "difficulty_level": "medium",
+    "text_direction": "policy",
+    "count": 1,
+    "generation_mode": "forced_user_material",
+    "user_material": {
+      "text": "人工智能正逐步参与城市治理、交通调度和公共服务。但技术越深入现实场景，越需要配套的数据治理、伦理规范与责任分工。只有把效率提升与制度完善放在一起考虑，技术才能真正形成公共价值。"
+    },
+    "source_question": {
+      "stem": "根据材料，下列最适合作为标题的一项是？",
+      "options": {
+        "A": "推动智能治理必须兼顾技术效率与制度完善",
+        "B": "人工智能能够完全替代公共治理中的制度安排",
+        "C": "技术落地后，治理责任可以自然消失",
+        "D": "城市治理只需要算力，不再需要规则约束"
+      },
+      "answer": "A",
+      "analysis": "A项完整概括材料中心，兼顾技术应用与制度建设。"
+    }
+  },
+  "ready_probe": {
+    "status_code": 200,
+    "service_status": "ready",
+    "continued": true,
+    "payload": {
+      "service": "prompt_skeleton_service",
+      "status": "ready",
+      "checks": [
+        {
+          "name": "config_dir",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+            "exists": true,
+            "kind": "dir"
+          }
+        },
+        {
+          "name": "runtime_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.dev.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "prompt_template_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "question_repository",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+            "exists": true,
+            "repository_initialized": true
+          }
+        },
+        {
+          "name": "config_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "loaded_types": 4,
+            "warnings": []
+          }
+        },
+        {
+          "name": "prompt_template_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "active_templates": 23
+          }
+        },
+        {
+          "name": "runtime_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "materials_base_url": "http://127.0.0.1:8101",
+            "materials_v2_search_path": "/materials/v2/search",
+            "llm_provider": "generation_llm"
+          }
+        },
+        {
+          "name": "passage_service",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "base_url": "http://127.0.0.1:8101",
+            "health_url": "http://127.0.0.1:8101/healthz",
+            "status_code": 200,
+            "reachable": true
+          }
+        }
+      ],
+      "settings": {
+        "config_dir": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+        "runtime_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.dev.yaml",
+        "prompt_template_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+        "question_db_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+        "generation_queue": {
+          "max_concurrent": 3,
+          "max_waiting": 12,
+          "acquire_timeout_seconds": 240
+        }
+      },
+      "runtime_state": {
+        "generation_queue": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "max_concurrent": 3,
+          "max_waiting": 12
+        }
+      }
+    }
+  },
+  "warmup": {
+    "count": 1,
+    "success": 0,
+    "failure": 1
+  },
+  "results": [
+    {
+      "request_index": 1,
+      "started_at": 1776329899.4594066,
+      "duration_ms": 15206.09,
+      "status_code": 422,
+      "ok": false,
+      "batch_id": null,
+      "item_count": null,
+      "request_id": "72475e1b-2ed3-48a0-9e74-381ab3d87590",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 1,
+      "waiting_requests": 0,
+      "error_message": "Primary generation flow could not produce enough validator-passing questions within 3 attempts.",
+      "error_reason": null,
+      "error_details": {
+        "question_type": "main_idea",
+        "difficulty_target": "medium",
+        "rejected_attempts": [
+          {
+            "material_id": "user_uploaded::0d9122f825024cf4ad909145610cbacd",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 1,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::0d9122f825024cf4ad909145610cbacd",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 2,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::0d9122f825024cf4ad909145610cbacd",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 3,
+            "material_index": 0
+          }
+        ],
+        "failure_record_md": "C:\\Users\\Maru\\Documents\\agent\\reports\\generation_failure_41b56203f1444288a83011aef255efe3.md",
+        "request_id": "72475e1b-2ed3-48a0-9e74-381ab3d87590"
+      }
+    },
+    {
+      "request_index": 2,
+      "started_at": 1776329899.4600337,
+      "duration_ms": 15610.87,
+      "status_code": 422,
+      "ok": false,
+      "batch_id": null,
+      "item_count": null,
+      "request_id": "40d6e48c-b0a8-49ca-904d-c8036a19b63b",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 3,
+      "waiting_requests": 0,
+      "error_message": "Primary generation flow could not produce enough validator-passing questions within 3 attempts.",
+      "error_reason": null,
+      "error_details": {
+        "question_type": "main_idea",
+        "difficulty_target": "medium",
+        "rejected_attempts": [
+          {
+            "material_id": "user_uploaded::5c47d2907a1242989bc39af0fc898d76",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 1,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::5c47d2907a1242989bc39af0fc898d76",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 2,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::5c47d2907a1242989bc39af0fc898d76",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 3,
+            "material_index": 0
+          }
+        ],
+        "failure_record_md": "C:\\Users\\Maru\\Documents\\agent\\reports\\generation_failure_d48a6c05fa40437a964998bbd0abde1e.md",
+        "request_id": "40d6e48c-b0a8-49ca-904d-c8036a19b63b"
+      }
+    },
+    {
+      "request_index": 3,
+      "started_at": 1776329899.4607503,
+      "duration_ms": 17247.24,
+      "status_code": 422,
+      "ok": false,
+      "batch_id": null,
+      "item_count": null,
+      "request_id": "25c8c249-2065-448f-8c34-6751167116bd",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 2,
+      "waiting_requests": 0,
+      "error_message": "Primary generation flow could not produce enough validator-passing questions within 3 attempts.",
+      "error_reason": null,
+      "error_details": {
+        "question_type": "main_idea",
+        "difficulty_target": "medium",
+        "rejected_attempts": [
+          {
+            "material_id": "user_uploaded::c485f47eea28401c9bf8608109e79228",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 1,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::c485f47eea28401c9bf8608109e79228",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 2,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::c485f47eea28401c9bf8608109e79228",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 3,
+            "material_index": 0
+          }
+        ],
+        "failure_record_md": "C:\\Users\\Maru\\Documents\\agent\\reports\\generation_failure_f069f138e3fb44418b2520429c20296a.md",
+        "request_id": "25c8c249-2065-448f-8c34-6751167116bd"
+      }
+    },
+    {
+      "request_index": 4,
+      "started_at": 1776329899.4622474,
+      "duration_ms": 28032.08,
+      "status_code": 422,
+      "ok": false,
+      "batch_id": null,
+      "item_count": null,
+      "request_id": "26d8a2f8-1fb6-464e-b9fe-97d16f213af2",
+      "queue_position": 2,
+      "queue_wait_seconds": 15.5802,
+      "active_requests": 3,
+      "waiting_requests": 0,
+      "error_message": "Primary generation flow could not produce enough validator-passing questions within 3 attempts.",
+      "error_reason": null,
+      "error_details": {
+        "question_type": "main_idea",
+        "difficulty_target": "medium",
+        "rejected_attempts": [
+          {
+            "material_id": "user_uploaded::2ec7385c0c484898b2274f8013cda536",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 1,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::2ec7385c0c484898b2274f8013cda536",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 2,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::2ec7385c0c484898b2274f8013cda536",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 3,
+            "material_index": 0
+          }
+        ],
+        "failure_record_md": "C:\\Users\\Maru\\Documents\\agent\\reports\\generation_failure_a2f4ae2c4dd8466ebfd0d8f7a527ec7a.md",
+        "request_id": "26d8a2f8-1fb6-464e-b9fe-97d16f213af2"
+      }
+    },
+    {
+      "request_index": 5,
+      "started_at": 1776329899.463474,
+      "duration_ms": 30721.02,
+      "status_code": 422,
+      "ok": false,
+      "batch_id": null,
+      "item_count": null,
+      "request_id": "4b5dbdd6-1d54-40f1-b507-821ff16a5a78",
+      "queue_position": 1,
+      "queue_wait_seconds": 15.1722,
+      "active_requests": 3,
+      "waiting_requests": 1,
+      "error_message": "Primary generation flow could not produce enough validator-passing questions within 3 attempts.",
+      "error_reason": null,
+      "error_details": {
+        "question_type": "main_idea",
+        "difficulty_target": "medium",
+        "rejected_attempts": [
+          {
+            "material_id": "user_uploaded::77310252f6124af9a7e33c306f38bf5c",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 1,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::77310252f6124af9a7e33c306f38bf5c",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 2,
+            "material_index": 0
+          },
+          {
+            "material_id": "user_uploaded::77310252f6124af9a7e33c306f38bf5c",
+            "pattern_id": "whole_passage_integration",
+            "current_status": "auto_failed",
+            "validation_errors": [
+              "Structured question output was not produced."
+            ],
+            "judge_score": null,
+            "judge_reason": "judge_disabled_runtime_advisory_only",
+            "material_retry_round": 3,
+            "material_index": 0
+          }
+        ],
+        "failure_record_md": "C:\\Users\\Maru\\Documents\\agent\\reports\\generation_failure_7fa0aacd2086411baa1e2efce4f5fbbf.md",
+        "request_id": "4b5dbdd6-1d54-40f1-b507-821ff16a5a78"
+      }
+    }
+  ],
+  "summary": {
+    "success_count": 0,
+    "failure_count": 5,
+    "success_rate": 0.0,
+    "throughput_rps": 0.163,
+    "total_seconds": 30.726,
+    "latency_ms": {
+      "min": 15206.09,
+      "avg": 21363.46,
+      "p50": 17247.24,
+      "p90": 29645.44,
+      "p95": 30183.23,
+      "max": 30721.02
+    },
+    "queue": {
+      "queued_request_count": 2,
+      "max_queue_position_seen": 2,
+      "wait_seconds_avg": 6.1505,
+      "wait_seconds_p95": 15.4986,
+      "wait_seconds_max": 15.5802
+    },
+    "status_codes": {
+      "422": 5
+    },
+    "error_reasons": {
+      "unknown": 5
+    }
+  },
+  "diagnostics": {
+    "sample_count": 18,
+    "max_active_requests": 3,
+    "max_waiting_requests": 2,
+    "samples": [
+      {
+        "captured_at": 1776329899.458739,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329901.2791972,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329903.143709,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329905.0017455,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329906.8227491,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329908.795154,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329910.6423454,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329912.3601975,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776329914.1953535,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776329915.8406847,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329917.6380777,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329919.1763556,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329921.0024915,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329922.5633461,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329924.3430364,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329926.0656435,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329927.4945073,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329929.783555,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      }
+    ]
+  }
+}

@@ -16,6 +16,10 @@ def _install_test_stubs() -> None:
         responses = types.ModuleType("fastapi.responses")
         responses.JSONResponse = type("JSONResponse", (), {})
         sys.modules["fastapi.responses"] = responses
+    if "fastapi.exceptions" not in sys.modules:
+        exceptions = types.ModuleType("fastapi.exceptions")
+        exceptions.RequestValidationError = type("RequestValidationError", (Exception,), {})
+        sys.modules["fastapi.exceptions"] = exceptions
     if "yaml" not in sys.modules:
         yaml = types.ModuleType("yaml")
         yaml.safe_load = lambda *args, **kwargs: {}

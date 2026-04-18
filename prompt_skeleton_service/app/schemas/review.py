@@ -76,8 +76,13 @@ class ReviewVersionSummary(BaseModel):
     current_status: str
     target_difficulty: str | None = None
     material_id: str | None = None
+    material_preview: str | None = None
+    material_text: str | None = None
     stem_preview: str | None = None
+    stem: str | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
     answer: str | None = None
+    analysis: str | None = None
     validation_result: dict[str, Any] = Field(default_factory=dict)
     evaluation_result: dict[str, Any] = Field(default_factory=dict)
     prompt_template_name: str | None = None

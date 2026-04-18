@@ -1,37 +1,17 @@
-const PRIMARY_OPTIONS = [
-  { label: "标题填入题", value: "标题填入题" },
-  { label: "接语选择题", value: "接语选择题" },
+﻿const PRIMARY_OPTIONS = [
   { label: "语句排序题", value: "语句排序题" },
   { label: "语句填空题", value: "语句填空题" },
   { label: "中心理解题", value: "中心理解题" },
 ];
 
 const SECONDARY_BY_PRIMARY = {
-  标题填入题: [
-    { label: "选择标题", value: "选择标题" },
-    { label: "主旨概括", value: "主旨概括" },
-    { label: "结构概括", value: "结构概括" },
-    { label: "局部段意概括", value: "局部段意概括" },
-  ],
-  接语选择题: [
-    { label: "尾句直接承接", value: "尾句直接承接" },
-    { label: "问题后接对策", value: "问题后接对策" },
-    { label: "机制展开", value: "机制展开" },
-    { label: "主题转分话题", value: "主题转分话题" },
-    { label: "总结后开启新支点", value: "总结后开启新支点" },
-    { label: "观点后接原因", value: "观点后接原因" },
-    { label: "个案到宏观展开", value: "个案到宏观展开" },
-    { label: "多分支聚焦", value: "多分支聚焦" },
-    { label: "张力解释", value: "张力解释" },
-    { label: "方法延展", value: "方法延展" },
-  ],
-  语句排序题: [
+  "语句排序题": [
     { label: "双锚点锁定", value: "双锚点锁定" },
     { label: "承接并列展开", value: "承接并列展开" },
     { label: "观点-原因-行动排序", value: "观点-原因-行动排序" },
     { label: "问题-对策-案例排序", value: "问题-对策-案例排序" },
   ],
-  语句填空题: [
+  "语句填空题": [
     { label: "开头总起", value: "开头总起" },
     { label: "衔接过渡", value: "衔接过渡" },
     { label: "中段焦点切换", value: "中段焦点切换" },
@@ -41,19 +21,8 @@ const SECONDARY_BY_PRIMARY = {
     { label: "定位插入匹配", value: "定位插入匹配" },
     { label: "综合多点匹配", value: "综合多点匹配" },
   ],
-  中心理解题: [{ label: "中心理解题", value: "中心理解题" }],
+  "中心理解题": [{ label: "中心理解题", value: "中心理解题" }],
 };
-
-const TEXT_DIRECTION_OPTIONS = [
-  { label: "不指定", value: "" },
-  { label: "政策文", value: "政策文" },
-  { label: "法条文", value: "法条文" },
-  { label: "科普文", value: "科普文" },
-  { label: "评论文", value: "评论文" },
-  { label: "新闻报道", value: "新闻报道" },
-  { label: "通知公告", value: "通知公告" },
-  { label: "经验材料", value: "经验材料" },
-];
 
 const MATERIAL_STRUCTURE_OPTIONS = [
   { label: "不指定", value: "" },
@@ -70,8 +39,6 @@ const MATERIAL_STRUCTURE_OPTIONS = [
 ];
 
 const MATERIAL_STRUCTURE_BY_PRIMARY = {
-  "标题填入题": ["总分归纳", "分总归纳", "转折归旨", "并列推进", "观点-论证", "背景-核心结论", "综合说明"],
-  "接语选择题": ["转折归旨", "并列推进", "问题-对策", "现象-分析", "案例-结论", "观点-论证", "背景-核心结论", "综合说明"],
   "语句排序题": ["总分归纳", "分总归纳", "并列推进", "问题-对策", "现象-分析", "案例-结论", "观点-论证", "综合说明"],
   "语句填空题": ["总分归纳", "分总归纳", "转折归旨", "并列推进", "问题-对策", "现象-分析", "背景-核心结论", "综合说明"],
   "中心理解题": ["总分归纳", "分总归纳", "转折归旨", "并列推进", "观点-论证", "背景-核心结论", "综合说明"],
@@ -144,8 +111,7 @@ const VALUE_LABELS = {
   easy: "简单",
   medium: "中等",
   hard: "困难",
-  main_idea: "标题填入题",
-  continuation: "接语选择题",
+  main_idea: "中心理解题",
   sentence_order: "语句排序题",
   sentence_fill: "语句填空题",
   single_claim_capture: "单点主旨提取",
@@ -376,13 +342,11 @@ function renderMaterialStructureOptions() {
 }
 
 function buildGeneratePayload() {
-  const textDirection = $("textDirection").value || null;
   const specialType = $("specialType").value;
   const sourceQuestion = collectSourceQuestionPayload();
   return {
     question_focus: $("questionFocus").value,
     difficulty_level: $("difficultyLevel").value,
-    text_direction: textDirection,
     material_structure: $("materialStructure").value || null,
     special_question_types: specialType ? [specialType] : [],
     count: Number.parseInt($("count").value || "1", 10),
@@ -393,13 +357,6 @@ function buildGeneratePayload() {
     type_slots: {},
     extra_constraints: {},
     source_question: sourceQuestion,
-    material_policy: {
-      allow_reuse: false,
-      cooldown_days: 30,
-      preferred_document_genres: textDirection ? [textDirection] : [],
-      excluded_material_ids: [],
-      prefer_high_quality_reused: false,
-    },
   };
 }
 
@@ -1258,7 +1215,6 @@ function initPage() {
   if (!$("questionFocus").value && $("questionFocus").options.length) {
     $("questionFocus").selectedIndex = 0;
   }
-  populateSelect($("textDirection"), TEXT_DIRECTION_OPTIONS);
   renderSecondaryOptions();
   syncCountValue();
   renderLoadingStep(0);
@@ -1287,3 +1243,4 @@ function initPage() {
 }
 
 initPage();
+

@@ -168,5 +168,105 @@ cards:
   - 整体块顺序交换
   - 块内正确块间错误
   - 假首句由指代句/转折句制造
+- card_id: order_material.timeline_progression
+  display_name: Timeline Progression
+  selection_core: Sequence whose main ordering force is stable time or action progression, even if head/tail anchors are weaker than a full dual-anchor chain.
+  structures:
+  - timeline_sequence
+  - action_progression
+  - weak_tail_closure
+  required_signals:
+    unique_opener_score: '>=0.50'
+    binding_pair_count: '>=1'
+    exchange_risk: <=0.40
+    function_overlap_score: <=0.48
+    local_binding_strength: '>=0.44'
+    discourse_progression_strength: '>=0.56'
+    sequence_integrity: '>=0.58'
+  preferred_signals:
+  - explicit temporal or action progression
+  - adjacent units constrain one another
+  - order remains stronger than simple topical grouping
+  avoid_signals:
+  - pure topical listing
+  - middle units fully exchangeable
+  - no progression despite shared theme
+  candidate_contract:
+    raw_policy: sentence_block_group
+    allowed_candidate_types:
+    - sentence_block_group
+    preferred_candidate_types: []
+  card_bias: time or action driven ordering
+  default_generation_archetype: dual_anchor_lock
+  distractor_bias:
+  - topical grouping only
+  - local adjacency broken
+  - weak progression overread
+- card_id: order_material.first_sentence_gate
+  display_name: First Sentence Gate
+  selection_core: Sequence where first-sentence legality is the primary anchor and strongly narrows the valid ordering space.
+  structures:
+  - opener_gate
+  - first_sentence_legality
+  - weak_chain_supported
+  required_signals:
+    opening_signal_strength: '>=0.60'
+    unique_opener_score: '>=0.60'
+    binding_pair_count: '>=1'
+    exchange_risk: <=0.42
+    discourse_progression_strength: '>=0.52'
+    sequence_integrity: '>=0.54'
+  preferred_signals:
+  - background intro or definition naturally opens
+  - non-first units contain backward dependency
+  - opener significantly reduces ambiguity
+  avoid_signals:
+  - many units can all open
+  - opener advantage depends on world knowledge only
+  - no downstream chain support
+  candidate_contract:
+    raw_policy: sentence_block_group
+    allowed_candidate_types:
+    - sentence_block_group
+    preferred_candidate_types: []
+  card_bias: opener legality driven ordering
+  default_generation_archetype: dual_anchor_lock
+  distractor_bias:
+  - false opener
+  - world-knowledge opening
+  - opener without downstream support
+- card_id: order_material.tail_sentence_gate
+  display_name: Tail Sentence Gate
+  selection_core: Sequence where final-sentence closure is the strongest anchor and the tail sentence sharply constrains the ordering.
+  structures:
+  - closer_gate
+  - tail_sentence_closure
+  - weak_chain_supported
+  required_signals:
+    closing_signal_strength: '>=0.60'
+    binding_pair_count: '>=1'
+    exchange_risk: <=0.42
+    discourse_progression_strength: '>=0.52'
+    context_closure_score: '>=0.58'
+    sequence_integrity: '>=0.54'
+  preferred_signals:
+  - final summary, result, or action landing is clear
+  - earlier units naturally lead into the closer
+  - moving the tail sentence earlier breaks closure
+  avoid_signals:
+  - data appendices or loose afterthoughts as tail
+  - no strong closure difference from middle units
+  - closer depends on external knowledge
+  candidate_contract:
+    raw_policy: sentence_block_group
+    allowed_candidate_types:
+    - sentence_block_group
+    preferred_candidate_types: []
+  card_bias: closure legality driven ordering
+  default_generation_archetype: dual_anchor_lock
+  distractor_bias:
+  - false closer
+  - appendix tail
+  - closure overread
 normalized_from: sentence_order_intermediate_material_cards.yaml
 

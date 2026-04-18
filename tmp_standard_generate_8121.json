@@ -1,0 +1,11 @@
+{
+  "error": {
+    "message": "Failed to fetch v2 materials from passage_service.",
+    "details": {
+      "base_url": "http://127.0.0.1:8001",
+      "search_path": "/materials/v2/search",
+      "reason": "timed out",
+      "request_id": "4e1a1425-37d5-49c0-a4aa-cbe2455b6665"
+    }
+  }
+}

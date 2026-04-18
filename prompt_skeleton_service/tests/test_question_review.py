@@ -175,7 +175,12 @@ class QuestionReviewUnitTest(TestCase):
     def tearDown(self) -> None:
         self.tempdir.cleanup()
 
-    def _save_base_item(self, *, item_id: str = "item-1") -> dict:
+    def _save_base_item(
+        self,
+        *,
+        item_id: str = "item-1",
+        type_slots: dict[str, object] | None = None,
+    ) -> dict:
         item = {
             "item_id": item_id,
             "batch_id": "batch-1",
@@ -198,7 +203,7 @@ class QuestionReviewUnitTest(TestCase):
             "material_text": "材料原文",
             "material_source": {"site": "demo"},
             "request_snapshot": {
-                "type_slots": {"slot_a": "value_a"},
+                "type_slots": dict(type_slots or {"slot_a": "value_a"}),
                 "extra_constraints": {"keep": True},
             },
             "statuses": {
@@ -248,6 +253,50 @@ class QuestionReviewUnitTest(TestCase):
                 QuestionReviewActionRequest(
                     action="question_modify",
                     control_overrides={"type_slots": {"new_slot": "value"}},
+                ),
+            )
+
+    def test_question_modify_accepts_review_control_slot_not_present_in_snapshot(self) -> None:
+        self._save_base_item(type_slots={"abstraction_level": "medium"})
+        service = QuestionReviewService(self.repository, _NoOpGenerationService())
+
+        response = service.apply_action(
+            "item-1",
+            QuestionReviewActionRequest(
+                action="question_modify",
+                control_overrides={"type_slots": {"statement_visibility": "low"}},
+            ),
+        )
+
+        self.assertEqual(response["action"], "question_modify")
+
+    def test_question_modify_rejects_more_than_two_type_slot_updates(self) -> None:
+        self._save_base_item(type_slots={"slot_a": "value_a", "slot_b": "value_b", "slot_c": "value_c"})
+        service = QuestionReviewService(self.repository, _NoOpGenerationService())
+
+        with self.assertRaises(DomainError):
+            service.apply_action(
+                "item-1",
+                QuestionReviewActionRequest(
+                    action="question_modify",
+                    control_overrides={"type_slots": {"slot_a": "x", "slot_b": "y", "slot_c": "z"}},
+                ),
+            )
+
+    def test_question_modify_rejects_multi_select_with_more_than_two_values(self) -> None:
+        self._save_base_item(type_slots={"distractor_modes": ["wrong_opening"]})
+        service = QuestionReviewService(self.repository, _NoOpGenerationService())
+
+        with self.assertRaises(DomainError):
+            service.apply_action(
+                "item-1",
+                QuestionReviewActionRequest(
+                    action="question_modify",
+                    control_overrides={
+                        "type_slots": {
+                            "distractor_modes": ["wrong_opening", "wrong_closing", "block_swap"],
+                        }
+                    },
                 ),
             )
 

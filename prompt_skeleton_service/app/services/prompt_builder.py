@@ -131,6 +131,11 @@ class PromptBuilderService:
             question_type=question_type_config.type_id,
             business_subtype=business_subtype_config.subtype_id if business_subtype_config else None,
         )
+        round1_candidates = self._filter_round1_fewshot_candidates(
+            question_type=question_type_config.type_id,
+            resolved_slots=resolved_slots,
+            examples=round1_candidates,
+        )
         selected = self._pick_best_fewshot(
             round1_candidates,
             resolved_slots,
@@ -175,6 +180,27 @@ class PromptBuilderService:
         if single_example:
             collected.insert(0, single_example)
         return collected
+
+    def _filter_round1_fewshot_candidates(
+        self,
+        *,
+        question_type: str,
+        resolved_slots: dict[str, Any],
+        examples: list[FewshotExampleConfig],
+    ) -> list[FewshotExampleConfig]:
+        if question_type != "sentence_order":
+            return examples
+
+        opening_anchor_type = str(resolved_slots.get("opening_anchor_type") or "").strip()
+        if not opening_anchor_type:
+            return examples
+
+        compatible = [
+            example
+            for example in examples
+            if str((example.fit_slots or {}).get("opening_anchor_type") or "").strip() == opening_anchor_type
+        ]
+        return compatible or []
 
     def _pick_best_fewshot(
         self,

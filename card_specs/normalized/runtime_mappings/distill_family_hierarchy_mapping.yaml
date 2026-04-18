@@ -1,0 +1,311 @@
+﻿schema_version: distill_family_hierarchy_mapping.v1
+notes:
+  - Defines the question-side mother/child hierarchy used by routing, prompt overlays, replay, and depth1 pressure tests.
+  - Mother and child overlays supplement shared card logic, but never replace leaf-level hard logic.
+  - Runtime rule: leaf is primary, child supplements shared structure, mother supplements family boundary.
+
+mother_families:
+  center_understanding:
+    label: center_understanding
+    runtime_question_type: main_idea
+    runtime_business_subtype: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    candidate_type: closed_span
+    child_family_ids:
+      - center_understanding_relation_words
+      - center_understanding_special_types
+      - center_understanding_standalone_subfamilies
+      - center_understanding_subsentence_features
+    depth1_routing_note: classify center-understanding candidates first, then route into the most likely child family before leaf-card scoring.
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        distill_runtime_role: leaf_primary_parent_supplement
+        answer_style_guard: central_meaning_only
+        distractor_band_guard: same_topic_same_band
+      prompt_guard_lines:
+        - Leaf logic is primary. Mother/subfamily only supplement shared center-understanding constraints.
+        - Correct option must stay inside the passage-supported central meaning chain and avoid unsupported policy, criterion, or doctrine upgrades.
+        - Distill difficulty by strengthening nearest competing distractors, not by making the correct option more abstract than the passage can defend.
+
+  sentence_fill:
+    label: sentence_fill
+    runtime_question_type: sentence_fill
+    runtime_business_subtype: null
+    question_card_id: question.sentence_fill.standard_v1
+    candidate_type: closed_span
+    child_family_ids:
+      - sentence_fill_head_start
+      - sentence_fill_middle
+      - sentence_fill_tail_end
+    depth1_routing_note: classify fill candidates first, then route into opening, middle, or ending child families before leaf-card scoring.
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        distill_runtime_role: leaf_primary_parent_supplement
+        answer_style_guard: original_removed_sentence_only
+        distractor_band_guard: same_slot_same_band
+      prompt_guard_lines:
+        - Leaf logic is primary. Mother/subfamily only supplement shared sentence-fill constraints.
+        - The correct option must remain the removed original sentence. Do not rewrite it into a smoother explanation, slogan, or broader task statement.
+        - Raise difficulty by increasing local distractor similarity, not by weakening original-slot legality.
+
+  sentence_order:
+    label: sentence_order
+    runtime_question_type: sentence_order
+    runtime_business_subtype: null
+    question_card_id: question.sentence_order.standard_v1
+    candidate_type: sentence_block_group
+    child_family_ids:
+      - sentence_order_first_sentence
+      - sentence_order_fixed_bundle
+      - sentence_order_sequence
+      - sentence_order_tail_sentence
+    depth1_routing_note: classify order candidates first, then route into first-sentence, fixed-bundle, sequence, or tail-sentence child families before leaf-card scoring.
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        distill_runtime_role: leaf_primary_parent_supplement
+        answer_style_guard: original_order_truth_only
+        distractor_band_guard: near_miss_order_only
+      prompt_guard_lines:
+        - Leaf logic is primary. Mother/subfamily only supplement shared sentence-order constraints.
+        - The correct order must be the original material order. Options may permute display order, but must not invent a new truth chain.
+        - Raise difficulty by strengthening near-miss bindings, not by weakening order uniqueness.
+
+child_families:
+  center_understanding_relation_words:
+    mother_family_id: center_understanding
+    batch_scope: center_understanding_relation_words_2026-04-14
+    candidate_type: closed_span
+    source_ref: reports/distill_batches/center_understanding_relation_words_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - relation_words
+    pattern_tag_keys:
+      - relation_variant
+      - relation_parallel
+      - relation_countermeasure
+      - relation_plain
+      - relation_turning
+    material_card_ids:
+      - center_material.relation_variant
+      - center_material.relation_parallel
+      - center_material.relation_countermeasure
+      - center_material.relation_plain
+      - center_material.relation_turning
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: relation_words
+      prompt_guard_lines:
+        - For relation-word leaves, keep the relation type explicit and do not flatten turning, parallel, countermeasure, or variant logic into a generic importance summary.
+
+  center_understanding_special_types:
+    mother_family_id: center_understanding
+    batch_scope: center_understanding_special_types_2026-04-14
+    candidate_type: closed_span
+    source_ref: reports/distill_batches/center_understanding_special_types_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - special_types
+    pattern_tag_keys:
+      - keyword_or_theme_word
+      - fable_or_story
+      - classical_or_prose_special_form
+      - special_question_other
+    material_card_ids:
+      - center_material.relation_plain
+      - center_material.subsentence_example
+      - center_material.subsentence_other
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: special_types
+      prompt_guard_lines:
+        - For special-type leaves, preserve the special asking form when the material supports it instead of rewriting everything into a generic center-understanding stem.
+
+  center_understanding_standalone_subfamilies:
+    mother_family_id: center_understanding
+    batch_scope: center_understanding_standalone_subfamilies_2026-04-14
+    candidate_type: closed_span
+    source_ref: reports/distill_batches/center_understanding_standalone_subfamilies_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - theme_word_only
+      - degree_word_only
+    pattern_tag_keys: []
+    material_card_ids:
+      - center_material.relation_plain
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: standalone_subfamilies
+      prompt_guard_lines:
+        - For standalone-subfamily leaves, keep theme-word or degree-word task identity when the material supports it. Do not forcibly collapse them into a plain summary item.
+
+  center_understanding_subsentence_features:
+    mother_family_id: center_understanding
+    batch_scope: center_understanding_subsentence_features_2026-04-14
+    candidate_type: closed_span
+    source_ref: reports/distill_batches/center_understanding_subsentence_features_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - subsentence_features
+    pattern_tag_keys:
+      - example_clause
+      - subsentence_other
+      - multi_angle_discussion
+      - introductory_prelude
+      - data_or_fact_support
+    material_card_ids:
+      - center_material.subsentence_example
+      - center_material.subsentence_other
+      - center_material.subsentence_multi_angle
+      - center_material.subsentence_prelude
+      - center_material.subsentence_data
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: subsentence_features
+      prompt_guard_lines:
+        - For subsentence-feature leaves, treat examples, data, and preludes as support layers. The correct option should answer the judgment they jointly support, not simply restate the support layer itself.
+
+  sentence_fill_head_start:
+    mother_family_id: sentence_fill
+    batch_scope: sentence_fill_head_start_2026-04-14
+    candidate_type: closed_span
+    truth_blank_position: opening
+    source_ref: reports/distill_batches/sentence_fill_head_start_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - head_start
+    pattern_tag_keys:
+      - opening_summary
+      - opening_topic_intro
+      - opening_clause_lead
+    material_card_ids:
+      - fill_material.opening_summary
+      - fill_material.opening_topic_intro
+      - fill_material.opening_clause_lead
+    shared_runtime_overlay:
+      resolved_slot_defaults:
+        blank_position: opening
+      control_logic_special_fields:
+        child_family_focus: opening_blank
+      prompt_guard_lines:
+        - Opening blanks should lead or lift the paragraph naturally. Do not spend the slot on a late-stage conclusion or new task deployment.
+
+  sentence_fill_middle:
+    mother_family_id: sentence_fill
+    batch_scope: sentence_fill_middle_2026-04-14
+    candidate_type: closed_span
+    truth_blank_position: middle
+    source_ref: reports/distill_batches/sentence_fill_middle_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - middle_fill
+    pattern_tag_keys:
+      - bridge_transition
+      - middle_focus_shift
+      - middle_explanation
+    material_card_ids:
+      - fill_material.bridge_transition
+      - fill_material.middle_focus_shift
+      - fill_material.middle_explanation
+    shared_runtime_overlay:
+      resolved_slot_defaults:
+        blank_position: middle
+      control_logic_special_fields:
+        child_family_focus: middle_blank
+      prompt_guard_lines:
+        - Middle blanks must respect left-right linkage. Smoothness alone is not enough unless the leaf says single-direction carry or lead is sufficient.
+
+  sentence_fill_tail_end:
+    mother_family_id: sentence_fill
+    batch_scope: sentence_fill_tail_end_2026-04-14
+    candidate_type: closed_span
+    truth_blank_position: ending
+    source_ref: reports/distill_batches/sentence_fill_tail_end_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - tail_end
+    pattern_tag_keys:
+      - ending_clause_summary
+      - ending_summary
+      - ending_countermeasure
+    material_card_ids:
+      - fill_material.ending_clause_summary
+      - fill_material.ending_summary
+      - fill_material.ending_countermeasure
+    shared_runtime_overlay:
+      resolved_slot_defaults:
+        blank_position: ending
+      control_logic_special_fields:
+        child_family_focus: ending_blank
+      prompt_guard_lines:
+        - Ending blanks should close the existing paragraph task. Do not reopen the topic unless the leaf explicitly requires a countermeasure landing.
+
+  sentence_order_first_sentence:
+    mother_family_id: sentence_order
+    batch_scope: sentence_order_first_sentence_2026-04-14
+    candidate_type: sentence_block_group
+    source_ref: reports/distill_batches/sentence_order_first_sentence_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - first_sentence
+    pattern_tag_keys:
+      - first_sentence_gate
+    material_card_ids:
+      - order_material.first_sentence_gate
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: first_sentence_legality
+      prompt_guard_lines:
+        - In first-sentence leaves, legal opening power outranks later local smoothness. Prefer the sentence that can open the whole scope.
+
+  sentence_order_fixed_bundle:
+    mother_family_id: sentence_order
+    batch_scope: sentence_order_fixed_bundle_2026-04-14
+    candidate_type: sentence_block_group
+    source_ref: reports/distill_batches/sentence_order_fixed_bundle_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - fixed_bundle
+    pattern_tag_keys:
+      - carry_parallel_expand
+      - dual_anchor_lock
+    material_card_ids:
+      - order_material.carry_parallel_expand
+      - order_material.dual_anchor_lock
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: fixed_bundle
+      prompt_guard_lines:
+        - In fixed-bundle leaves, preserve local binding pairs and coupled structures before considering broad discourse smoothness.
+
+  sentence_order_sequence:
+    mother_family_id: sentence_order
+    batch_scope: sentence_order_sequence_2026-04-14
+    candidate_type: sentence_block_group
+    source_ref: reports/distill_batches/sentence_order_sequence_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - sequence
+    pattern_tag_keys:
+      - timeline_progression
+      - viewpoint_reason_action
+      - problem_solution_case_blocks
+      - sequence_first_sentence_gate
+      - sequence_dual_anchor_lock
+    material_card_ids:
+      - order_material.timeline_progression
+      - order_material.viewpoint_reason_action
+      - order_material.problem_solution_case_blocks
+      - order_material.first_sentence_gate
+      - order_material.dual_anchor_lock
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: sequence_progression
+      prompt_guard_lines:
+        - In sequence leaves, preserve block progression and stage order. Do not solve the item with one isolated clue when the leaf demands a whole-chain reading.
+
+  sentence_order_tail_sentence:
+    mother_family_id: sentence_order
+    batch_scope: sentence_order_tail_sentence_2026-04-14
+    candidate_type: sentence_block_group
+    source_ref: reports/distill_batches/sentence_order_tail_sentence_2026-04-14/family_mapping_table.yaml
+    source_subfamily_keys:
+      - tail_sentence
+    pattern_tag_keys:
+      - tail_sentence_gate
+    material_card_ids:
+      - order_material.tail_sentence_gate
+    shared_runtime_overlay:
+      control_logic_special_fields:
+        child_family_focus: tail_sentence_closure
+      prompt_guard_lines:
+        - In tail-sentence leaves, natural closure dominates. Do not end on a sentence that still depends on a missing later block.

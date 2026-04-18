@@ -1,0 +1,94 @@
+schema_version: signal_layer.v1
+layer_id: center_understanding_intermediate_signal_layer_v1
+business_family_id: center_understanding
+layer_role: neutral_signal_profile
+description: Intermediate neutral signal layer for center_understanding material card scoring.
+notes:
+  - Minimal runtime signal layer for center_understanding relation-word leaf cards.
+  - Keep signal ids aligned with material_pipeline_v2 neutral signal profile outputs.
+signals:
+  - signal_id: candidate_type
+    type: enum
+    description: Candidate span type.
+    allowed_values:
+      - whole_passage
+      - closed_span
+      - multi_paragraph_unit
+      - sentence_group
+      - single_paragraph
+      - paragraph_window
+      - functional_slot_unit
+  - signal_id: discourse_shape
+    type: enum
+    description: Coarse discourse structure shape.
+    allowed_values:
+      - total_sub
+      - sub_total
+      - parallel
+      - problem_solution
+      - phenomenon_analysis
+      - example_conclusion
+      - unknown
+  - signal_id: material_structure_label
+    type: string
+    description: Material structure label projected by runtime.
+  - signal_id: single_center_strength
+    type: float
+    description: Strength of single-center main axis.
+    range: [0, 1]
+  - signal_id: summary_strength
+    type: float
+    description: Summary/closing consolidation strength.
+    range: [0, 1]
+  - signal_id: turning_focus_strength
+    type: float
+    description: Focus shift strength after turning markers.
+    range: [0, 1]
+  - signal_id: multi_dimension_cohesion
+    type: float
+    description: Cohesion strength for multi-dimension discourse.
+    range: [0, 1]
+  - signal_id: problem_signal_strength
+    type: float
+    description: Problem diagnosis signal strength.
+    range: [0, 1]
+  - signal_id: analysis_to_conclusion_strength
+    type: float
+    description: Analysis-to-conclusion closure strength.
+    range: [0, 1]
+  - signal_id: cause_effect_strength
+    type: float
+    description: Cause-effect linkage strength.
+    range: [0, 1]
+  - signal_id: necessary_condition_strength
+    type: float
+    description: Necessary-condition signal strength.
+    range: [0, 1]
+  - signal_id: countermeasure_signal_strength
+    type: float
+    description: Countermeasure/action signal strength.
+    range: [0, 1]
+  - signal_id: parallel_enumeration_strength
+    type: float
+    description: Parallel-enumeration signal strength.
+    range: [0, 1]
+  - signal_id: titleability
+    type: float
+    description: Main-idea titleability proxy.
+    range: [0, 1]
+  - signal_id: closure_score
+    type: float
+    description: Standalone closure/completeness score.
+    range: [0, 1]
+  - signal_id: context_dependency
+    type: float
+    description: External-context dependency; lower is better.
+    range: [0, 1]
+derived_signals:
+  - signal_id: family_affinity_topk
+    type: array
+    description: Family affinity ranking from runtime.
+  - signal_id: distractor_profile
+    type: object
+    description: Runtime distractor profile hints.
+normalized_from: center_understanding_signal_layer.yaml

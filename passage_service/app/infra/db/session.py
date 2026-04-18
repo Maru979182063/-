@@ -6,11 +6,26 @@ from app.infra.db.base import Base
 
 
 settings = get_settings()
-engine = create_engine(
-    settings.database_url,
-    future=True,
-    connect_args={"timeout": 30, "check_same_thread": False},
-)
+
+
+def _build_engine():
+    connect_args = {"timeout": 30}
+    engine_kwargs = {
+        "future": True,
+        "connect_args": connect_args,
+        "pool_pre_ping": True,
+        "pool_size": max(1, int(settings.db_pool_size)),
+        "max_overflow": max(0, int(settings.db_max_overflow)),
+        "pool_timeout": max(1.0, float(settings.db_pool_timeout_seconds)),
+        "pool_recycle": max(1, int(settings.db_pool_recycle_seconds)),
+        "pool_use_lifo": True,
+    }
+    if settings.resolved_database_url.startswith("sqlite:///"):
+        connect_args["check_same_thread"] = False
+    return create_engine(settings.resolved_database_url, **engine_kwargs)
+
+
+engine = _build_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
 
 

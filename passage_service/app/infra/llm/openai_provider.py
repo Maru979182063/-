@@ -64,13 +64,13 @@ class OpenAIResponsesProvider(BaseLLMProvider):
         }
 
         try:
-            data = self._request_with_retry("/responses", responses_payload, allow_fallback=True)
-            text_output = self._extract_responses_text(data)
-        except httpx.HTTPStatusError as exc:
-            if not self._should_fallback_to_chat(exc):
-                raise
-            data = self._request_with_retry("/chat/completions", chat_payload, allow_fallback=False)
+            data = self._request_with_retry("/chat/completions", chat_payload, allow_fallback=True)
             text_output = self._extract_chat_text(data)
+        except httpx.HTTPStatusError as exc:
+            if not self._should_fallback_to_responses(exc):
+                raise
+            data = self._request_with_retry("/responses", responses_payload, allow_fallback=False)
+            text_output = self._extract_responses_text(data)
 
         if not text_output:
             raise RuntimeError("No structured output returned by model.")
@@ -101,7 +101,7 @@ class OpenAIResponsesProvider(BaseLLMProvider):
             except httpx.HTTPStatusError as exc:
                 last_error = exc
                 status_code = exc.response.status_code if exc.response is not None else None
-                if allow_fallback and self._should_fallback_to_chat(exc):
+                if allow_fallback and self._should_fallback_to_responses(exc):
                     raise
                 if status_code not in {429, 500, 502, 503, 504} or attempt >= self.max_attempts:
                     raise
@@ -141,11 +141,11 @@ class OpenAIResponsesProvider(BaseLLMProvider):
             return "".join(parts)
         return ""
 
-    def _should_fallback_to_chat(self, exc: httpx.HTTPStatusError) -> bool:
+    def _should_fallback_to_responses(self, exc: httpx.HTTPStatusError) -> bool:
         response = exc.response
         if response is None:
             return False
-        if response.status_code in {404, 405, 415, 422}:
+        if response.status_code in {403, 404, 405, 415, 422}:
             return True
         if response.status_code in {500, 502, 503, 504}:
             body_preview = ""

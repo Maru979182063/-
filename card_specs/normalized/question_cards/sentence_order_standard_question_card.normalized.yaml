@@ -1,4 +1,4 @@
-schema_version: question_card.v1
+﻿schema_version: question_card.v1
 card_id: question.sentence_order.standard_v1
 card_type: question
 business_family_id: sentence_order
@@ -6,23 +6,33 @@ business_subtype_id: sentence_order_selection
 runtime_binding:
   question_type: sentence_order
   business_subtype: null
-display_name: 语句排序标准题卡
-description: 基于固定6句句群的角色链接口关系，为语句排序题选择唯一正确的句序。该卡消费中间结构材料卡，不直接绑定单一主族；核心看首句合法性、尾句收束、中间角色链与绑定不被破坏。
+
+distill_runtime_overlay:
+  overlay_mode: leaf_primary_parent_supplement
+  hierarchy_mapping_ref: card_specs/normalized/runtime_mappings/distill_family_hierarchy_mapping.yaml
+  mother_family_id: sentence_order
+  child_family_ids:
+    - sentence_order_first_sentence
+    - sentence_order_fixed_bundle
+    - sentence_order_sequence
+    - sentence_order_tail_sentence
+display_name: 璇彞鎺掑簭鏍囧噯棰樺崱
+description: "语句排序标准题卡；基于句群角色链与绑定关系确定唯一正确句序，消费中间结构材料卡，不直接绑定单一母族。"
 formal_runtime_spec:
   primary_business_card_id: sentence_order__six_sentence_role_chain__abstract
   sortable_unit_count:
     mode: fixed
-    value: 6
+    value: null
   sortable_unit_sentence_span:
     min: 1
     max: 2
   sortable_unit_type: sentence_block
   candidate_type: sentence_block_group
-  reject_non_six_unit_sequences: true
+  reject_non_six_unit_sequences: false
 structure_schema:
   sortable_unit_count:
     mode: fixed
-    value: 6
+    value: null
   sortable_unit_sentence_span:
     min: 1
     max: 2
@@ -83,6 +93,9 @@ preferred_business_cards:
 upstream_contract:
   required_candidate_types:
   - sentence_block_group
+  - ordered_unit_group
+  - closed_span
+  - whole_passage
   required_profiles:
   - block_order_complexity
   - binding_pair_count
@@ -104,8 +117,11 @@ upstream_contract:
   - order_material.carry_parallel_expand
   - order_material.viewpoint_reason_action
   - order_material.problem_solution_case_blocks
+  - order_material.timeline_progression
+  - order_material.first_sentence_gate
+  - order_material.tail_sentence_gate
 base_slots:
-  sortable_unit_count: 6
+  sortable_unit_count: null
   sortable_unit_sentence_span:
     min: 1
     max: 2
@@ -113,20 +129,26 @@ base_slots:
   candidate_type: sentence_block_group
   opening_anchor_type: explicit_topic
   opening_signal_strength: medium
-  middle_structure_type: local_binding
-  local_binding_strength: medium
+  middle_structure_type: mixed_layers
+  local_binding_strength: high
   closing_anchor_type: conclusion
   closing_signal_strength: medium
-  block_order_complexity: medium
+  block_order_complexity: high
   distractor_modes:
   - wrong_opening
   - local_binding_break
   - wrong_closing
-  distractor_strength: medium
+  - block_swap
+  distractor_strength: high
   sentence_roles:
   - thesis
+  - definition
   - explanation
+  - reasoning
+  - transition
+  - example
   - conclusion
+  - countermeasure
   head_constraints:
     must_not_have:
     - backward_reference
@@ -141,30 +163,32 @@ base_slots:
     - conclusion
     - countermeasure
   binding_pairs: []
-  ordering_logic: thesis -> explanation -> reasoning -> conclusion
+  ordering_logic: legal_opener -> local_hard_binding -> block_progression -> natural_closure
   uniqueness_source:
   - role_order_conflict
   - closure_position
   - binding_violation
 slot_extensions:
-  fixed_sortable_unit_count: 6
+  fixed_sortable_unit_count: null
   allowed_sortable_unit_counts:
+  - 4
+  - 5
   - 6
   sortable_unit_sentence_span:
     min: 1
     max: 2
-  reject_non_six_unit_sequences: true
+  reject_non_six_unit_sequences: false
   preserve_unit_count: true
   first_sentence_legality_required: true
   unique_opener_required: true
-  local_binding_min: 0.56
+  local_binding_min: 0.62
   min_binding_pair_count: 2
-  sequence_integrity_min: 0.6
-  max_exchange_risk: 0.34
-  max_multi_path_risk: 0.36
-  max_function_overlap_score: 0.42
-  min_discourse_progression_strength: 0.58
-  min_context_closure_score: 0.6
+  sequence_integrity_min: 0.66
+  max_exchange_risk: 0.3
+  max_multi_path_risk: 0.3
+  max_function_overlap_score: 0.36
+  min_discourse_progression_strength: 0.62
+  min_context_closure_score: 0.66
   anchor_pair_mode: opening_and_or_closing
   block_group_unique_sequence_required: true
   block_group_primary_only: true
@@ -200,46 +224,64 @@ material_card_overrides:
     middle_structure_type: problem_solution_blocks
     closing_anchor_type: case_support
     block_order_complexity: high
+- material_card: order_material.timeline_progression
+  slot_overrides:
+    opening_anchor_type: explicit_topic
+    middle_structure_type: local_binding
+    closing_anchor_type: conclusion
+    block_order_complexity: medium
+- material_card: order_material.first_sentence_gate
+  slot_overrides:
+    opening_anchor_type: explicit_topic
+    middle_structure_type: local_binding
+    closing_anchor_type: conclusion
+    block_order_complexity: medium
+- material_card: order_material.tail_sentence_gate
+  slot_overrides:
+    opening_anchor_type: explicit_topic
+    middle_structure_type: local_binding
+    closing_anchor_type: conclusion
+    block_order_complexity: medium
 generation_archetypes:
   dual_anchor_lock:
-    source: 语句排序题配置文件 pattern dual_anchor_lock
-    processing_type: 首句判断+尾句判断+局部捆绑
-    correct_logic: 正确顺序必须同时满足首句合法、尾句可收束、中段局部关系不断裂。
+    source: 璇彞鎺掑簭棰橀厤缃枃浠?pattern dual_anchor_lock
+    processing_type: 棣栧彞鍒ゆ柇+灏惧彞鍒ゆ柇+灞€閮ㄦ崋缁?
+    correct_logic: 姝ｇ‘椤哄簭蹇呴』鍚屾椂婊¤冻棣栧彞鍚堟硶銆佸熬鍙ュ彲鏀舵潫銆佷腑娈靛眬閮ㄥ叧绯讳笉鏂銆?
     analysis_framework:
-    - 先排除不能作首句的句子
-    - 识别结论/总结尾句
-    - 建立局部紧邻关系
-    - 用首尾锚点锁定整体顺序
+    - 鍏堟帓闄や笉鑳戒綔棣栧彞鐨勫彞瀛?
+    - 璇嗗埆缁撹/鎬荤粨灏惧彞
+    - 寤虹珛灞€閮ㄧ揣閭诲叧绯?
+    - 鐢ㄩ灏鹃敋鐐归攣瀹氭暣浣撻『搴?
   carry_parallel_expand:
-    source: 语句排序题配置文件 pattern carry_parallel_expand
-    processing_type: 承接上文+并列关系排序
-    correct_logic: 正确顺序应体现承接→并列/补充→总结的递进过程。
+    source: 璇彞鎺掑簭棰橀厤缃枃浠?pattern carry_parallel_expand
+    processing_type: 鎵挎帴涓婃枃+骞跺垪鍏崇郴鎺掑簭
+    correct_logic: 姝ｇ‘椤哄簭搴斾綋鐜版壙鎺モ啋骞跺垪/琛ュ厖鈫掓€荤粨鐨勯€掕繘杩囩▼銆?
     analysis_framework:
-    - 识别真正承接上文的话头句
-    - 理清并列项接口与次序
-    - 识别补充链条
-    - 将总结句放在收束位置
+    - 璇嗗埆鐪熸鎵挎帴涓婃枃鐨勮瘽澶村彞
+    - 鐞嗘竻骞跺垪椤规帴鍙ｄ笌娆″簭
+    - 璇嗗埆琛ュ厖閾炬潯
+    - 灏嗘€荤粨鍙ユ斁鍦ㄦ敹鏉熶綅缃?
   viewpoint_reason_action:
-    source: 语句排序题配置文件 pattern viewpoint_reason_action
-    processing_type: 观点→原因/条件→对策/号召
-    correct_logic: 正确顺序必须先立观点，再补因果或条件，最后落到行动或策略。
+    source: 璇彞鎺掑簭棰橀厤缃枃浠?pattern viewpoint_reason_action
+    processing_type: 瑙傜偣鈫掑師鍥?鏉′欢鈫掑绛?鍙峰彫
+    correct_logic: 姝ｇ‘椤哄簭蹇呴』鍏堢珛瑙傜偣锛屽啀琛ュ洜鏋滄垨鏉′欢锛屾渶鍚庤惤鍒拌鍔ㄦ垨绛栫暐銆?
     analysis_framework:
-    - 定位总领观点句
-    - 排出原因链与让步/条件关系
-    - 将行动句置于逻辑终点
-    - 排除功能顺序错置项
+    - 瀹氫綅鎬婚瑙傜偣鍙?
+    - 鎺掑嚭鍘熷洜閾句笌璁╂/鏉′欢鍏崇郴
+    - 灏嗚鍔ㄥ彞缃簬閫昏緫缁堢偣
+    - 鎺掗櫎鍔熻兘椤哄簭閿欑疆椤?
   problem_solution_case_blocks:
-    source: 语句排序题配置文件 pattern problem_solution_case_blocks
-    processing_type: 问题块→对策块→案例/补充块
-    correct_logic: 正确顺序必须满足板块级逻辑推进，局部通顺不能替代整体顺序正确。
+    source: 璇彞鎺掑簭棰橀厤缃枃浠?pattern problem_solution_case_blocks
+    processing_type: 闂鍧椻啋瀵圭瓥鍧椻啋妗堜緥/琛ュ厖鍧?
+    correct_logic: 姝ｇ‘椤哄簭蹇呴』婊¤冻鏉垮潡绾ч€昏緫鎺ㄨ繘锛屽眬閮ㄩ€氶『涓嶈兘鏇夸唬鏁翠綋椤哄簭姝ｇ‘銆?
     analysis_framework:
-    - 识别问题块/对策块/案例块
-    - 先锁问题开头
-    - 再排块顺序
-    - 最后校验块内顺序
+    - 璇嗗埆闂鍧?瀵圭瓥鍧?妗堜緥鍧?
+    - 鍏堥攣闂寮€澶?
+    - 鍐嶆帓鍧楅『搴?
+    - 鏈€鍚庢牎楠屽潡鍐呴『搴?
 validator_contract:
   sentence_order:
-    sortable_unit_count: 6
+    sortable_unit_count: null
     sortable_unit_sentence_span:
       min: 1
       max: 2
@@ -260,32 +302,23 @@ validator_contract:
     - medium
     - hard
     fail_reasons:
-      sentence_count_mismatch: sortable_unit_count_must_equal_6
+      sentence_count_mismatch: sortable_unit_count_must_match_source
       illegal_head: no_legal_head_sentence
       illegal_tail: no_legal_tail_sentence
       binding_violation: binding_pairs_broken
       ordering_chain_incomplete: ordering_logic_chain_incomplete
   thresholds:
-    unique_opener_min_score: 0.56
-    closure_min_score: 0.6
-    exchange_risk_max: 0.34
-    multi_path_risk_max: 0.36
-    function_overlap_max: 0.42
+    unique_opener_min_score: 0.62
+    closure_min_score: 0.66
+    exchange_risk_max: 0.3
+    multi_path_risk_max: 0.3
+    function_overlap_max: 0.36
   reasoning:
     required_modes:
     - head_tail_roles
     - role_chain_validation
   extension_rules:
-  - 语句排序标准母卡统一按6句排序单元制作；若材料不能稳定提供6个可排序句子，则应在生成前淘汰，不得改做3句、4句或7句排序。
-  - 若 sortable_unit_count 不等于 6，应显式判为不通过，并标记原因 sortable_unit_count_must_equal_6。
-  - 必须存在合法首句、合法尾句、完整角色链和不被破坏的 binding_pairs，缺任一项都应显式失败。
-  - 正确顺序必须能解释首句为何可起、尾句为何可收、中段为何能接，不得只给结果不讲接口。
-  - 至少1个错误项应保留局部顺序正确，但破坏首句、尾句或关键捆绑关系。
-  - 若材料存在明显的上文依赖、转折后半句开头、代词指代不明等非首句信号，解析必须显式指出。
-  - 若尾句带有‘因此/所以/总之/可见/无论如何’等收束信号，正确项应优先把该句置后。
-  - 变体排序题需显式说明其不依赖首尾锚点，而依赖固定搭配、语义流程或价值排序。
-  - block-group 排序题必须优先保证唯一较优序列，不能只证明“能够解释出一种顺序”。
-answer_grounding:
+  - 璇彞鎺掑簭鏍囧噯姣嶅崱缁熶竴鎸?鍙ユ帓搴忓崟鍏冨埗浣滐紱鑻ユ潗鏂欎笉鑳界ǔ瀹氭彁渚?涓彲鎺掑簭鍙ュ瓙锛屽垯搴斿湪鐢熸垚鍓嶆窐姹帮紝涓嶅緱鏀瑰仛3鍙ャ€?鍙ユ垨7鍙ユ帓搴忋€?  - 鑻?sortable_unit_count 涓嶇瓑浜?6锛屽簲鏄惧紡鍒や负涓嶉€氳繃锛屽苟鏍囪鍘熷洜 sortable_unit_count_must_equal_6銆?  - 蹇呴』瀛樺湪鍚堟硶棣栧彞銆佸悎娉曞熬鍙ャ€佸畬鏁磋鑹查摼鍜屼笉琚牬鍧忕殑 binding_pairs锛岀己浠讳竴椤归兘搴旀樉寮忓け璐ャ€?  - 姝ｇ‘椤哄簭蹇呴』鑳借В閲婇鍙ヤ负浣曞彲璧枫€佸熬鍙ヤ负浣曞彲鏀躲€佷腑娈典负浣曡兘鎺ワ紝涓嶅緱鍙粰缁撴灉涓嶈鎺ュ彛銆?  - 鑷冲皯1涓敊璇」搴斾繚鐣欏眬閮ㄩ『搴忔纭紝浣嗙牬鍧忛鍙ャ€佸熬鍙ユ垨鍏抽敭鎹嗙粦鍏崇郴銆?  - 鑻ユ潗鏂欏瓨鍦ㄦ槑鏄剧殑涓婃枃渚濊禆銆佽浆鎶樺悗鍗婂彞寮€澶淬€佷唬璇嶆寚浠ｄ笉鏄庣瓑闈為鍙ヤ俊鍙凤紝瑙ｆ瀽蹇呴』鏄惧紡鎸囧嚭銆?  - 鑻ュ熬鍙ュ甫鏈夆€樺洜姝?鎵€浠?鎬讳箣/鍙/鏃犺濡備綍鈥欑瓑鏀舵潫淇″彿锛屾纭」搴斾紭鍏堟妸璇ュ彞缃悗銆?  - 鍙樹綋鎺掑簭棰橀渶鏄惧紡璇存槑鍏朵笉渚濊禆棣栧熬閿氱偣锛岃€屼緷璧栧浐瀹氭惌閰嶃€佽涔夋祦绋嬫垨浠峰€兼帓搴忋€?  - block-group 鎺掑簭棰樺繀椤讳紭鍏堜繚璇佸敮涓€杈冧紭搴忓垪锛屼笉鑳藉彧璇佹槑鈥滆兘澶熻В閲婂嚭涓€绉嶉『搴忊€濄€?  - 绂佹閫氳繃鐢熺‖娣诲姞鏁欑▼寮忚繛鎺ヨ瘝锛堝鈥滈鍏?鍏舵/鏈€鍚庘€濓級鏉ュ埗閫犲敮涓€鎬э紝搴斾紭鍏堜娇鐢ㄥ師鏂囧凡鏈夌粦瀹氫笌瑙掕壊鎺ㄨ繘銆?answer_grounding:
   require_material_traceability: true
   disallow_unsupported_extensions: true
   unsupported_extension_types:
@@ -319,4 +352,5 @@ normalization_notes:
 - generation_archetype duplication removed; question card now follows material_card.default_generation_archetype
 - sentence_block_group is now the only standard candidate entry for the standard sentence_order card
 - sentence order cards now expose role-chain schema and uniqueness sources in addition to legacy anchor slots
+
 

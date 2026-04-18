@@ -1,4 +1,4 @@
-schema_version: question_card.v1
+﻿schema_version: question_card.v1
 card_id: question.center_understanding.standard_v1
 card_type: question
 business_family_id: center_understanding
@@ -7,10 +7,19 @@ runtime_binding:
   question_type: main_idea
   business_subtype: center_understanding
 compatibility_backbone:
-  material_signal_family_id: title_selection
+  material_signal_family_id: center_understanding
   answer_grounding_asset_family_id: title_selection
-display_name: 中心理解标准题卡
-description: 基于整篇/闭合材料，为文段选择最能覆盖论证主轴与表达任务的中心理解项。为了兼容现有材料族，暂沿用 title_selection 材料家族，但题卡语义按 center_understanding 独立建模。
+distill_runtime_overlay:
+  overlay_mode: leaf_primary_parent_supplement
+  hierarchy_mapping_ref: card_specs/normalized/runtime_mappings/distill_family_hierarchy_mapping.yaml
+  mother_family_id: center_understanding
+  child_family_ids:
+    - center_understanding_relation_words
+    - center_understanding_special_types
+    - center_understanding_standalone_subfamilies
+    - center_understanding_subsentence_features
+display_name: 涓績鐞嗚В鏍囧噯棰樺崱
+description: "中心理解标准题卡；当前材料与信号层已按 center_understanding 独立建模，答桉溯源仍兼容 title_selection 资产骨架。"
 structure_schema:
   argument_structure:
     type: enum
@@ -69,25 +78,29 @@ upstream_contract:
   - turning_focus_strength
   - value_judgement_strength
   preferred_material_cards:
-  - title_material.turning_focus
-  - title_material.problem_essence_judgement
-  - title_material.multi_dimension_unification
-  - title_material.case_to_theme_elevation
-  - title_material.example_then_recovery
-  - title_material.plain_main_recovery
+  - center_material.relation_plain
+  - center_material.relation_turning
+  - center_material.relation_parallel
+  - center_material.relation_countermeasure
+  - center_material.relation_variant
+  - center_material.subsentence_example
+  - center_material.subsentence_data
+  - center_material.subsentence_prelude
+  - center_material.subsentence_multi_angle
+  - center_material.subsentence_other
 base_slots:
   structure_type: progressive
   main_point_source: whole_passage
   abstraction_level: medium
   coverage_requirement: integrated
-  target_form: article_task
+  target_form: central_meaning
   title_style: neutral
   distractor_modes:
   - function_misread
   - topic_shift
   - overgeneralization
   distractor_strength: high
-  statement_visibility: high
+  statement_visibility: medium
   argument_structure: phenomenon_analysis
   main_axis_source: global_abstraction
   distractor_types:
@@ -107,71 +120,91 @@ slot_extensions:
   - far_topic_shift
 generation_archetype_source: material_card.default_generation_archetype
 material_card_overrides:
-- material_card: title_material.turning_focus
+- material_card: center_material.relation_turning
   slot_overrides:
     structure_type: turning
     argument_structure: sub_total
     main_axis_source: transition_after
     statement_visibility: medium
-- material_card: title_material.problem_essence_judgement
+- material_card: center_material.relation_countermeasure
   slot_overrides:
     structure_type: progressive
     argument_structure: problem_solution
     main_axis_source: solution_conclusion
     target_form: article_task
-- material_card: title_material.multi_dimension_unification
+- material_card: center_material.relation_parallel
   slot_overrides:
     structure_type: progressive
     argument_structure: parallel
     main_axis_source: global_abstraction
     abstraction_level: medium
-- material_card: title_material.case_to_theme_elevation
+- material_card: center_material.relation_variant
   slot_overrides:
     structure_type: progressive
     argument_structure: example_conclusion
-    main_axis_source: example_elevation
+    main_axis_source: final_summary
     abstraction_level: medium
-- material_card: title_material.example_then_recovery
-  slot_overrides:
-    structure_type: progressive
-    argument_structure: example_conclusion
-    main_axis_source: example_elevation
-    abstraction_level: medium
-- material_card: title_material.plain_main_recovery
+- material_card: center_material.relation_plain
   slot_overrides:
     structure_type: explicit_single_center
     argument_structure: total_sub
     main_axis_source: final_summary
     abstraction_level: low
+- material_card: center_material.subsentence_example
+  slot_overrides:
+    structure_type: progressive
+    argument_structure: example_conclusion
+    main_axis_source: example_elevation
+    abstraction_level: medium
+- material_card: center_material.subsentence_data
+  slot_overrides:
+    structure_type: progressive
+    argument_structure: phenomenon_analysis
+    main_axis_source: final_summary
+    abstraction_level: medium
+- material_card: center_material.subsentence_prelude
+  slot_overrides:
+    structure_type: progressive
+    argument_structure: sub_total
+    main_axis_source: transition_after
+    abstraction_level: medium
+- material_card: center_material.subsentence_multi_angle
+  slot_overrides:
+    structure_type: progressive
+    argument_structure: parallel
+    main_axis_source: global_abstraction
+    abstraction_level: medium
+- material_card: center_material.subsentence_other
+  slot_overrides:
+    structure_type: progressive
+    argument_structure: phenomenon_analysis
+    main_axis_source: global_abstraction
+    abstraction_level: medium
 generation_archetypes:
   axis_extraction:
     source: center_understanding schema alignment
-    processing_type: 论证主轴抽取
-    correct_logic: 正确项必须覆盖全文主轴并保持恰当抽象层级，而不是复述局部信息或例子
+    processing_type: 璁鸿瘉涓昏酱鎶藉彇
+    correct_logic: 姝ｇ‘椤瑰繀椤昏鐩栧叏鏂囦富杞村苟淇濇寔鎭板綋鎶借薄灞傜骇锛岃€屼笉鏄杩板眬閮ㄤ俊鎭垨渚嬪瓙
     analysis_framework:
-    - 判断文章整体论证结构
-    - 定位主轴真正来源
-    - 确认正确项覆盖全文而非局部
-    - 排除细节、例子、范围失衡和对象偷换
+    - 鍒ゆ柇鏂囩珷鏁翠綋璁鸿瘉缁撴瀯
+    - 瀹氫綅涓昏酱鐪熸鏉ユ簮
+    - 纭姝ｇ‘椤硅鐩栧叏鏂囪€岄潪灞€閮?    - 鎺掗櫎缁嗚妭銆佷緥瀛愩€佽寖鍥村け琛″拰瀵硅薄鍋锋崲
 validator_contract:
   center_understanding:
     require_axis_coverage: true
     disallow_detail_as_answer: true
     disallow_example_as_answer: true
-    min_final_candidate_score: 0.3
-    min_readiness_score: 0.4
-    max_total_penalty: 0.45
+    min_final_candidate_score: 0.35
+    min_readiness_score: 0.45
+    max_total_penalty: 0.4
     review_if_high_readiness_high_penalty: true
-    min_reasoning_depth_score: 0.4
-    max_ambiguity_score: 0.58
+    min_reasoning_depth_score: 0.5
+    max_ambiguity_score: 0.5
     difficulty_band_allowed:
     - medium
     - hard
   extension_rules:
-  - 正确项必须说明全文围绕的中心对象以及文章在说明/解释/论证什么。
-  - 至少1个错误项与正确项共享对象域，但在主轴、抽象层级或重心上失效。
-  - 解析必须显式指出主轴来源、抽象层级和错项错因。
-answer_grounding:
+  - 姝ｇ‘椤瑰繀椤昏鏄庡叏鏂囧洿缁曠殑涓績瀵硅薄浠ュ強鏂囩珷鍦ㄨ鏄?瑙ｉ噴/璁鸿瘉浠€涔堛€?  - 鑷冲皯1涓敊璇」涓庢纭」鍏变韩瀵硅薄鍩燂紝浣嗗湪涓昏酱銆佹娊璞″眰绾ф垨閲嶅績涓婂け鏁堛€?  - 瑙ｆ瀽蹇呴』鏄惧紡鎸囧嚭涓昏酱鏉ユ簮銆佹娊璞″眰绾у拰閿欓」閿欏洜銆?answer_grounding:
   require_material_traceability: true
   disallow_unsupported_extensions: true
   unsupported_extension_types:
@@ -198,5 +231,6 @@ answer_grounding:
 normalized_from: center_understanding_standard_question_card.yaml
 normalization_notes:
 - center_understanding runtime binding is now explicitly normalized instead of falling through title_selection only
-- center_understanding keeps a canonical business_family_id and reuses the title_selection material/signal and answer-grounding backbone only through compatibility_backbone
+- center_understanding keeps a canonical business_family_id and now consumes a dedicated center_understanding material/signal layer; answer-grounding remains on title_selection backbone
 - required_profiles intentionally stay close to the existing title_selection material family to avoid tightening runtime contracts before main-chain consumption is updated
+

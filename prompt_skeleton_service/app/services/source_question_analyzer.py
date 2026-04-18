@@ -67,6 +67,14 @@ _BUSINESS_CARD_MAP = {
     "theme": "theme_word_focus__main_idea",
 }
 
+_CENTER_UNDERSTANDING_RELATION_WORD_LEAF_MAP = {
+    "turning_relation_focus__main_idea": "cu_relation_turning",
+    "parallel_comprehensive_summary__main_idea": "cu_relation_parallel",
+    "necessary_condition_countermeasure__main_idea": "cu_relation_countermeasure",
+    "theme_word_focus__main_idea": "cu_relation_plain",
+    "cause_effect__conclusion_focus__main_idea": "cu_relation_variant",
+}
+
 _SENTENCE_ORDER_CARD_IDS = {
     "head_tail_logic": "sentence_order__head_tail_logic__abstract",
     "head_tail": "sentence_order__head_tail_lock__abstract",
@@ -115,11 +123,12 @@ class SourceQuestionAnalyzer:
             "\u6700\u6070\u5f53\u7684\u4e00\u53e5",
             "\u6700\u6070\u5f53\u7684\u4e00\u9879",
         )
-        continuation_markers = (
-            "\u63a5\u5728",
-            "\u63a5\u7eed",
-            "\u63a5\u8bed",
-            "\u8854\u63a5",
+        title_selection_markers = (
+            "\u6807\u9898",
+            "\u6700\u6070\u5f53\u7684\u6807\u9898",
+            "\u6700\u606d\u5f53\u7684\u6807\u9898",
+            "\u9002\u5408\u4f5c\u4e3a\u6807\u9898",
+            "\u4f5c\u4e3a\u6807\u9898",
         )
         center_understanding_markers = (
             "\u610f\u5728\u5f3a\u8c03",
@@ -141,17 +150,11 @@ class SourceQuestionAnalyzer:
                 "business_subtype": None,
                 "reason": "source_question_stem_detected_sentence_fill",
             }
-        if any(token in combined for token in continuation_markers):
-            return {
-                "question_type": "continuation",
-                "business_subtype": None,
-                "reason": "source_question_stem_detected_continuation",
-            }
-        if "\u6807\u9898" in combined:
+        if any(token in combined for token in title_selection_markers):
             return {
                 "question_type": "main_idea",
-                "business_subtype": "title_selection",
-                "reason": "source_question_stem_detected_title_selection",
+                "business_subtype": "center_understanding",
+                "reason": "source_question_stem_detected_title_as_center_understanding",
             }
         if any(token in combined for token in center_understanding_markers):
             return {
@@ -201,6 +204,11 @@ class SourceQuestionAnalyzer:
             structure_constraints=analysis.get("structure_constraints") or {},
         )
         length_tolerance = 75
+        leaf_projection = self._project_leaf_taxonomy(
+            question_type=question_type,
+            business_subtype=business_subtype,
+            business_card_ids=analysis.get("business_card_ids") or [],
+        )
 
         return {
             "reference_present": True,
@@ -223,6 +231,34 @@ class SourceQuestionAnalyzer:
             "retrieval_preferred_business_card_ids": analysis.get("retrieval_preferred_business_card_ids") or [],
             "retrieval_query_terms": analysis.get("retrieval_query_terms") or [],
             "retrieval_structure_constraints": analysis.get("retrieval_structure_constraints") or {},
+            "leaf_id_primary": leaf_projection.get("leaf_id_primary"),
+            "leaf_id_candidates": leaf_projection.get("leaf_id_candidates") or [],
+            "leaf_taxonomy": leaf_projection.get("leaf_taxonomy"),
+        }
+
+    def _project_leaf_taxonomy(
+        self,
+        *,
+        question_type: str,
+        business_subtype: str | None,
+        business_card_ids: list[str],
+    ) -> dict[str, Any]:
+        if question_type != "main_idea" or business_subtype != "center_understanding":
+            return {}
+        candidates: list[str] = []
+        for card_id in business_card_ids:
+            leaf_id = _CENTER_UNDERSTANDING_RELATION_WORD_LEAF_MAP.get(str(card_id or "").strip())
+            if leaf_id and leaf_id not in candidates:
+                candidates.append(leaf_id)
+        if not candidates:
+            return {}
+        return {
+            "leaf_id_primary": candidates[0],
+            "leaf_id_candidates": candidates,
+            "leaf_taxonomy": {
+                "mother_family_id": "center_understanding",
+                "child_family_id": "relation_words",
+            },
         }
 
     def _analyze_main_idea(self, source_question: SourceQuestionPayload, normalized: str) -> dict[str, Any]:
@@ -897,8 +933,6 @@ class SourceQuestionAnalyzer:
             return 90 + max(unit_count, 4) * 28
         if question_type == "sentence_fill":
             return 200
-        if question_type == "continuation":
-            return 260
         if question_type == "main_idea" and business_subtype == "center_understanding":
             return 260
         return 300

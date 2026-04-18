@@ -29,14 +29,14 @@ class DifyFormInput(BaseModel):
         validation_alias=AliasChoices("question_focus", "\u95ee\u9898\u8003\u70b9"),
         description="Business-facing question focus from Dify form.",
     )
+    business_subtype: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("business_subtype", "\u4e1a\u52a1\u5b50\u7c7b"),
+        description="Business-facing subtype selection from the form.",
+    )
     difficulty_level: str = Field(
         validation_alias=AliasChoices("difficulty_level", "\u96be\u5ea6\u7ea7\u522b"),
         description="Business-facing difficulty label from Dify form.",
-    )
-    text_direction: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("text_direction", "\u6587\u672c\u65b9\u5411"),
-        description="Not consumed by the prompt engine yet; carried via extra_constraints.",
     )
     special_question_types: list[str] = Field(
         default_factory=list,
@@ -62,7 +62,7 @@ class DifyFormInput(BaseModel):
 
 
 class DecodedPromptBuildEnvelope(BaseModel):
-    mapping_source: Literal["question_focus", "special_question_type"]
+    mapping_source: Literal["question_focus", "business_subtype", "special_question_type"]
     selected_special_type: str | None = None
     standard_request: PromptBuildRequest
     batch_meta: BatchMeta

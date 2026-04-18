@@ -1,0 +1,42 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="900" fill="#DDE5F1"/>
+  <rect x="72" y="34" width="1296" height="832" rx="30" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <rect x="72" y="34" width="1296" height="96" rx="30" fill="#F7FAFE"/>
+  <text x="116" y="88" fill="#20324D" font-size="34" font-family="Arial" font-weight="700">修题版本历史</text>
+  <text x="116" y="116" fill="#63758E" font-size="18" font-family="Arial">按 v1 / v2 / v3 看每次修题后的完整题面。</text>
+  <rect x="1210" y="64" width="92" height="40" rx="12" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="1238" y="90" fill="#4A607B" font-size="18" font-family="Arial">关闭</text>
+  <rect x="116" y="162" width="390" height="656" rx="24" fill="#FBFDFF" stroke="#E1EAF5"/>
+  <rect x="138" y="190" width="346" height="112" rx="18" fill="#FFFFFF" stroke="#8BB0E9"/>
+  <text x="160" y="226" fill="#20324D" font-size="22" font-family="Arial" font-weight="700">v3 · 手工编辑</text>
+  <text x="160" y="255" fill="#61738E" font-size="16" font-family="Arial">2026/04/17 14:10</text>
+  <text x="160" y="284" fill="#61738E" font-size="16" font-family="Arial">变化：材料 / 题干 / 解析</text>
+  <rect x="138" y="320" width="346" height="112" rx="18" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="160" y="356" fill="#20324D" font-size="22" font-family="Arial" font-weight="700">v2 · 单错误项修复</text>
+  <text x="160" y="385" fill="#61738E" font-size="16" font-family="Arial">2026/04/17 14:01</text>
+  <text x="160" y="414" fill="#61738E" font-size="16" font-family="Arial">变化：options / analysis</text>
+  <rect x="138" y="450" width="346" height="112" rx="18" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="160" y="486" fill="#20324D" font-size="22" font-family="Arial" font-weight="700">v1 · 初始生成</text>
+  <text x="160" y="515" fill="#61738E" font-size="16" font-family="Arial">2026/04/17 13:54</text>
+  <text x="160" y="544" fill="#61738E" font-size="16" font-family="Arial">变化：首版生成</text>
+  <rect x="536" y="162" width="768" height="112" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="204" fill="#20324D" font-size="28" font-family="Arial" font-weight="700">v3 · 手工编辑</text>
+  <text x="566" y="235" fill="#61738E" font-size="17" font-family="Arial">当前版本：已通过 · 中心理解题 / 中心理解</text>
+  <rect x="1134" y="188" width="140" height="44" rx="14" fill="#2F6CC2"/>
+  <text x="1165" y="216" fill="#FFFFFF" font-size="18" font-family="Arial" font-weight="700">下载当前题</text>
+  <rect x="536" y="294" width="376" height="92" rx="18" fill="#F6F9FE" stroke="#E1EAF5"/>
+  <text x="562" y="330" fill="#30415E" font-size="20" font-family="Arial" font-weight="700">材料预览</text>
+  <text x="562" y="360" fill="#566C86" font-size="16" font-family="Arial">政策执行并不是简单传达…</text>
+  <rect x="928" y="294" width="376" height="92" rx="18" fill="#F6F9FE" stroke="#E1EAF5"/>
+  <text x="954" y="330" fill="#30415E" font-size="20" font-family="Arial" font-weight="700">变化摘要</text>
+  <text x="954" y="360" fill="#566C86" font-size="16" font-family="Arial">material_text / stem / analysis</text>
+  <rect x="536" y="406" width="768" height="176" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="444" fill="#30415E" font-size="22" font-family="Arial" font-weight="700">材料</text>
+  <text x="566" y="480" fill="#4B5F79" font-size="18" font-family="Arial">政策执行并不是把文件精神简单转述下去，而是要把要求转成可落地的现实安排…</text>
+  <rect x="536" y="604" width="768" height="100" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="642" fill="#30415E" font-size="22" font-family="Arial" font-weight="700">题干</text>
+  <text x="566" y="676" fill="#4B5F79" font-size="18" font-family="Arial">这段文字意在强调：</text>
+  <rect x="536" y="724" width="768" height="94" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="760" fill="#30415E" font-size="22" font-family="Arial" font-weight="700">选项与解析</text>
+  <text x="566" y="792" fill="#4B5F79" font-size="17" font-family="Arial">A. 政策执行要完成从要求到场景化落地的转化　答案：A　解析：v3 中人工改得更直给。</text>
+</svg>

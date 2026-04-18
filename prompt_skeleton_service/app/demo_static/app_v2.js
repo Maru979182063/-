@@ -1,107 +1,95 @@
-const QUESTION_FOCUS_OPTIONS = [
+﻿const QUESTION_FOCUS_OPTIONS = [
   { value: "", label: "不指定" },
-  { value: "main_idea", label: "主旨中心类" },
-  { value: "continuation", label: "接语选择题" },
   { value: "sentence_order", label: "语句排序题" },
   { value: "sentence_fill", label: "语句填空题" },
   { value: "center_understanding", label: "中心理解题" },
 ];
 
-const SPECIAL_TYPE_OPTIONS = {
-  "": [{ value: "", label: "不指定" }],
-  main_idea: [
-    { value: "", label: "不指定" },
-    { value: "title_selection", label: "标题填入" },
-    { value: "turning_relation_focus", label: "转折关系聚焦" },
-    { value: "cause_effect__conclusion_focus", label: "因果结论聚焦" },
-    { value: "necessary_condition_countermeasure", label: "必要条件与对策" },
-    { value: "theme_word_focus", label: "主题词聚焦" },
-    { value: "structure_summary", label: "结构概括" },
-    { value: "local_paragraph_summary", label: "局部段意概括" },
-  ],
-  continuation: [
-    { value: "", label: "不指定" },
-    { value: "plot_continuation", label: "情节续写" },
-    { value: "character_extension", label: "人物延展" },
-    { value: "theme_extension", label: "主题延展" },
-    { value: "foreshadow_recall", label: "伏笔呼应" },
-    { value: "setting_alignment", label: "环境衔接" },
-    { value: "emotion_progression", label: "情绪递进" },
-    { value: "conflict_resolution", label: "冲突解决" },
-    { value: "ending_resolution", label: "结尾收束" },
-    { value: "value_expression", label: "价值表达" },
-  ],
+const SPECIAL_TYPE_TREE = {
+  "": [],
   sentence_order: [
-    { value: "", label: "不指定" },
-    { value: "head_tail_lock", label: "首尾锁定" },
-    { value: "deterministic_binding", label: "确定性捆绑" },
-    { value: "discourse_logic", label: "行文逻辑" },
-    { value: "timeline_action_sequence", label: "时间行动顺序" },
-    { value: "dual_anchor_lock", label: "双锚点锁定" },
-    { value: "carry_parallel_expand", label: "承接并列展开" },
-    { value: "viewpoint_reason_action", label: "观点-原因-行动" },
-    { value: "problem_solution_case_blocks", label: "问题-对策-案例" },
+    {
+      value: "sentence_order_first_sentence",
+      label: "首句合法",
+      children: [
+        { value: "first_background_intro", label: "背景引入首句" },
+        { value: "first_raise_viewpoint", label: "观点起笔首句" },
+        { value: "first_definition", label: "定义开篇首句" },
+      ],
+    },
+    {
+      value: "sentence_order_fixed_bundle",
+      label: "固定捆绑",
+      children: [
+        { value: "rel_turning", label: "转折捆绑" },
+        { value: "rel_parallel", label: "并列捆绑" },
+        { value: "pronoun", label: "指代捆绑" },
+      ],
+    },
+    {
+      value: "sentence_order_sequence",
+      label: "顺序推进",
+      children: [
+        { value: "daily_time_timeline", label: "时间脉络推进" },
+        { value: "daily_action_order", label: "行动顺序推进" },
+        { value: "writing_view_explain", label: "观点解释推进" },
+        { value: "writing_problem_solution", label: "问题对策推进" },
+      ],
+    },
+    {
+      value: "sentence_order_tail_sentence",
+      label: "尾句收束",
+      children: [
+        { value: "tail_conclusion", label: "结论收束" },
+        { value: "tail_countermeasure", label: "对策收束" },
+      ],
+    },
   ],
   sentence_fill: [
-    { value: "", label: "不指定" },
-    { value: "opening_summary", label: "开头总起" },
-    { value: "opening_topic_intro", label: "开头引入" },
-    { value: "middle_carry_previous", label: "中间承上" },
-    { value: "middle_lead_next", label: "中间启下" },
-    { value: "middle_bridge_both_sides", label: "承上启下" },
-    { value: "ending_summary", label: "结尾总结" },
-    { value: "ending_countermeasure", label: "结尾对策" },
-  ],
-  center_understanding: [{ value: "", label: "中心理解默认" }],
-};
-
-const TEXT_DIRECTION_OPTIONS_BY_FOCUS = {
-  default: [
-    { value: "", label: "不指定" },
-    { value: "评论文", label: "评论文" },
-    { value: "政策文", label: "政策文" },
-    { value: "说明文", label: "说明文" },
-    { value: "纪实文", label: "纪实文" },
-    { value: "科普文", label: "科普文" },
-    { value: "新闻述评", label: "新闻述评" },
-  ],
-  main_idea: [
-    { value: "", label: "不指定" },
-    { value: "评论文", label: "评论文" },
-    { value: "政策文", label: "政策文" },
-    { value: "说明文", label: "说明文" },
-    { value: "新闻述评", label: "新闻述评" },
-    { value: "纪实文", label: "纪实文" },
+    {
+      value: "sentence_fill_head_start",
+      label: "开头空位",
+      children: [
+        { value: "opening_summary", label: "开头总起" },
+        { value: "opening_topic_intro", label: "开头引入" },
+      ],
+    },
+    {
+      value: "sentence_fill_middle",
+      label: "中段空位",
+      children: [
+        { value: "middle_carry_previous", label: "中间承上" },
+        { value: "middle_lead_next", label: "中间启下" },
+        { value: "middle_bridge_both_sides", label: "承上启下" },
+      ],
+    },
+    {
+      value: "sentence_fill_tail_end",
+      label: "结尾空位",
+      children: [
+        { value: "ending_summary", label: "结尾总结" },
+        { value: "ending_countermeasure", label: "结尾对策" },
+      ],
+    },
   ],
   center_understanding: [
-    { value: "", label: "不指定" },
-    { value: "评论文", label: "评论文" },
-    { value: "政策文", label: "政策文" },
-    { value: "说明文", label: "说明文" },
-    { value: "纪实文", label: "纪实文" },
-  ],
-  continuation: [
-    { value: "", label: "不指定" },
-    { value: "记叙文", label: "记叙文" },
-    { value: "散文", label: "散文" },
-    { value: "故事文", label: "故事文" },
-    { value: "人物纪实", label: "人物纪实" },
-  ],
-  sentence_order: [
-    { value: "", label: "不指定" },
-    { value: "评论文", label: "评论文" },
-    { value: "说明文", label: "说明文" },
-    { value: "议论文", label: "议论文" },
-    { value: "政策文", label: "政策文" },
-  ],
-  sentence_fill: [
-    { value: "", label: "不指定" },
-    { value: "评论文", label: "评论文" },
-    { value: "说明文", label: "说明文" },
-    { value: "科普文", label: "科普文" },
-    { value: "政策文", label: "政策文" },
+    {
+      value: "center_understanding_relation_words",
+      label: "关系词归旨",
+      children: [
+        { value: "turning_relation_focus", label: "转折关系聚焦" },
+        { value: "cause_effect__conclusion_focus", label: "因果结论聚焦" },
+        { value: "necessary_condition_countermeasure", label: "必要条件与对策" },
+        { value: "parallel_comprehensive_summary", label: "并列综合概括" },
+        { value: "theme_word_focus", label: "主题词聚焦" },
+      ],
+    },
   ],
 };
+
+const EMPTY_SUBTYPE_OPTION = [{ value: "", label: "不指定" }];
+const EMPTY_SPECIAL_TYPE_OPTION = [{ value: "", label: "不指定" }];
+const NULL_SPECIAL_TYPE_OPTION = [{ value: "", label: "null（暂无可选项）" }];
 
 const DIFFICULTY_OPTIONS = [
   { value: "easy", label: "简单" },
@@ -118,12 +106,26 @@ const VALUE_LABELS = {
   continuation: "接语选择题",
   sentence_order: "语句排序题",
   sentence_fill: "语句填空题",
+  sentence_order_first_sentence: "首句合法",
+  sentence_order_fixed_bundle: "固定捆绑",
+  sentence_order_sequence: "顺序推进",
+  sentence_order_tail_sentence: "尾句收束",
+  sentence_fill_head_start: "开头空位",
+  sentence_fill_middle: "中段空位",
+  sentence_fill_tail_end: "结尾空位",
+  center_understanding_relation_words: "关系词归旨",
   center_understanding: "中心理解题",
-  title_selection: "标题填入",
+  title_selection: "中心理解",
   turning_relation_focus: "转折关系聚焦",
   cause_effect__conclusion_focus: "因果结论聚焦",
   necessary_condition_countermeasure: "必要条件与对策",
+  parallel_comprehensive_summary: "并列综合概括",
   theme_word_focus: "主题词聚焦",
+  cu_relation_turning: "转折关系孙族卡",
+  cu_relation_parallel: "并列关系孙族卡",
+  cu_relation_countermeasure: "对策条件孙族卡",
+  cu_relation_plain: "常规中心孙族卡",
+  cu_relation_variant: "结论变体孙族卡",
   structure_summary: "结构概括",
   local_paragraph_summary: "局部段意概括",
   plot_continuation: "情节续写",
@@ -135,14 +137,18 @@ const VALUE_LABELS = {
   conflict_resolution: "冲突解决",
   ending_resolution: "结尾收束",
   value_expression: "价值表达",
-  head_tail_lock: "首尾锁定",
-  deterministic_binding: "确定性捆绑",
-  discourse_logic: "行文逻辑",
-  timeline_action_sequence: "时间行动顺序",
-  dual_anchor_lock: "双锚点锁定",
-  carry_parallel_expand: "承接并列展开",
-  viewpoint_reason_action: "观点-原因-行动",
-  problem_solution_case_blocks: "问题-对策-案例",
+  first_background_intro: "背景引入首句",
+  first_raise_viewpoint: "观点起笔首句",
+  first_definition: "定义开篇首句",
+  rel_turning: "转折捆绑",
+  rel_parallel: "并列捆绑",
+  pronoun: "指代捆绑",
+  daily_time_timeline: "时间脉络推进",
+  daily_action_order: "行动顺序推进",
+  writing_view_explain: "观点解释推进",
+  writing_problem_solution: "问题对策推进",
+  tail_conclusion: "结论收束",
+  tail_countermeasure: "对策收束",
   opening_summary: "开头总起",
   opening_topic_intro: "开头引入",
   middle_carry_previous: "中间承上",
@@ -150,6 +156,26 @@ const VALUE_LABELS = {
   middle_bridge_both_sides: "承上启下",
   ending_summary: "结尾总结",
   ending_countermeasure: "结尾对策",
+  "sentence_fill.opening.summary.summary": "开头总起",
+  "sentence_fill.opening.topic_intro.continuation": "开头引入",
+  "sentence_fill.middle.carry_previous.explanation": "中间承上",
+  "sentence_fill.middle.lead_next.focus_shift": "中间启下",
+  "sentence_fill.middle.bridge.continuation": "承上启下",
+  "sentence_fill.ending.conclusion.summary": "结尾总结",
+  "sentence_fill.ending.countermeasure.action": "结尾对策",
+  "sentence_order.background_intro.mixed_layers.summary": "背景引入首句",
+  "sentence_order.viewpoint_opening.cause_effect_chain.summary": "观点解释推进",
+  "sentence_order.explicit_topic.local_binding.summary": "定义开篇首句",
+  "sentence_order.explicit_topic.local_binding.conclusion": "结论收束",
+  "sentence_order.upper_context_link.parallel_expansion.summary": "并列捆绑",
+  "sentence_order.upper_context_link.local_binding.summary": "指代捆绑",
+  "sentence_order.background_intro.cause_effect_chain.summary": "时间脉络推进",
+  "sentence_order.problem_opening.problem_solution_blocks.case_support": "问题对策推进",
+  "sentence_order.problem_opening.problem_solution_blocks.call_to_action": "对策收束",
+  "center_understanding.relation_words.turning": "转折关系聚焦",
+  "center_understanding.relation_words.parallel": "并列综合概括",
+  "center_understanding.relation_words.countermeasure": "必要条件与对策",
+  "center_understanding.relation_words.variant": "因果结论聚焦",
   approved: "已通过",
   pending_review: "待复核",
   waiting_review: "待复核",
@@ -194,6 +220,337 @@ const VALUE_LABELS = {
   complexity_score: "复杂度",
   reasoning_depth_score: "推理深度",
   constraint_intensity_score: "约束强度",
+};
+
+const GENERATION_TARGETS = {
+  sentence_order: {
+    businessSubtype: null,
+    leaves: {
+      first_background_intro: {
+        patternId: null,
+        typeSlots: {
+          opening_anchor_type: "background_intro",
+          middle_structure_type: "mixed_layers",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__head_tail_logic__abstract"],
+        guardLines: ["优先判断谁能合法起句，局部顺滑不能代替首句资格。"],
+      },
+      first_raise_viewpoint: {
+        patternId: null,
+        typeSlots: {
+          opening_anchor_type: "viewpoint_opening",
+          middle_structure_type: "cause_effect_chain",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__head_tail_logic__abstract"],
+        guardLines: ["首句要直接立起观点，后文按观点后的解释或论证展开。"],
+      },
+      first_definition: {
+        patternId: null,
+        typeSlots: {
+          opening_anchor_type: "explicit_topic",
+          middle_structure_type: "local_binding",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__head_tail_logic__abstract"],
+        guardLines: ["首句应承担定义或总起功能，不要把细节句误推到开头。"],
+      },
+      rel_turning: {
+        patternId: "dual_anchor_lock",
+        typeSlots: {
+          opening_anchor_type: "explicit_topic",
+          middle_structure_type: "local_binding",
+          closing_anchor_type: "conclusion",
+        },
+        referenceBusinessCards: ["sentence_order__deterministic_binding__abstract"],
+        guardLines: ["优先保住转折前后的小链条，不要为了整体顺滑拆开关键捆绑。"],
+      },
+      rel_parallel: {
+        patternId: "carry_parallel_expand",
+        typeSlots: {
+          opening_anchor_type: "upper_context_link",
+          middle_structure_type: "parallel_expansion",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__deterministic_binding__abstract"],
+        guardLines: ["并列叶优先看局部捆绑和并列接口，而不是泛泛的通顺。"],
+      },
+      pronoun: {
+        patternId: null,
+        typeSlots: {
+          opening_anchor_type: "upper_context_link",
+          middle_structure_type: "local_binding",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__deterministic_binding__abstract"],
+        guardLines: ["指代叶必须顺着代词回扣锁序，不能断开指称对象。"],
+      },
+      daily_time_timeline: {
+        patternId: "timeline_action_sequence",
+        typeSlots: {
+          opening_anchor_type: "background_intro",
+          middle_structure_type: "cause_effect_chain",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__timeline_action_sequence__abstract"],
+        guardLines: ["按时间脉络推进，不要把后发生的句子提前。"],
+      },
+      daily_action_order: {
+        patternId: "timeline_action_sequence",
+        typeSlots: {
+          opening_anchor_type: "background_intro",
+          middle_structure_type: "cause_effect_chain",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__timeline_action_sequence__abstract"],
+        guardLines: ["按行动先后推进，不要打乱步骤链。"],
+      },
+      writing_view_explain: {
+        patternId: "viewpoint_reason_action",
+        typeSlots: {
+          opening_anchor_type: "viewpoint_opening",
+          middle_structure_type: "cause_effect_chain",
+          closing_anchor_type: "summary",
+        },
+        referenceBusinessCards: ["sentence_order__discourse_logic__abstract"],
+        guardLines: ["按观点-解释的推进关系组织，不要把解释句前置为首句。"],
+      },
+      writing_problem_solution: {
+        patternId: "problem_solution_case_blocks",
+        typeSlots: {
+          opening_anchor_type: "problem_opening",
+          middle_structure_type: "problem_solution_blocks",
+          closing_anchor_type: "case_support",
+        },
+        referenceBusinessCards: ["sentence_order__discourse_logic__abstract"],
+        guardLines: ["按问题-对策-案例板块推进，不要把问题块和对策块互换。"],
+      },
+      tail_conclusion: {
+        patternId: null,
+        typeSlots: {
+          opening_anchor_type: "explicit_topic",
+          middle_structure_type: "local_binding",
+          closing_anchor_type: "conclusion",
+        },
+        referenceBusinessCards: ["sentence_order__head_tail_logic__abstract"],
+        guardLines: ["尾句必须真正完成结论收束，不能停在中段解释。"],
+      },
+      tail_countermeasure: {
+        patternId: null,
+        typeSlots: {
+          opening_anchor_type: "problem_opening",
+          middle_structure_type: "problem_solution_blocks",
+          closing_anchor_type: "call_to_action",
+        },
+        referenceBusinessCards: ["sentence_order__head_tail_logic__abstract"],
+        guardLines: ["尾句必须落在对策或行动，不要把未完成的问题句留到最后。"],
+      },
+    },
+  },
+  sentence_fill: {
+    businessSubtype: null,
+    leaves: {
+      opening_summary: {
+        patternId: "opening_summary",
+        typeSlots: {
+          blank_position: "opening",
+          function_type: "summary",
+          logic_relation: "summary",
+        },
+        referenceBusinessCards: ["sentence_fill__opening_summary__abstract"],
+        guardLines: ["开头总起叶要负责领起全文，不要提前写成结论。"],
+      },
+      opening_topic_intro: {
+        patternId: null,
+        typeSlots: {
+          blank_position: "opening",
+          function_type: "topic_intro",
+          logic_relation: "continuation",
+        },
+        referenceBusinessCards: ["sentence_fill__opening_topic_intro__abstract"],
+        guardLines: ["开头引入叶要先把题眼带出来，不要抹平成说明句。"],
+      },
+      middle_carry_previous: {
+        patternId: "middle_explanation",
+        typeSlots: {
+          blank_position: "middle",
+          function_type: "carry_previous",
+          logic_relation: "explanation",
+        },
+        referenceBusinessCards: ["sentence_fill__middle_carry_previous__abstract"],
+        guardLines: ["中间承上叶要先回扣前文对象和判断。"],
+      },
+      middle_lead_next: {
+        patternId: "middle_focus_shift",
+        typeSlots: {
+          blank_position: "middle",
+          function_type: "lead_next",
+          logic_relation: "focus_shift",
+        },
+        referenceBusinessCards: ["sentence_fill__middle_lead_next__abstract"],
+        guardLines: ["中间启下叶要点亮后文马上展开的对象。"],
+      },
+      middle_bridge_both_sides: {
+        patternId: "bridge_transition",
+        typeSlots: {
+          blank_position: "middle",
+          function_type: "bridge",
+          logic_relation: "continuation",
+        },
+        referenceBusinessCards: ["sentence_fill__middle_bridge_both_sides__abstract"],
+        guardLines: ["承上启下叶必须同时咬住左右两侧，不能只顺一边。"],
+      },
+      ending_summary: {
+        patternId: "ending_summary",
+        typeSlots: {
+          blank_position: "ending",
+          function_type: "conclusion",
+          logic_relation: "summary",
+        },
+        referenceBusinessCards: ["sentence_fill__ending_summary__abstract"],
+        guardLines: ["结尾总结叶要完成收束，不要新增论点。"],
+      },
+      ending_countermeasure: {
+        patternId: null,
+        typeSlots: {
+          blank_position: "ending",
+          function_type: "countermeasure",
+          logic_relation: "action",
+        },
+        referenceBusinessCards: ["sentence_fill__ending_countermeasure__abstract"],
+        guardLines: ["结尾对策叶必须给出同尺度对策，不要把危害续写当对策。"],
+      },
+    },
+  },
+  center_understanding: {
+    businessSubtype: "center_understanding",
+    leaves: {
+      turning_relation_focus: {
+        patternId: null,
+        typeSlots: {
+          structure_type: "turning",
+          main_point_source: "whole_passage",
+          abstraction_level: "medium",
+          statement_visibility: "medium",
+          main_axis_source: "transition_after",
+        },
+        referenceBusinessCards: ["turning_relation_focus__main_idea"],
+        guardLines: ["正确项要抓转折后的中心判断，不要停在转折前铺垫。"],
+      },
+      cause_effect__conclusion_focus: {
+        patternId: null,
+        typeSlots: {
+          structure_type: "progressive",
+          main_point_source: "conclusion_sentence",
+          abstraction_level: "medium",
+          statement_visibility: "medium",
+          main_axis_source: "final_summary",
+        },
+        referenceBusinessCards: ["cause_effect__conclusion_focus__main_idea"],
+        guardLines: ["正确项要落在因果推出的核心结论，不要把前置原因当主旨。"],
+      },
+      necessary_condition_countermeasure: {
+        patternId: null,
+        typeSlots: {
+          structure_type: "progressive",
+          main_point_source: "whole_passage",
+          abstraction_level: "medium",
+          statement_visibility: "medium",
+          main_axis_source: "solution_conclusion",
+        },
+        referenceBusinessCards: ["necessary_condition_countermeasure__main_idea"],
+        guardLines: ["正确项要落在必要条件或对策结论上，不要只复述问题表层。"],
+      },
+      parallel_comprehensive_summary: {
+        patternId: null,
+        typeSlots: {
+          structure_type: "contrast",
+          main_point_source: "whole_passage",
+          abstraction_level: "medium",
+          statement_visibility: "medium",
+          main_axis_source: "global_abstraction",
+        },
+        referenceBusinessCards: ["parallel_comprehensive_summary__main_idea"],
+        guardLines: ["正确项要整合并列信息，不要只抓其中一个分点。"],
+      },
+      theme_word_focus: {
+        patternId: null,
+        typeSlots: {
+          structure_type: "explicit_single_center",
+          main_point_source: "whole_passage",
+          abstraction_level: "medium",
+          statement_visibility: "high",
+          main_axis_source: "global_abstraction",
+        },
+        referenceBusinessCards: ["theme_word_focus__main_idea"],
+        guardLines: ["正确项要围绕稳定主题词归旨，不要把例子或局部判断拔成主旨。"],
+      },
+    },
+  },
+};
+
+const BUSINESS_CARD_TAXONOMY = {
+  turning_relation_focus__main_idea: {
+    child: "center_understanding_relation_words",
+    leaf: "turning_relation_focus",
+  },
+  cause_effect__conclusion_focus__main_idea: {
+    child: "center_understanding_relation_words",
+    leaf: "cause_effect__conclusion_focus",
+  },
+  necessary_condition_countermeasure__main_idea: {
+    child: "center_understanding_relation_words",
+    leaf: "necessary_condition_countermeasure",
+  },
+  parallel_comprehensive_summary__main_idea: {
+    child: "center_understanding_relation_words",
+    leaf: "parallel_comprehensive_summary",
+  },
+  theme_word_focus__main_idea: {
+    child: "center_understanding_relation_words",
+    leaf: "theme_word_focus",
+  },
+  sentence_fill__opening_summary__abstract: {
+    child: "sentence_fill_head_start",
+    leaf: "opening_summary",
+  },
+  sentence_fill__opening_topic_intro__abstract: {
+    child: "sentence_fill_head_start",
+    leaf: "opening_topic_intro",
+  },
+  sentence_fill__middle_carry_previous__abstract: {
+    child: "sentence_fill_middle",
+    leaf: "middle_carry_previous",
+  },
+  sentence_fill__middle_lead_next__abstract: {
+    child: "sentence_fill_middle",
+    leaf: "middle_lead_next",
+  },
+  sentence_fill__middle_bridge_both_sides__abstract: {
+    child: "sentence_fill_middle",
+    leaf: "middle_bridge_both_sides",
+  },
+  sentence_fill__ending_summary__abstract: {
+    child: "sentence_fill_tail_end",
+    leaf: "ending_summary",
+  },
+  sentence_fill__ending_countermeasure__abstract: {
+    child: "sentence_fill_tail_end",
+    leaf: "ending_countermeasure",
+  },
+  sentence_order__head_tail_logic__abstract: {
+    child: "sentence_order_first_sentence",
+  },
+  sentence_order__deterministic_binding__abstract: {
+    child: "sentence_order_fixed_bundle",
+  },
+  sentence_order__discourse_logic__abstract: {
+    child: "sentence_order_sequence",
+  },
+  sentence_order__timeline_action_sequence__abstract: {
+    child: "sentence_order_sequence",
+  },
 };
 
 const DECISION_REASON_LABELS = {
@@ -432,7 +789,21 @@ const state = {
   replacementsByItem: {},
   selectedReplacementByItem: {},
   loadingStep: "collect",
+  approvedHistory: [],
+  approvedHistoryTotal: 0,
+  approvedHistoryLoaded: false,
+  approvedHistoryLoading: false,
+  approvedPreviewItemId: null,
+  approvedPreviewItem: null,
+  approvedPreviewLoading: false,
+  historyByItem: {},
+  historyLoadingByItem: {},
+  selectedVersionByItem: {},
+  overlayMode: null,
+  overlayContextItemId: null,
 };
+
+const QUESTION_MODIFY_MAX_CHANGES = 2;
 
 function $(id) {
   return document.getElementById(id);
@@ -534,6 +905,208 @@ function cleanDisplayText(value, options = {}) {
   return text.trim();
 }
 
+function shortText(value, limit = 56) {
+  const text = cleanDisplayText(value, { replaceBlankToken: false }).replace(/\n+/g, " ");
+  if (!text) return "未提供";
+  return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 1))}…`;
+}
+
+function formatDateTime(value) {
+  const text = String(value || "").trim();
+  if (!text) return "未提供";
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+const CIRCLED_INDEX_MARKERS = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+
+function getRuntimeMaterialSnapshot(itemLike) {
+  return itemLike?.runtime_snapshot?.material_snapshot || {};
+}
+
+function getGeneratedQuestion(itemLike) {
+  return itemLike?.generated_question || {};
+}
+
+function getQuestionType(itemLike) {
+  return String(itemLike?.question_type || itemLike?.item?.question_type || getGeneratedQuestion(itemLike)?.question_type || "").trim();
+}
+
+function getPromptExtras(itemLike) {
+  const materialSource = getMaterialSource(itemLike);
+  const promptExtras = materialSource?.prompt_extras;
+  return promptExtras && typeof promptExtras === "object" ? promptExtras : {};
+}
+
+function rawMaterialFullText(itemLike) {
+  const materialSnapshot = getRuntimeMaterialSnapshot(itemLike);
+  return cleanDisplayText(
+    itemLike?.material_text ||
+      itemLike?.material_selection?.text ||
+      materialSnapshot?.source?.text ||
+      materialSnapshot?.original_text ||
+      materialSnapshot?.preview ||
+      "",
+    { replaceBlankToken: false },
+  );
+}
+
+function normalizeTextArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => cleanDisplayText(entry, { replaceBlankToken: false })).filter(Boolean);
+}
+
+function stripOrderedUnitPrefix(value) {
+  return cleanDisplayText(value, { replaceBlankToken: false })
+    .replace(/^\s*[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "")
+    .replace(/^\s*\(?\d+\)?[.、．]?\s*/, "")
+    .trim();
+}
+
+function parseSortableUnitsFromText(value) {
+  const text = cleanDisplayText(value, { replaceBlankToken: false });
+  if (!text) return [];
+  return text
+    .split(/\n+/)
+    .map((line) => stripOrderedUnitPrefix(line))
+    .filter(Boolean);
+}
+
+function extractSentenceOrderUnits(itemLike) {
+  const generated = getGeneratedQuestion(itemLike);
+  const promptExtras = getPromptExtras(itemLike);
+  const modelOutput = itemLike?.runtime_snapshot?.model_output_snapshot?.parsed_structured_output || {};
+  const directUnits = normalizeTextArray(
+    generated?.original_sentences ||
+      itemLike?.original_sentences ||
+      modelOutput?.original_sentences,
+  );
+  if (directUnits.length) {
+    return directUnits;
+  }
+  const promptUnits = normalizeTextArray(promptExtras?.sortable_units);
+  if (promptUnits.length) {
+    return promptUnits;
+  }
+  return parseSortableUnitsFromText(promptExtras?.sortable_material_text || "");
+}
+
+function formatSortableUnits(units) {
+  return units
+    .map((unit, index) => `${CIRCLED_INDEX_MARKERS[index] || `${index + 1}.`} ${stripOrderedUnitPrefix(unit)}`)
+    .join("\n");
+}
+
+function resolvePrimaryContent(itemLike) {
+  const questionType = getQuestionType(itemLike);
+  const promptExtras = getPromptExtras(itemLike);
+
+  if (questionType === "sentence_order") {
+    const units = extractSentenceOrderUnits(itemLike);
+    if (units.length) {
+      const text = formatSortableUnits(units);
+      return { label: "排序原句", text, preview: shortText(text, 64) };
+    }
+  }
+
+  if (questionType === "sentence_fill") {
+    const fillDisplay = cleanDisplayText(
+      promptExtras?.fill_ready_material || promptExtras?.fill_ready_local_material || rawMaterialFullText(itemLike),
+    );
+    if (fillDisplay) {
+      return { label: "挖空材料", text: fillDisplay, preview: shortText(fillDisplay, 64) };
+    }
+  }
+
+  const fallback = rawMaterialFullText(itemLike);
+  return { label: "材料", text: fallback, preview: shortText(fallback, 64) };
+}
+
+function materialPreviewText(itemLike) {
+  const primaryContent = resolvePrimaryContent(itemLike);
+  if (primaryContent.preview && primaryContent.preview !== "未提供") {
+    return primaryContent.preview;
+  }
+  return shortText(itemLike?.material_preview || rawMaterialFullText(itemLike), 64);
+}
+
+function materialFullText(itemLike) {
+  return resolvePrimaryContent(itemLike).text || "";
+}
+
+function primaryContentLabel(itemLike) {
+  return resolvePrimaryContent(itemLike).label || "材料";
+}
+
+function stemFullText(itemLike) {
+  return cleanDisplayText(itemLike?.stem || itemLike?.generated_question?.stem || itemLike?.stem_text || "");
+}
+
+function answerText(itemLike) {
+  return String(itemLike?.answer || itemLike?.generated_question?.answer || "").trim();
+}
+
+function analysisFullText(itemLike) {
+  return cleanDisplayText(itemLike?.analysis || itemLike?.generated_question?.analysis || "");
+}
+
+function optionsMap(itemLike) {
+  const options =
+    (itemLike && typeof itemLike.options === "object" && itemLike.options) ||
+    (itemLike?.generated_question && typeof itemLike.generated_question.options === "object" && itemLike.generated_question.options) ||
+    {};
+  return ["A", "B", "C", "D"].reduce((acc, key) => {
+    if (key in options) acc[key] = cleanDisplayText(options[key] || "");
+    return acc;
+  }, {});
+}
+
+function resolveCategoryLabel(itemLike) {
+  const questionType = humanize(itemLike?.question_type || itemLike?.item?.question_type);
+  const subtypeRaw =
+    itemLike?.business_subtype ||
+    itemLike?.item?.business_subtype ||
+    itemLike?.generated_question?.business_subtype ||
+    itemLike?.item?.generated_question?.business_subtype ||
+    resolveDisplayedSubtype(itemLike);
+  const subtype = subtypeRaw ? humanize(subtypeRaw) : "";
+  return subtype && subtype !== "未提供" ? `${questionType} / ${subtype}` : questionType;
+}
+
+function resolveVersionStatus(version, historyPayload) {
+  if (!version) return "pending_review";
+  if (Number(version.version_no) === Number(historyPayload?.current_version_no || 0) && historyPayload?.item?.current_status) {
+    return historyPayload.item.current_status;
+  }
+  return version.current_status || "pending_review";
+}
+
+function sanitizeFileName(value) {
+  return String(value || "题目")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 48);
+}
+
+function triggerDownload(text, fileName, mimeType = "text/markdown;charset=utf-8") {
+  const blob = new Blob([text], { type: mimeType });
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+}
+
 function extractPatternFromBusinessCard(cardId) {
   const raw = String(cardId || "").trim();
   if (!raw || !raw.includes("__")) return null;
@@ -543,8 +1116,16 @@ function extractPatternFromBusinessCard(cardId) {
 }
 
 function resolveDisplayedSubtype(item) {
+  const actual = resolveActualTaxonomy(item);
+  if (actual.leaf && actual.leaf !== "未提供") return actual.leaf;
+  if (actual.child && actual.child !== "未提供") return actual.child;
+
+  const requested = resolveRequestedTaxonomy(item);
+  if (requested.leaf && requested.leaf !== "未提供") return requested.leaf;
+  if (requested.child && requested.child !== "未提供") return requested.child;
+
   const materialSource = getMaterialSource(item);
-  const promptLabel = String(materialSource?.prompt_extras?.business_feature_card_label || "").trim();
+  const promptLabel = String(getPromptExtras(item)?.business_feature_card_label || "").trim();
   if (promptLabel) {
     return promptLabel.replace(/^语句填空-/, "").replace(/^接语选择-/, "").replace(/^语句排序-/, "").trim();
   }
@@ -555,6 +1136,50 @@ function resolveDisplayedSubtype(item) {
   }
 
   return item.business_subtype || item.pattern_id || item.selected_pattern || "未提供";
+}
+
+function resolveRequestedTaxonomy(item) {
+  const extraConstraints = item?.request_snapshot?.extra_constraints || item?.extra_constraints || {};
+  return {
+    child: humanize(extraConstraints.requested_child_family || extraConstraints.requested_child_label || ""),
+    leaf: humanize(extraConstraints.requested_leaf_id || extraConstraints.requested_leaf_label || ""),
+  };
+}
+
+function resolveActualTaxonomy(item) {
+  const materialSource = getMaterialSource(item);
+  const promptExtras = getPromptExtras(item);
+  const overlay =
+    item?.distill_runtime_overlay ||
+    item?.request_snapshot?.distill_runtime_overlay ||
+    materialSource?.distill_runtime_overlay ||
+    {};
+  const selectedBusinessCard = String(materialSource?.selected_business_card || "").trim();
+  const taxonomyFromCard = BUSINESS_CARD_TAXONOMY[selectedBusinessCard] || {};
+  const promptLabel = String(promptExtras?.business_feature_card_label || "").trim();
+  const normalizedPromptLeaf = promptLabel.replace(/^语句填空-/, "").replace(/^接语选择-/, "").replace(/^语句排序-/, "").trim();
+  const childRaw =
+    overlay.child_family_id ||
+    promptExtras.distill_child_family_id ||
+    taxonomyFromCard.child ||
+    "";
+  const structuredLeafRaw =
+    overlay.leaf_key ||
+    promptExtras.distill_leaf_key ||
+    promptExtras.hard_logic_leaf_key ||
+    "";
+  const leafRaw =
+    (structuredLeafRaw && (VALUE_LABELS[structuredLeafRaw] || /[\u4e00-\u9fff]/.test(structuredLeafRaw))
+      ? structuredLeafRaw
+      : "") ||
+    taxonomyFromCard.leaf ||
+    normalizedPromptLeaf ||
+    structuredLeafRaw ||
+    "";
+  return {
+    child: humanize(childRaw),
+    leaf: humanize(leafRaw),
+  };
 }
 
 function truthyBoolean(value) {
@@ -664,6 +1289,12 @@ function localizeErrorMessage(message) {
   if (/distractor_patch requires at least one patch input/i.test(text)) {
     return "请至少调整迷惑方式、迷惑强度，或直接修改该错误项文本。";
   }
+  if (/question_modify accepts at most two type_slot updates per request/i.test(text)) {
+    return "题目级修改一次最多调整 2 项参数。";
+  }
+  if (/question_modify multi-select controls accept at most two values/i.test(text)) {
+    return "当前多选字段最多只能选 2 个选项。";
+  }
   if (/Failed to call configured LLM provider/i.test(text) && /getaddrinfo failed/i.test(text)) {
     return "上游生成服务暂时不可用，当前网络解析失败，请稍后重试。";
   }
@@ -728,13 +1359,542 @@ function formatCheckDetailValue(value) {
   return String(serialized == null ? value : serialized).replace(/\btrue\b/g, "是").replace(/\bfalse\b/g, "否");
 }
 
+function ensureHistoryOverlay() {
+  let root = $("historyOverlay");
+  if (root) return root;
+  root = document.createElement("div");
+  root.id = "historyOverlay";
+  root.className = "overlay-root";
+  root.hidden = true;
+  root.innerHTML = `
+    <div class="overlay-backdrop" data-overlay-close="true"></div>
+    <div class="overlay-shell">
+      <div class="overlay-header">
+        <div>
+          <h2 id="historyOverlayTitle">历史记录</h2>
+          <p id="historyOverlaySubtitle">正在加载…</p>
+        </div>
+        <button id="historyOverlayCloseBtn" type="button" class="ghost-btn overlay-close-btn">关闭</button>
+      </div>
+      <div id="historyOverlayBody" class="overlay-body"></div>
+    </div>
+  `;
+  document.body.appendChild(root);
+  return root;
+}
+
+function ensureBuilderHistoryEntry() {
+  const heroCard = document.querySelector("#builderScreen .hero-card");
+  if (!heroCard || heroCard.querySelector('[data-action="open-approved-history"]')) return;
+  const titleNode = heroCard.querySelector("h1");
+  const subtitleNode = heroCard.querySelector(".screen-subtitle");
+  const formNode = heroCard.querySelector("#generateForm");
+  if (!titleNode || !subtitleNode || !formNode) return;
+  const topbar = document.createElement("div");
+  topbar.className = "screen-topbar";
+  topbar.innerHTML = `
+    <div class="screen-topbar-copy"></div>
+    <div class="screen-topbar-actions">
+      <button type="button" class="secondary-btn history-trigger-btn" data-action="open-approved-history">已确认历史</button>
+    </div>
+  `;
+  topbar.querySelector(".screen-topbar-copy").append(titleNode, subtitleNode);
+  heroCard.insertBefore(topbar, formNode);
+}
+
+function ensureResultHistoryEntry() {
+  const actionRoot = document.querySelector("#resultScreen .result-header-actions");
+  if (!actionRoot || actionRoot.querySelector('[data-action="open-approved-history"]')) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "secondary-btn history-trigger-btn";
+  button.dataset.action = "open-approved-history";
+  button.textContent = "已确认历史";
+  actionRoot.insertBefore(button, actionRoot.firstChild);
+}
+
+function openHistoryOverlay() {
+  ensureHistoryOverlay().hidden = false;
+}
+
+function closeHistoryOverlay() {
+  state.overlayMode = null;
+  state.overlayContextItemId = null;
+  ensureHistoryOverlay().hidden = true;
+}
+
+function renderOptionsPreview(options) {
+  const normalized = optionsMap({ options });
+  const keys = Object.keys(normalized);
+  if (!keys.length) {
+    return '<div class="history-empty">当前版本未提供选项。</div>';
+  }
+  return `
+    <div class="history-options">
+      ${keys
+        .map(
+          (key) => `
+            <div class="history-option">
+              <strong>选项 ${escapeHtml(key)}</strong>
+              <div>${escapeHtml(normalized[key] || "未提供")}</div>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function buildSingleItemMarkdown(item) {
+  const category = resolveCategoryLabel(item);
+  const material = materialFullText(item) || "未提供";
+  const materialLabel = primaryContentLabel(item);
+  const stem = stemFullText(item) || "未提供";
+  const answer = answerText(item) || "未提供";
+  const analysis = analysisFullText(item) || "未提供";
+  const options = optionsMap(item);
+  const lines = [
+    `# ${category}`,
+    "",
+    `- Item ID: ${item.item_id || "unknown"}`,
+    `- Status: ${humanize(item.current_status || "approved")}`,
+    `- Updated At: ${item.updated_at || item.latest_action_at || ""}`,
+    "",
+    `## ${materialLabel}`,
+    material,
+    "",
+    "## Question",
+    stem,
+    "",
+    ...Object.entries(options).map(([key, value]) => `- ${key}. ${value}`),
+    "",
+    `Answer: ${answer}`,
+    `Analysis: ${analysis}`,
+    "",
+  ];
+  return lines.join("\n");
+}
+
+async function downloadApprovedHistoryItem(itemId) {
+  const payload = await apiFetch(`/api/v1/questions/${itemId}/download`, {
+    method: "POST",
+    body: JSON.stringify({
+      operator: "demo",
+      channel: "approved_history",
+      export_format: "markdown",
+      metadata: { source: "approved_history_overlay" },
+    }),
+  });
+  const item = payload?.item;
+  const fileName = `${sanitizeFileName(resolveCategoryLabel(item))}_${itemId}.md`;
+  triggerDownload(buildSingleItemMarkdown(item), fileName);
+}
+
+async function loadApprovedHistory() {
+  if (state.approvedHistoryLoading) return;
+  state.approvedHistoryLoading = true;
+  renderHistoryOverlay();
+  try {
+    const payload = await apiFetch("/api/v1/review/items?status=approved&page=1&page_size=100");
+    state.approvedHistory = payload.items || [];
+    state.approvedHistoryTotal = Number(payload.count || state.approvedHistory.length || 0);
+    state.approvedHistoryLoaded = true;
+    if (state.approvedPreviewItemId && !state.approvedHistory.some((item) => item.item_id === state.approvedPreviewItemId)) {
+      state.approvedPreviewItemId = "";
+      state.approvedPreviewItem = null;
+    }
+    if (!state.approvedPreviewItemId && state.approvedHistory.length) {
+      state.approvedPreviewItemId = state.approvedHistory[0].item_id;
+    }
+    if (state.approvedPreviewItemId) {
+      await loadApprovedPreview(state.approvedPreviewItemId);
+      return;
+    }
+    renderHistoryOverlay();
+  } finally {
+    state.approvedHistoryLoading = false;
+    renderHistoryOverlay();
+  }
+}
+
+async function loadApprovedPreview(itemId) {
+  if (!itemId) return;
+  state.approvedPreviewItemId = itemId;
+  state.approvedPreviewLoading = true;
+  renderHistoryOverlay();
+  try {
+    state.approvedPreviewItem = await apiFetch(`/api/v1/questions/${itemId}`);
+  } finally {
+    state.approvedPreviewLoading = false;
+    renderHistoryOverlay();
+  }
+}
+
+async function openApprovedHistory() {
+  state.overlayMode = "approved";
+  state.overlayContextItemId = null;
+  openHistoryOverlay();
+  if (!state.approvedHistoryLoaded) {
+    await loadApprovedHistory();
+    return;
+  }
+  if (state.approvedPreviewItemId && (!state.approvedPreviewItem || state.approvedPreviewItem.item_id !== state.approvedPreviewItemId)) {
+    await loadApprovedPreview(state.approvedPreviewItemId);
+    return;
+  }
+  renderHistoryOverlay();
+}
+
+async function loadItemVersionHistory(itemId) {
+  if (!itemId) return;
+  state.historyLoadingByItem[itemId] = true;
+  renderHistoryOverlay();
+  try {
+    const payload = await apiFetch(`/api/v1/review/items/${itemId}/history`);
+    state.historyByItem[itemId] = payload;
+    state.selectedVersionByItem[itemId] = state.selectedVersionByItem[itemId] || payload.current_version_no;
+  } finally {
+    state.historyLoadingByItem[itemId] = false;
+    renderHistoryOverlay();
+  }
+}
+
+async function openItemVersionHistory(itemId) {
+  state.overlayMode = "versions";
+  state.overlayContextItemId = itemId;
+  openHistoryOverlay();
+  if (!state.historyByItem[itemId]) {
+    await loadItemVersionHistory(itemId);
+    return;
+  }
+  renderHistoryOverlay();
+}
+
+function renderApprovedHistoryBody() {
+  if (state.approvedHistoryLoading && !state.approvedHistory.length) {
+    return '<div class="history-loading">正在加载已确认题目…</div>';
+  }
+  if (!state.approvedHistory.length) {
+    return '<div class="history-empty">还没有已确认题目。后面只要点了“确认通过”，这里就会自动累计下来。</div>';
+  }
+  const previewItem = state.approvedPreviewItem;
+  const selectedId = state.approvedPreviewItemId;
+  const previewMarkup =
+    state.approvedPreviewLoading && (!previewItem || previewItem.item_id !== selectedId)
+      ? '<div class="history-loading">正在加载题目详情…</div>'
+      : previewItem
+        ? `
+          <div class="history-detail">
+            <div class="history-detail-card">
+              <div class="history-detail-head">
+                <div>
+                  <h3>${escapeHtml(resolveCategoryLabel(previewItem))}</h3>
+                  <p class="history-detail-subtitle">最近更新时间：${escapeHtml(formatDateTime(previewItem.updated_at || previewItem.latest_action_at))}</p>
+                </div>
+                <div class="history-actions">
+                  <button type="button" class="secondary-btn" data-action="open-version-history" data-item-id="${escapeHtml(previewItem.item_id)}">查看修题版本</button>
+                  <button type="button" class="primary-btn" data-action="download-approved-item" data-item-id="${escapeHtml(previewItem.item_id)}">下载这道题</button>
+                </div>
+              </div>
+            </div>
+            <div class="history-detail-card">
+              <div class="passage-label">${escapeHtml(primaryContentLabel(previewItem))}</div>
+              <pre class="compact-pre">${escapeHtml(materialFullText(previewItem) || "未提供")}</pre>
+            </div>
+            <div class="history-detail-card">
+              <div class="passage-label">题干</div>
+              <div class="question-stem">${escapeHtml(stemFullText(previewItem) || "未提供")}</div>
+            </div>
+            <div class="history-detail-card">
+              <div class="passage-label">选项</div>
+              ${renderOptionsPreview(optionsMap(previewItem))}
+              <div class="answer-row" style="margin-top: 14px;"><strong>答案：</strong>${escapeHtml(answerText(previewItem) || "未提供")}</div>
+              <div class="analysis-row" style="margin-top: 10px;"><strong>解析：</strong>${escapeHtml(analysisFullText(previewItem) || "未提供")}</div>
+            </div>
+          </div>
+        `
+        : '<div class="history-empty">左侧选一条已确认题，就能在这里直接预览并下载。</div>';
+  return `
+    <div class="history-layout">
+      <div class="history-column">
+        <div class="history-list">
+          ${state.approvedHistory
+            .map((item) => {
+              const activeClass = item.item_id === selectedId ? "is-active" : "";
+              return `
+                <button
+                  type="button"
+                  class="history-card ${activeClass}"
+                  data-action="select-approved-history"
+                  data-item-id="${escapeHtml(item.item_id)}"
+                >
+                  <div class="history-card-head">
+                    <div class="history-card-title">${escapeHtml(resolveCategoryLabel(item))}</div>
+                    <span class="chip status status-approved">${escapeHtml(humanize(item.current_status || "approved"))}</span>
+                  </div>
+                  <div class="history-card-meta">${escapeHtml(formatDateTime(item.updated_at || item.latest_action_at || item.created_at))}</div>
+                  <div class="history-card-preview">${escapeHtml(materialPreviewText(item))}</div>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+      <div class="history-column">${previewMarkup}</div>
+    </div>
+  `;
+}
+
+function renderVersionHistoryBody() {
+  const itemId = state.overlayContextItemId;
+  const payload = state.historyByItem[itemId];
+  if (state.historyLoadingByItem[itemId] && !payload) {
+    return '<div class="history-loading">正在加载版本历史…</div>';
+  }
+  if (!payload) {
+    return '<div class="history-empty">当前题目还没有可展示的版本历史。</div>';
+  }
+  const versions = Array.isArray(payload.versions) ? payload.versions : [];
+  const selectedVersionNo = Number(state.selectedVersionByItem[itemId] || payload.current_version_no || versions[0]?.version_no || 0);
+  const selectedVersion =
+    versions.find((version) => Number(version.version_no) === selectedVersionNo) || payload.current_version || versions[0] || null;
+  const selectedVersionStatus = resolveVersionStatus(selectedVersion, payload);
+  const actionTrail = (payload.review_actions || [])
+    .slice(0, 6)
+    .map((action) => `<span class="chip">${escapeHtml(humanize(action.action_type || action.requested_action || "generate"))}</span>`)
+    .join("");
+  const detailMarkup = selectedVersion
+    ? `
+      <div class="history-detail">
+        <div class="history-detail-card">
+          <div class="history-detail-head">
+            <div>
+              <h3>v${escapeHtml(selectedVersion.version_no)} · ${escapeHtml(humanize(selectedVersion.source_action || "generate"))}</h3>
+              <p class="history-detail-subtitle">生成时间：${escapeHtml(formatDateTime(selectedVersion.created_at))}</p>
+            </div>
+            <div class="history-actions">
+              ${payload.item?.current_status === "approved" ? `<button type="button" class="primary-btn" data-action="download-approved-item" data-item-id="${escapeHtml(itemId)}">下载当前题</button>` : ""}
+            </div>
+          </div>
+          <div class="history-card-tags" style="margin-top: 14px;">
+            <span class="chip">${escapeHtml(resolveCategoryLabel(payload.item || {}))}</span>
+            <span class="chip">${escapeHtml(humanize(selectedVersionStatus))}</span>
+            ${selectedVersion.target_difficulty ? `<span class="chip">${escapeHtml(humanize(selectedVersion.target_difficulty))}</span>` : ""}
+            ${selectedVersion.answer ? `<span class="chip">答案 ${escapeHtml(selectedVersion.answer)}</span>` : ""}
+          </div>
+          ${actionTrail ? `<div class="history-card-tags" style="margin-top: 10px;">${actionTrail}</div>` : ""}
+        </div>
+        <div class="history-detail-card">
+          <div class="history-detail-grid">
+            <div class="history-mini-card">
+              <strong>材料预览</strong>
+              <div>${escapeHtml(materialPreviewText(selectedVersion))}</div>
+            </div>
+            <div class="history-mini-card">
+              <strong>变化摘要</strong>
+              <div>${escapeHtml((selectedVersion.diff_summary?.changed_fields || []).join(" / ") || "首版生成")}</div>
+            </div>
+          </div>
+        </div>
+        <div class="history-detail-card">
+          <div class="passage-label">${escapeHtml(primaryContentLabel(selectedVersion))}</div>
+          <pre class="compact-pre">${escapeHtml(materialFullText(selectedVersion) || "未提供")}</pre>
+        </div>
+        <div class="history-detail-card">
+          <div class="passage-label">题干</div>
+          <div class="question-stem">${escapeHtml(stemFullText(selectedVersion) || selectedVersion.stem_preview || "未提供")}</div>
+        </div>
+        <div class="history-detail-card">
+          <div class="passage-label">选项</div>
+          ${renderOptionsPreview(optionsMap(selectedVersion))}
+          <div class="answer-row" style="margin-top: 14px;"><strong>答案：</strong>${escapeHtml(answerText(selectedVersion) || "未提供")}</div>
+          <div class="analysis-row" style="margin-top: 10px;"><strong>解析：</strong>${escapeHtml(analysisFullText(selectedVersion) || "未提供")}</div>
+        </div>
+      </div>
+    `
+    : '<div class="history-empty">当前题目还没有可展示的版本快照。</div>';
+  return `
+    <div class="history-layout">
+      <div class="history-column">
+        <div class="history-list">
+          ${versions
+            .map((version) => {
+              const activeClass = Number(version.version_no) === Number(selectedVersionNo) ? "is-active" : "";
+              const changedFields = (version.diff_summary?.changed_fields || []).slice(0, 4).join(" / ");
+              const versionStatus = resolveVersionStatus(version, payload);
+              return `
+                <button
+                  type="button"
+                  class="history-card ${activeClass}"
+                  data-action="select-version-history"
+                  data-item-id="${escapeHtml(itemId)}"
+                  data-version-no="${escapeHtml(version.version_no)}"
+                >
+                  <div class="history-card-head">
+                    <div class="history-card-title">v${escapeHtml(version.version_no)} · ${escapeHtml(humanize(version.source_action || "generate"))}</div>
+                    <span class="chip">${escapeHtml(humanize(versionStatus))}</span>
+                  </div>
+                  <div class="history-card-meta">${escapeHtml(formatDateTime(version.created_at))}</div>
+                  <div class="history-card-preview">${escapeHtml(changedFields || version.stem_preview || "首版生成")}</div>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      </div>
+      <div class="history-column">${detailMarkup}</div>
+    </div>
+  `;
+}
+
+function renderHistoryOverlay() {
+  const root = ensureHistoryOverlay();
+  const titleNode = $("historyOverlayTitle");
+  const subtitleNode = $("historyOverlaySubtitle");
+  const bodyNode = $("historyOverlayBody");
+  if (!titleNode || !subtitleNode || !bodyNode) return;
+  if (!state.overlayMode) {
+    root.hidden = true;
+    return;
+  }
+  root.hidden = false;
+  if (state.overlayMode === "approved") {
+    titleNode.textContent = "已确认历史";
+    subtitleNode.textContent = `这里会累计所有已经确认通过的题目。当前共 ${state.approvedHistoryTotal || state.approvedHistory.length || 0} 道。`;
+    bodyNode.innerHTML = renderApprovedHistoryBody();
+    return;
+  }
+  const itemId = state.overlayContextItemId;
+  const payload = state.historyByItem[itemId];
+  titleNode.textContent = "修题版本历史";
+  subtitleNode.textContent = payload
+    ? `${resolveCategoryLabel(payload.item || {})} · 当前版本 v${payload.current_version_no || "-"}`
+    : "正在整理当前题目的版本链…";
+  bodyNode.innerHTML = renderVersionHistoryBody();
+}
+
+async function handleHistoryOverlayAction(event) {
+  const button = event.target.closest("[data-action], [data-overlay-close]");
+  if (!button) return;
+  if (button.dataset.overlayClose) {
+    closeHistoryOverlay();
+    return;
+  }
+  const action = button.dataset.action;
+  if (action === "open-approved-history") {
+    await openApprovedHistory();
+    return;
+  }
+  if (action === "select-approved-history") {
+    await loadApprovedPreview(button.dataset.itemId);
+    return;
+  }
+  if (action === "download-approved-item") {
+    await downloadApprovedHistoryItem(button.dataset.itemId);
+    showToast("下载成功");
+    return;
+  }
+  if (action === "open-version-history") {
+    await openItemVersionHistory(button.dataset.itemId);
+    return;
+  }
+  if (action === "select-version-history") {
+    const itemId = button.dataset.itemId;
+    state.selectedVersionByItem[itemId] = Number(button.dataset.versionNo || 0);
+    renderHistoryOverlay();
+  }
+}
+
 function syncCountValue() {
   $("countValue").textContent = $("count").value;
 }
 
-function renderSpecialTypeOptions() {
+function getSubtypeNodes() {
   const focus = $("questionFocus").value || "";
-  populateSelect($("specialType"), SPECIAL_TYPE_OPTIONS[focus] || SPECIAL_TYPE_OPTIONS[""]);
+  return SPECIAL_TYPE_TREE[focus] || SPECIAL_TYPE_TREE[""];
+}
+
+function renderSubtypeOptions() {
+  const select = $("businessSubtype");
+  if (!select) return;
+  const currentValue = select.value || "";
+  const nodes = getSubtypeNodes();
+  const options = EMPTY_SUBTYPE_OPTION.concat(nodes.map((node) => ({ value: node.value, label: node.label })));
+  populateSelect(select, options);
+  const allowed = new Set(options.map((option) => option.value));
+  select.value = allowed.has(currentValue) ? currentValue : "";
+}
+
+function getSelectedSubtypeNode() {
+  const subtype = $("businessSubtype")?.value || "";
+  return getSubtypeNodes().find((node) => node.value === subtype) || null;
+}
+
+function getSelectedLeafNode() {
+  const selectedSubtype = getSelectedSubtypeNode();
+  if (!selectedSubtype) return null;
+  const specialType = $("specialType")?.value || "";
+  return (selectedSubtype.children || []).find((node) => node.value === specialType) || null;
+}
+
+function buildTaxonomyRequestPayload(questionFocus) {
+  const subtypeNode = getSelectedSubtypeNode();
+  const leafNode = getSelectedLeafNode();
+  const familyConfig = GENERATION_TARGETS[questionFocus] || {};
+  const leafConfig = (familyConfig.leaves || {})[leafNode?.value || ""] || {};
+  const typeSlots = { ...(leafConfig.typeSlots || {}) };
+  const referenceBusinessCards = Array.isArray(leafConfig.referenceBusinessCards)
+    ? leafConfig.referenceBusinessCards.filter(Boolean)
+    : [];
+  const requestedGuardLines = Array.isArray(leafConfig.guardLines) ? leafConfig.guardLines.filter(Boolean) : [];
+  const extraConstraints = {};
+  if (leafConfig.patternId) {
+    extraConstraints.pattern_id = leafConfig.patternId;
+  }
+  if (subtypeNode?.value) {
+    extraConstraints.requested_child_family = subtypeNode.value;
+    extraConstraints.requested_child_label = subtypeNode.label;
+  }
+  if (leafNode?.value) {
+    extraConstraints.requested_leaf_id = leafNode.value;
+    extraConstraints.requested_leaf_label = leafNode.label;
+  }
+  if (requestedGuardLines.length) {
+    extraConstraints.requested_guard_lines = requestedGuardLines;
+  }
+  if (referenceBusinessCards.length) {
+    extraConstraints.reference_business_cards = referenceBusinessCards;
+  }
+  return {
+    businessSubtype: familyConfig.businessSubtype ?? null,
+    typeSlots,
+    extraConstraints,
+  };
+}
+
+function renderSpecialTypeOptions() {
+  const select = $("specialType");
+  if (!select) return;
+  const currentValue = select.value || "";
+  const selectedSubtype = getSelectedSubtypeNode();
+  if (!selectedSubtype) {
+    populateSelect(select, EMPTY_SPECIAL_TYPE_OPTION);
+    select.disabled = false;
+    select.value = "";
+    return;
+  }
+  const children = Array.isArray(selectedSubtype.children) ? selectedSubtype.children : [];
+  if (!children.length) {
+    populateSelect(select, NULL_SPECIAL_TYPE_OPTION);
+    select.disabled = true;
+    select.value = "";
+    return;
+  }
+  const options = EMPTY_SPECIAL_TYPE_OPTION.concat(children.map((node) => ({ value: node.value, label: node.label })));
+  populateSelect(select, options);
+  select.disabled = false;
+  const allowed = new Set(options.map((option) => option.value));
+  select.value = allowed.has(currentValue) ? currentValue : "";
 }
 
 function renderLoadingSteps() {
@@ -784,28 +1944,21 @@ function collectSourceQuestionPayload() {
   return hasAnyContent ? payload : null;
 }
 
+function hasStructuredSourceQuestion(payload) {
+  if (!payload) return false;
+  const hasStem = Boolean(String(payload.stem || "").trim());
+  const hasOptions = Object.values(payload.options || {}).some((value) => String(value || "").trim());
+  const hasAnswer = Boolean(String(payload.answer || "").trim());
+  const hasAnalysis = Boolean(String(payload.analysis || "").trim());
+  return hasStem || hasOptions || hasAnswer || hasAnalysis;
+}
+
 function inferQuestionFocus(sourceQuestion) {
   const stem = String(sourceQuestion?.stem || "");
   if (/排序|重新排列|语序正确/.test(stem)) return "sentence_order";
   if (/填入|横线|最恰当/.test(stem)) return "sentence_fill";
-  if (/标题/.test(stem)) return "main_idea";
-  if (/接在|接语|衔接|续写/.test(stem)) return "continuation";
+  if (/标题/.test(stem)) return "center_understanding";
   return "center_understanding";
-}
-
-function getTextDirectionOptions() {
-  const questionFocus = $("questionFocus")?.value || "";
-  return TEXT_DIRECTION_OPTIONS_BY_FOCUS[questionFocus] || TEXT_DIRECTION_OPTIONS_BY_FOCUS.default;
-}
-
-function renderTextDirectionOptions() {
-  const select = $("textDirection");
-  if (!select) return;
-  const currentValue = select.value || "";
-  const options = getTextDirectionOptions();
-  populateSelect(select, options);
-  const allowed = new Set(options.map((option) => option.value));
-  select.value = allowed.has(currentValue) ? currentValue : "";
 }
 
 function collectUserMaterialPayload() {
@@ -819,14 +1972,16 @@ function buildGeneratePayload(options = {}) {
   const sourceQuestion = collectSourceQuestionPayload();
   const userMaterial = includeUserMaterial ? collectUserMaterialPayload() : null;
   const questionFocus = $("questionFocus").value || (sourceQuestion ? inferQuestionFocus(sourceQuestion) : "");
-  const specialType = $("specialType").value || "";
+  const taxonomyPayload = buildTaxonomyRequestPayload(questionFocus);
   const payload = {
     question_focus: questionFocus,
+    business_subtype: taxonomyPayload.businessSubtype,
     difficulty_level: $("difficultyLevel").value || "medium",
-    text_direction: $("textDirection").value || null,
-    special_question_types: specialType ? [specialType] : [],
+    special_question_types: [],
     count: Number($("count").value || 1),
     source_question: sourceQuestion,
+    type_slots: taxonomyPayload.typeSlots,
+    extra_constraints: taxonomyPayload.extraConstraints,
   };
   if (userMaterial) {
     payload.generation_mode = "forced_user_material";
@@ -851,6 +2006,50 @@ function validateGeneratePayload(payload, options = {}) {
     return false;
   }
   return true;
+}
+
+function applyDetectedTarget(detection) {
+  const detectedFocus = String(detection?.question_focus || "").trim();
+  const detectedSpecialType = String(detection?.special_question_type || "").trim();
+  const detectedSubtype = String(detection?.business_subtype || "").trim();
+
+  if (detectedFocus) {
+    $("questionFocus").value = detectedFocus;
+  }
+  renderSubtypeOptions();
+  const subtypeValue = detectedSubtype || "";
+  if (subtypeValue) {
+    $("businessSubtype").value = subtypeValue;
+  }
+  renderSpecialTypeOptions();
+  if (detectedSpecialType && !$("specialType").disabled) {
+    $("specialType").value = detectedSpecialType;
+  }
+}
+
+function buildDetectionStatusHtml(detection) {
+  const focus = humanize(detection?.question_focus);
+  const subtype = humanize(detection?.business_subtype);
+  const specialType = humanize(detection?.special_question_type);
+  const leaf = humanize(detection?.leaf_id_primary);
+  const confidence = Number.isFinite(Number(detection?.analysis_confidence))
+    ? `${Math.round(Number(detection.analysis_confidence) * 100)}%`
+    : "未提供";
+  const businessCards = (detection?.business_card_ids || [])
+    .slice(0, 3)
+    .map((item) => humanize(item))
+    .join(" / ");
+  const queryTerms = (detection?.query_terms || []).slice(0, 4).join(" / ") || "未提供";
+
+  return [
+    `已识别题型：${escapeHtml(focus)}`,
+    `业务子类：${escapeHtml(subtype)}`,
+    `业务孙类：${escapeHtml(specialType)}`,
+    `孙族卡：${escapeHtml(leaf)}`,
+    `命中业务卡：${escapeHtml(businessCards || "未提供")}`,
+    `检索关键词：${escapeHtml(queryTerms)}`,
+    `识别置信度：${escapeHtml(confidence)}`,
+  ].join("<br />");
 }
 
 async function executeGenerate(payload) {
@@ -931,25 +2130,29 @@ async function autoDetectSourceQuestion() {
   statusNode.textContent = "正在自动拆题并回填...";
 
   try {
-    const response = await apiFetch("/api/v1/questions/source-question/parse", {
-      method: "POST",
-      body: JSON.stringify({ raw_text: rawText }),
-    });
-    const parsed = response.source_question || {};
-    $("sourceQuestionPassage").value = parsed.passage || "";
-    $("sourceQuestionStem").value = parsed.stem || "";
-    $("sourceOptionA").value = parsed.options?.A || "";
-    $("sourceOptionB").value = parsed.options?.B || "";
-    $("sourceOptionC").value = parsed.options?.C || "";
-    $("sourceOptionD").value = parsed.options?.D || "";
-    $("sourceQuestionAnswer").value = parsed.answer || "";
-    $("sourceQuestionAnalysis").value = parsed.analysis || "";
-    if (!$("questionFocus").value) {
-      $("questionFocus").value = inferQuestionFocus(parsed);
-      renderSpecialTypeOptions();
+    let parsed = collectSourceQuestionPayload() || {};
+    if (!hasStructuredSourceQuestion(parsed)) {
+      const response = await apiFetch("/api/v1/questions/source-question/parse", {
+        method: "POST",
+        body: JSON.stringify({ raw_text: rawText }),
+      });
+      parsed = response.source_question || {};
+      $("sourceQuestionPassage").value = parsed.passage || "";
+      $("sourceQuestionStem").value = parsed.stem || "";
+      $("sourceOptionA").value = parsed.options?.A || "";
+      $("sourceOptionB").value = parsed.options?.B || "";
+      $("sourceOptionC").value = parsed.options?.C || "";
+      $("sourceOptionD").value = parsed.options?.D || "";
+      $("sourceQuestionAnswer").value = parsed.answer || "";
+      $("sourceQuestionAnalysis").value = parsed.analysis || "";
     }
-    statusNode.textContent = "已完成拆题并回填，你可以直接提交生成。";
-    showToast("参考母题已自动拆解");
+    const detection = await apiFetch("/api/v1/questions/source-question/detect", {
+      method: "POST",
+      body: JSON.stringify({ source_question: parsed }),
+    });
+    applyDetectedTarget(detection);
+    statusNode.innerHTML = buildDetectionStatusHtml(detection);
+    showToast("参考母题已拆题并识别");
   } catch (error) {
     statusNode.textContent = "自动拆题失败，请保留原文并手动补充必要字段。";
     setBanner("builderError", `自动拆题失败：${error.message}`);
@@ -1000,10 +2203,20 @@ function statusChipClass(status) {
 }
 
 function getMaterialSource(item) {
-  return item?.material_source || item?.material_selection?.source || {};
+  return item?.material_source || item?.material_selection?.source || item?.runtime_snapshot?.material_snapshot?.source || {};
+}
+
+function isManualOverrideActive(item) {
+  if (!item || typeof item !== "object") return false;
+  if (truthyBoolean(item.manual_override_active)) return true;
+  return truthyBoolean(item?.generated_question?.metadata?.manual_edit);
 }
 
 function getFeedbackSnapshot(item) {
+  if (isManualOverrideActive(item)) {
+    return null;
+  }
+
   if (item && typeof item.feedback_snapshot === "object" && item.feedback_snapshot) {
     return item.feedback_snapshot;
   }
@@ -1364,35 +2577,6 @@ const QUESTION_MODIFY_TUNING_FIELDS = [
   },
 ];
 
-function renderQuestionModifyTuningControls(item) {
-  const itemId = item.item_id;
-  const defaults = item?.request_snapshot?.extra_constraints || {};
-  const fields = QUESTION_MODIFY_TUNING_FIELDS.map((field) => {
-    const rawValue = defaults[field.key];
-    const selectedValue = rawValue == null ? "" : String(rawValue);
-    const options = field.options
-      .map(([value, label]) => {
-        const selected = value === selectedValue ? " selected" : "";
-        return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
-      })
-      .join("");
-    return `
-      <label class="field-compact">
-        <span>${escapeHtml(field.label)}</span>
-        <select class="review-tune-input" data-item-id="${itemId}" data-extra-key="${escapeHtml(field.key)}">
-          ${options}
-        </select>
-        <small class="field-help">${escapeHtml(field.help)}</small>
-      </label>
-    `;
-  }).join("");
-
-  return `
-    <div class="inline-feedback">审核调优：只影响“按参数重做”这次生成，不改材料来源。</div>
-    <div class="builder-stack">${fields}</div>
-  `;
-}
-
 function renderDistractorPatchOptions(optionPairs, selectedValue = "") {
   return optionPairs
     .map(([value, label]) => {
@@ -1402,66 +2586,129 @@ function renderDistractorPatchOptions(optionPairs, selectedValue = "") {
     .join("");
 }
 
+function normalizeControlArrayValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry || "").trim()).filter(Boolean);
+  }
+  const text = String(value || "").trim();
+  return text ? [text] : [];
+}
+
+function sortStrings(values) {
+  return values.slice().sort((left, right) => left.localeCompare(right, "zh-CN"));
+}
+
+function sameStringArrays(left, right) {
+  const a = sortStrings(left);
+  const b = sortStrings(right);
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
+
 function renderQuestionModifySection(item) {
   const itemId = item.item_id;
   const panel = state.controlsByItem[itemId];
   if (!panel || !Array.isArray(panel.controls)) {
-    return '<div class="inline-feedback">参数重做控件加载中...</div>';
+    return '<div class="inline-feedback">题目级修改控件加载中...</div>';
   }
 
   if (!panel.controls.length) {
-    return '<div class="inline-feedback">当前题目没有开放的参数重做控件。</div>';
+    return '<div class="inline-feedback">当前题型没有开放的题目级修改字段。</div>';
   }
 
   const editableControls = panel.controls.filter((control) => !control.read_only && control.mapped_action === "question_modify");
   if (!editableControls.length) {
-    return '<div class="inline-feedback">当前题目没有开放的参数重做控件。</div>';
+    return '<div class="inline-feedback">当前题型没有开放的题目级修改字段。</div>';
   }
 
-  const fields = editableControls
-    .slice(0, 6)
-    .map((control) => {
+  const fields = editableControls.map((control) => {
       const options = Array.isArray(control.options) ? control.options : [];
+      const controlType = String(control.control_type || "string");
+      if (controlType === "array") {
+        const selectedValues = normalizeControlArrayValue(control.current_value);
+        const initialValue = escapeHtml(JSON.stringify(sortStrings(selectedValues)));
+        const maxSelected = Number(control.max_selected || 0) || 2;
+        return `
+          <div
+            class="field-compact question-modify-field"
+            data-item-id="${itemId}"
+            data-control-key="${escapeHtml(control.control_key)}"
+            data-control-type="array"
+            data-initial-value="${initialValue}"
+            data-max-selected="${maxSelected}"
+          >
+            <span>${escapeHtml(control.label || control.control_key)}</span>
+            <div class="option-list">
+              ${options
+                .map((option) => {
+                  const value = option.value == null ? "" : String(option.value);
+                  const checked = selectedValues.includes(value) ? " checked" : "";
+                  return `
+                    <label style="display:block; margin-bottom:6px;">
+                      <input
+                        type="checkbox"
+                        class="question-modify-array-option"
+                        data-item-id="${itemId}"
+                        data-control-key="${escapeHtml(control.control_key)}"
+                        value="${escapeHtml(value)}"${checked}
+                      />
+                      <span>${escapeHtml(option.label || value)}</span>
+                    </label>
+                  `;
+                })
+                .join("")}
+            </div>
+            <small class="field-help">${escapeHtml(control.description || "单次最多选 2 个。")}</small>
+          </div>
+        `;
+      }
       const selectedValue = control.current_value == null ? "" : String(control.current_value);
       return `
-        <label class="field-compact">
-          <span>${escapeHtml(humanize(control.label || control.control_key))}</span>
+        <div
+          class="field-compact question-modify-field"
+          data-item-id="${itemId}"
+          data-control-key="${escapeHtml(control.control_key)}"
+          data-control-type="${escapeHtml(controlType)}"
+          data-initial-value="${escapeHtml(selectedValue)}"
+        >
+          <span>${escapeHtml(control.label || control.control_key)}</span>
           <select class="question-modify-input" data-item-id="${itemId}" data-control-key="${escapeHtml(control.control_key)}">
             <option value="">不调整</option>
             ${options
               .map((option) => {
                 const value = option.value == null ? "" : String(option.value);
                 const selected = value === selectedValue ? " selected" : "";
-                return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(
-                  humanize(option.label || value),
-                )}</option>`;
+                return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(option.label || value)}</option>`;
               })
               .join("")}
           </select>
           <small class="field-help">${escapeHtml(control.description || "沿用后端返回的控件定义。")}</small>
-        </label>
+        </div>
       `;
     })
     .join("");
 
-  return `<div class="builder-stack">${fields}</div>`;
+  return `
+    <div class="inline-feedback">题目级修改：单次最多调整 2 项，直接作用于当前题卡结构。</div>
+    <div class="builder-stack">${fields}</div>
+  `;
 }
 
 function renderQuestionModifyPanel(item) {
   const itemId = item.item_id;
   const panel = state.controlsByItem[itemId];
-  let dynamicSection = '<div class="inline-feedback">参数重做控件加载中...</div>';
+  let dynamicSection = '<div class="inline-feedback">题目级修改控件加载中...</div>';
 
   if (panel && Array.isArray(panel.controls)) {
     const editableControls = panel.controls.filter((control) => !control.read_only && control.mapped_action === "question_modify");
     if (editableControls.length) {
       dynamicSection = renderQuestionModifySection(item);
     } else {
-      dynamicSection = '<div class="inline-feedback">当前题目没有开放的后端参数控件，仍可使用下方审核调优。</div>';
+      dynamicSection = '<div class="inline-feedback">当前题型没有开放的题目级修改字段。</div>';
     }
   }
 
-  return `${dynamicSection}${renderQuestionModifyTuningControls(item)}`;
+  return dynamicSection;
 }
 
 function renderDistractorPatchPanel(item) {
@@ -1596,15 +2843,19 @@ function buildQuestionCard(item, index) {
   const generated = item.generated_question || {};
   const material = item.material_selection || {};
   const materialSource = getMaterialSource(item);
+  const manualOverrideActive = isManualOverrideActive(item);
   const feedback = getFeedbackSnapshot(item);
   const currentStatus = item.current_status || "generated";
   const approved = currentStatus === "approved";
   const discarded = currentStatus === "discarded";
-  const materialText = cleanDisplayText(item.material_text || material.text || "");
+  const primaryContent = resolvePrimaryContent(item);
+  const materialText = rawMaterialFullText(item);
   const originalMaterial = cleanDisplayText(material.original_text || material.text || "", { replaceBlankToken: false });
   const stemText = cleanDisplayText(generated.stem || item.stem_text || "");
   const analysisText = cleanDisplayText(generated.analysis || "");
   const displaySubtype = resolveDisplayedSubtype(item);
+  const requestedTaxonomy = resolveRequestedTaxonomy(item);
+  const actualTaxonomy = resolveActualTaxonomy(item);
 
   const card = document.createElement("section");
   card.className = "question-card";
@@ -1622,20 +2873,39 @@ function buildQuestionCard(item, index) {
             ${item.forced_generation ? '<span class="chip">用户自带材料</span>' : ""}
             ${item.material_source_type ? `<span class="chip">${escapeHtml(humanize(item.material_source_type))}</span>` : ""}
             ${materialSource.caution_tag ? `<span class="chip status status-warn">${escapeHtml(humanize(materialSource.caution_tag))}</span>` : ""}
+            ${manualOverrideActive ? '<span class="chip">人工接管</span>' : ""}
           </div>
+        </div>
+        <div class="question-head-actions">
+          <button type="button" class="secondary-btn" data-action="open-version-history" data-item-id="${item.item_id}">版本历史</button>
         </div>
       </div>
 
       <div class="question-box">
-        <div class="passage-label">题目主内容</div>
-        <div class="passage-preview">${escapeHtml(materialText || "暂无材料文本")}</div>
-        <div class="passage-label" style="margin-top: 18px;">题干</div>
+        ${
+          requestedTaxonomy.child || requestedTaxonomy.leaf || actualTaxonomy.child || actualTaxonomy.leaf
+            ? `
+        <div class="inline-feedback">
+          用户选择：${escapeHtml(requestedTaxonomy.child || "未提供")} / ${escapeHtml(requestedTaxonomy.leaf || "未提供")}
+          &nbsp;&nbsp;|&nbsp;&nbsp;
+          系统落位：${escapeHtml(actualTaxonomy.child || "未提供")} / ${escapeHtml(actualTaxonomy.leaf || "未提供")}
+        </div>
+          `
+              : ""
+          }
+          <div class="passage-label">${escapeHtml(primaryContent.label || "题目主内容")}</div>
+          <div class="passage-preview">${escapeHtml(primaryContent.text || "暂无题目主内容")}</div>
+          <div class="passage-label" style="margin-top: 18px;">题干</div>
         <div class="question-stem">${escapeHtml(stemText || "暂无题干")}</div>
         <div class="option-list">${renderOptions(generated.options || {})}</div>
         <div class="answer-row"><strong>答案：</strong>${escapeHtml(generated.answer || "未提供")}</div>
         <div class="analysis-row"><strong>解析：</strong>${escapeHtml(analysisText || "未提供")}</div>
       </div>
 
+      ${
+        manualOverrideActive
+          ? ""
+          : `
       <div class="system-box" style="margin-top: 16px;">
         <div class="section-title">结构与状态</div>
         ${renderSignalSummary(feedback)}
@@ -1646,6 +2916,8 @@ function buildQuestionCard(item, index) {
         <div class="section-title">风险与建议</div>
         ${renderExplainList(feedback, item)}
       </div>
+      `
+      }
 
       <details class="result-collapse" style="margin-top: 16px;">
         <summary>查看材料来源与上下文</summary>
@@ -1876,23 +3148,48 @@ function collectManualPatch(itemId) {
 function collectQuestionModifyOverrides(itemId) {
   const card = getCard(itemId);
   const overrides = {};
-  card.querySelectorAll(`.question-modify-input[data-item-id="${itemId}"]`).forEach((node) => {
-    const key = node.dataset.controlKey;
-    const value = String(node.value || "").trim();
-    if (!key || !value) return;
-    overrides[key] = value;
+  const typeSlots = {};
+  let changedCount = 0;
+  card.querySelectorAll(`.question-modify-field[data-item-id="${itemId}"]`).forEach((fieldNode) => {
+    const key = fieldNode.dataset.controlKey;
+    const controlType = fieldNode.dataset.controlType || "string";
+    if (!key) return;
+    if (controlType === "array") {
+      const initialValue = normalizeControlArrayValue(JSON.parse(fieldNode.dataset.initialValue || "[]"));
+      const selectedValues = normalizeControlArrayValue(
+        Array.from(fieldNode.querySelectorAll(".question-modify-array-option:checked")).map((node) => node.value),
+      );
+      if (sameStringArrays(selectedValues, initialValue)) return;
+      typeSlots[key] = selectedValues;
+      changedCount += 1;
+      return;
+    }
+    const node = fieldNode.querySelector(`.question-modify-input[data-control-key="${key}"]`);
+    const value = String(node?.value || "").trim();
+    const initialValue = String(fieldNode.dataset.initialValue || "").trim();
+    if (!value || value === initialValue) return;
+    typeSlots[key] = value;
+    changedCount += 1;
   });
-  const extraConstraints = {};
-  card.querySelectorAll(`.review-tune-input[data-item-id="${itemId}"]`).forEach((node) => {
-    const key = node.dataset.extraKey;
-    const rawValue = String(node.value || "").trim();
-    if (!key || !rawValue) return;
-    extraConstraints[key] = key === "review_keep_correct_answer_fixed" ? rawValue === "true" : rawValue;
-  });
-  if (Object.keys(extraConstraints).length) {
-    overrides.extra_constraints = extraConstraints;
+  if (changedCount > QUESTION_MODIFY_MAX_CHANGES) {
+    throw new Error(`题目级修改一次最多调整 ${QUESTION_MODIFY_MAX_CHANGES} 项参数。`);
+  }
+  if (Object.keys(typeSlots).length) {
+    overrides.type_slots = typeSlots;
   }
   return overrides;
+}
+
+function handleQuestionModifySelectionChange(event) {
+  const checkboxNode = event.target.closest(".question-modify-array-option");
+  if (!checkboxNode) return;
+  const fieldNode = checkboxNode.closest(".question-modify-field");
+  if (!fieldNode) return;
+  const maxSelected = Number(fieldNode.dataset.maxSelected || 0) || 2;
+  const selectedNodes = fieldNode.querySelectorAll(".question-modify-array-option:checked");
+  if (selectedNodes.length <= maxSelected) return;
+  checkboxNode.checked = false;
+  showToast(`这个字段最多选 ${maxSelected} 个选项`, "info");
 }
 
 function collectDistractorPatchPayload(itemId, targetOption) {
@@ -1940,6 +3237,25 @@ function upsertItem(nextItem) {
   state.items = state.items.map((current) => (current.item_id === nextItem.item_id ? nextItem : current));
 }
 
+function refreshHistoryCaches(itemId, nextItem = null) {
+  delete state.historyByItem[itemId];
+  delete state.historyLoadingByItem[itemId];
+  delete state.selectedVersionByItem[itemId];
+  state.approvedHistoryLoaded = false;
+  if (state.approvedPreviewItem?.item_id === itemId) {
+    state.approvedPreviewItem = nextItem && nextItem.current_status === "approved" ? nextItem : null;
+  }
+  if (nextItem && nextItem.current_status === "approved") {
+    state.approvedPreviewItemId = itemId;
+  }
+  if (state.overlayMode === "versions" && state.overlayContextItemId === itemId) {
+    void loadItemVersionHistory(itemId);
+  }
+  if (state.overlayMode === "approved") {
+    void loadApprovedHistory();
+  }
+}
+
 async function loadControlsForItem(itemId) {
   const payload = await apiFetch(`/api/v1/questions/${itemId}/controls`);
   state.controlsByItem[itemId] = payload;
@@ -1977,6 +3293,11 @@ async function handleResultAction(event) {
   if (!itemId) return;
 
   try {
+    if (action === "open-version-history") {
+      await openItemVersionHistory(itemId);
+      return;
+    }
+
     if (action === "load-replacements") {
       setButtonBusy(button, true, "加载中...");
       await loadReplacementMaterials(itemId);
@@ -2003,6 +3324,7 @@ async function handleResultAction(event) {
         }),
       });
       upsertItem(result.item);
+      refreshHistoryCaches(itemId, result.item);
       renderResults();
       void loadControlsForItem(itemId);
       showToast("已按备选材料重做");
@@ -2027,6 +3349,7 @@ async function handleResultAction(event) {
         }),
       });
       upsertItem(result.item);
+      refreshHistoryCaches(itemId, result.item);
       renderResults();
       void loadControlsForItem(itemId);
       showToast("已按自贴材料重做");
@@ -2050,6 +3373,7 @@ async function handleResultAction(event) {
         }),
       });
       upsertItem(result.item);
+      refreshHistoryCaches(itemId, result.item);
       renderResults();
       void loadControlsForItem(itemId);
       showToast("参数重做已提交");
@@ -2070,6 +3394,7 @@ async function handleResultAction(event) {
         body: JSON.stringify(payload),
       });
       upsertItem(result.item);
+      refreshHistoryCaches(itemId, result.item);
       renderResults();
       void loadControlsForItem(itemId);
       showToast(`错误项 ${targetOption} 已提交定点修复`);
@@ -2087,6 +3412,7 @@ async function handleResultAction(event) {
         }),
       });
       upsertItem(result.item);
+      refreshHistoryCaches(itemId, result.item);
       renderResults();
       void loadControlsForItem(itemId);
       showToast("手工编辑已保存");
@@ -2100,6 +3426,7 @@ async function handleResultAction(event) {
         body: JSON.stringify({ operator: "demo" }),
       });
       upsertItem(result.item);
+      refreshHistoryCaches(itemId, result.item);
       renderResults();
       showToast("题目已通过");
       return;
@@ -2112,6 +3439,7 @@ async function handleResultAction(event) {
         body: JSON.stringify({ action: "discard", operator: "demo" }),
       });
       upsertItem(result.item);
+      refreshHistoryCaches(itemId, result.item);
       renderResults();
       showToast("题目已丢弃", "info");
     }
@@ -2136,7 +3464,7 @@ async function exportApprovedBatch() {
   const href = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = href;
-  link.download = `batch_${state.batchId}.md`;
+  link.download = `已通过题目_批次_${state.batchId}.md`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -2144,15 +3472,23 @@ async function exportApprovedBatch() {
 }
 
 function initPage() {
+  ensureHistoryOverlay();
+  ensureBuilderHistoryEntry();
+  ensureResultHistoryEntry();
   populateSelect($("questionFocus"), QUESTION_FOCUS_OPTIONS);
-  populateSelect($("specialType"), SPECIAL_TYPE_OPTIONS[""]);
+  populateSelect($("businessSubtype"), EMPTY_SUBTYPE_OPTION);
+  populateSelect($("specialType"), EMPTY_SPECIAL_TYPE_OPTION);
   populateSelect($("difficultyLevel"), DIFFICULTY_OPTIONS);
-  renderTextDirectionOptions();
+  renderSubtypeOptions();
+  renderSpecialTypeOptions();
 
   $("count").addEventListener("input", syncCountValue);
   $("questionFocus").addEventListener("change", () => {
+    renderSubtypeOptions();
     renderSpecialTypeOptions();
-    renderTextDirectionOptions();
+  });
+  $("businessSubtype")?.addEventListener("change", () => {
+    renderSpecialTypeOptions();
   });
   $("generateForm").addEventListener("submit", generateQuestions);
   $("userMaterialToggleBtn")?.addEventListener("click", () => {
@@ -2171,12 +3507,20 @@ function initPage() {
       setBanner("builderError", `自动拆题失败：${error.message}`);
     });
   });
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest('[data-action="open-approved-history"]');
+    if (!button) return;
+    openApprovedHistory().catch((error) => {
+      showToast(error.message || "打开历史失败", "info");
+    });
+  });
   $("resultList").addEventListener("click", (event) => {
     handleResultAction(event).catch((error) => {
       showToast(error.message || "操作失败", "info");
     });
   });
   $("resultList").addEventListener("change", (event) => {
+    handleQuestionModifySelectionChange(event);
     const selectNode = event.target.closest(".replacement-select");
     if (!selectNode) return;
     updateReplacementPreviewFromSelection(selectNode);
@@ -2188,9 +3532,19 @@ function initPage() {
       .then(() => showToast("导出成功"))
       .catch((error) => showToast(error.message || "导出失败", "info"));
   });
+  $("historyOverlay").addEventListener("click", (event) => {
+    handleHistoryOverlayAction(event).catch((error) => {
+      showToast(error.message || "历史操作失败", "info");
+    });
+  });
+  $("historyOverlayCloseBtn")?.addEventListener("click", () => {
+    closeHistoryOverlay();
+  });
 
   syncCountValue();
   renderLoadingSteps();
 }
 
 document.addEventListener("DOMContentLoaded", initPage);
+
+

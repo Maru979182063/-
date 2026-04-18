@@ -1,15 +1,5 @@
 const QUESTION_FOCUS_OPTIONS = [
   { label: "中心理解题", value: "center_understanding", specialTypes: [{ label: "中心理解题", value: "center_understanding" }] },
-  { label: "标题填入题", value: "title_selection", specialTypes: [{ label: "选择标题", value: "title_selection" }] },
-  {
-    label: "接语选择题",
-    value: "continuation",
-    specialTypes: [
-      { label: "尾句直接承接", value: "tail_anchor_direct_extend" },
-      { label: "问题后接对策", value: "problem_solution_hook" },
-      { label: "机制展开", value: "mechanism_unfolding" },
-    ],
-  },
   {
     label: "语句排序题",
     value: "sentence_order",
@@ -69,10 +59,6 @@ const MOCK_RESULT = {
 
 const SPECIAL_LABELS = {
   center_understanding: "中心理解题",
-  title_selection: "选择标题",
-  tail_anchor_direct_extend: "尾句直接承接",
-  problem_solution_hook: "问题后接对策",
-  mechanism_unfolding: "机制展开",
   dual_anchor_lock: "双锚点锁定",
   carry_parallel_expand: "承接并列展开",
   problem_solution_case_blocks: "问题-对策-案例排序",

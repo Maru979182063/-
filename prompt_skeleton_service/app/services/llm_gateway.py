@@ -36,43 +36,33 @@ class LLMGatewayService:
             )
 
         base_url = os.getenv(provider.base_url_env, provider.default_base_url) if provider.base_url_env else provider.default_base_url
-        payload = {
+        chat_payload = {
             "model": model_name,
-            "input": [
-                {
-                    "role": "system",
-                    "content": [{"type": "input_text", "text": system_prompt}],
-                },
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": user_prompt}],
-                },
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
                     "name": schema_name,
                     "schema": self._build_strict_schema(schema),
                     "strict": True,
-                }
+                },
             },
-            "max_output_tokens": provider.params.max_output_tokens,
+            "max_tokens": provider.params.max_output_tokens,
         }
         if not str(model_name).startswith("gpt-5"):
-            payload["temperature"] = provider.params.temperature
+            chat_payload["temperature"] = provider.params.temperature
 
         try:
-            with httpx.Client(
+            data = self._post_json(
                 base_url=base_url,
-                timeout=provider.params.timeout_seconds,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-            ) as client:
-                response = client.post("/responses", json=payload)
-                response.raise_for_status()
-                data = response.json()
+                api_key=api_key,
+                timeout_seconds=provider.params.timeout_seconds,
+                path="/chat/completions",
+                payload=chat_payload,
+            )
         except httpx.HTTPStatusError as exc:
             response_text = exc.response.text
             if len(response_text) > 4000:
@@ -101,37 +91,55 @@ class LLMGatewayService:
                 },
             ) from exc
 
-        text_output = ""
-        for item in data.get("output", []):
-            for content in item.get("content", []):
-                if content.get("type") == "output_text":
-                    text_output += content.get("text", "")
-        if not text_output and isinstance(data.get("output_text"), str):
-            text_output = str(data.get("output_text") or "")
-        if not text_output:
-            raise DomainError(
-                "Configured LLM returned no structured output.",
-                status_code=502,
-                details={
-                    "provider": route.provider,
-                    "model": model_name,
-                    "response_id": data.get("id"),
-                },
-            )
+        text_output = self._extract_text_output(data)
+        parse_error: ValueError | None = None
+        if text_output:
+            try:
+                return extract_json_object(text_output)
+            except ValueError as exc:
+                parse_error = exc
+        else:
+            parse_error = ValueError("empty_output")
+
+        retry_payload = self._build_plain_json_retry_payload(
+            original_payload=chat_payload,
+            schema=schema,
+        )
+        retry_data: dict[str, Any] | None = None
+        retry_text_output = ""
+        retry_parse_error: ValueError | None = None
         try:
-            return extract_json_object(text_output)
+            retry_data = self._post_json(
+                base_url=base_url,
+                api_key=api_key,
+                timeout_seconds=provider.params.timeout_seconds,
+                path="/chat/completions",
+                payload=retry_payload,
+            )
+            retry_text_output = self._extract_text_output(retry_data)
+            if retry_text_output:
+                return extract_json_object(retry_text_output)
+            retry_parse_error = ValueError("empty_output")
+        except httpx.HTTPError:
+            retry_parse_error = ValueError("retry_http_error")
         except ValueError as exc:
-            raise DomainError(
-                "Configured LLM returned structured text that could not be parsed as a JSON object.",
-                status_code=502,
-                details={
-                    "provider": route.provider,
-                    "model": model_name,
-                    "reason": str(exc),
-                    "response_id": data.get("id"),
-                    "text_preview": text_output[:800],
-                },
-            ) from exc
+            retry_parse_error = exc
+
+        raise DomainError(
+            "Configured LLM returned structured text that could not be parsed as a JSON object.",
+            status_code=502,
+            details={
+                "provider": route.provider,
+                "model": model_name,
+                "reason": str(parse_error) if parse_error else "json_object_not_found",
+                "response_id": data.get("id"),
+                "text_preview": text_output[:800],
+                "fallback_retry_attempted": True,
+                "fallback_retry_reason": str(retry_parse_error) if retry_parse_error else "",
+                "fallback_retry_response_id": (retry_data or {}).get("id"),
+                "fallback_retry_text_preview": retry_text_output[:800],
+            },
+        )
 
     def _get_provider(self, provider_name: str) -> ProviderConfig:
         provider = self.runtime_config.llm.providers.get(provider_name)
@@ -143,10 +151,83 @@ class LLMGatewayService:
             )
         return provider
 
+    def _post_json(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        timeout_seconds: int,
+        path: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        with httpx.Client(
+            base_url=base_url,
+            timeout=timeout_seconds,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        ) as client:
+            response = client.post(path, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+    def _extract_text_output(self, data: dict[str, Any]) -> str:
+        text_output = ""
+        for item in data.get("output", []):
+            for content in item.get("content", []):
+                if content.get("type") == "output_text":
+                    text_output += content.get("text", "")
+        if text_output:
+            return text_output
+        if isinstance(data.get("output_text"), str):
+            return str(data.get("output_text") or "")
+        choices = list(data.get("choices") or [])
+        if not choices:
+            return ""
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if text:
+                        parts.append(str(text))
+            return "".join(parts)
+        return ""
+
     def _build_strict_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
         strict_schema = deepcopy(schema)
         self._normalize_schema_node(strict_schema)
         return strict_schema
+
+    def _build_plain_json_retry_payload(
+        self,
+        *,
+        original_payload: dict[str, Any],
+        schema: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = deepcopy(original_payload)
+        payload.pop("response_format", None)
+        messages = list(payload.get("messages") or [])
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "The previous output was not valid structured JSON. "
+                    "Retry now and return ONLY one JSON object that matches the schema. "
+                    "Do not include markdown/code fences/explanations.\n"
+                    f"Schema: {json.dumps(self._build_strict_schema(schema), ensure_ascii=False)}"
+                ),
+            }
+        )
+        payload["messages"] = messages
+        if "temperature" in payload:
+            payload["temperature"] = 0
+        return payload
 
     def _normalize_schema_node(self, node: Any) -> None:
         if isinstance(node, dict):

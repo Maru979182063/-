@@ -38,7 +38,7 @@ _RATE_LIMITER = _RateLimiter()
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
-    EXEMPT_PATHS = {"/healthz", "/docs", "/openapi.json", "/redoc"}
+    EXEMPT_PATHS = {"/healthz", "/readyz", "/docs", "/openapi.json", "/redoc"}
     EXEMPT_PREFIXES = ("/docs/oauth2-redirect", "/demo", "/demo-static")
 
     async def dispatch(self, request: Request, call_next):
@@ -57,6 +57,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        self._attach_generation_gate_headers(request, response)
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
         logger.info(
             "request_complete request_id=%s method=%s path=%s status=%s duration_ms=%s",
@@ -115,6 +116,25 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             },
             headers={"Retry-After": str(retry_after), "X-Request-ID": request_id},
         )
+
+    def _attach_generation_gate_headers(self, request: Request, response: JSONResponse) -> None:
+        gate_state = getattr(request.state, "generation_gate", None)
+        if not isinstance(gate_state, dict):
+            return
+
+        header_mapping = {
+            "queue_position": "X-Generation-Queue-Position",
+            "wait_seconds": "X-Generation-Wait-Seconds",
+            "active_requests": "X-Generation-Active",
+            "waiting_requests": "X-Generation-Waiting",
+            "max_concurrent": "X-Generation-Max-Concurrent",
+            "max_waiting": "X-Generation-Max-Waiting",
+        }
+        for key, header_name in header_mapping.items():
+            value = gate_state.get(key)
+            if value is None:
+                continue
+            response.headers[header_name] = str(value)
 
 
 def install_security_middleware(app: FastAPI) -> None:

@@ -299,9 +299,14 @@ class ReviewWorkbenchSmokeTest(TestCase):
             response = self._generate_one()
 
         self.assertEqual(response.status_code, 200)
-        item = response.json()["items"][0]
+        payload = response.json()
+        self.assertEqual(len(payload["items"]), 1)
+        item = payload["items"][0]
         self.assertEqual(item["current_status"], "auto_failed")
-        self.assertFalse(item["validation_result"]["passed"])
+        self.assertIn("blocked_attempt_returned_for_review", item["notes"])
+        self.assertTrue(
+            any("manual review" in warning for warning in payload.get("warnings", []))
+        )
 
     def test_review_list_filters_by_status(self) -> None:
         with self._patched_runtime():
@@ -318,7 +323,7 @@ class ReviewWorkbenchSmokeTest(TestCase):
         with self._patched_runtime():
             response = self.client.post(
                 "/api/v1/questions/generate",
-                json={"question_focus": "标题填入题", "difficulty_level": "中等", "count": 2},
+                json={"question_focus": "center_understanding", "difficulty_level": "medium", "count": 2},
             )
             batch_id = response.json()["batch_id"]
             item_id = response.json()["items"][0]["item_id"]
@@ -347,6 +352,42 @@ class ReviewWorkbenchSmokeTest(TestCase):
         self.assertEqual(len(payload["versions"]), 2)
         self.assertEqual(len(payload["review_actions"]), 2)
         self.assertEqual(payload["review_actions"][0]["action_type"], "approve")
+        self.assertTrue(payload["versions"][0]["material_text"])
+        self.assertTrue(payload["versions"][0]["stem"])
+        self.assertIn("A", payload["versions"][0]["options"])
+        self.assertTrue(payload["versions"][0]["analysis"])
+
+    def test_manual_edit_keeps_prior_versions_visible_in_history(self) -> None:
+        with self._patched_runtime():
+            item_id = self._generate_one().json()["items"][0]["item_id"]
+            self.client.post(
+                f"/api/v1/questions/{item_id}/review-actions",
+                json={"action": "question_modify", "control_overrides": {"type_slots": {"abstraction_level": "high"}}},
+            )
+            self.client.post(
+                f"/api/v1/questions/{item_id}/review-actions",
+                json={
+                    "action": "manual_edit",
+                    "instruction": "manual patch",
+                    "control_overrides": {
+                        "manual_patch": {
+                            "stem": "手工编辑后的题干",
+                            "options": {"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+                            "answer": "A",
+                            "analysis": "手工编辑后的解析",
+                        }
+                    },
+                },
+            )
+
+        history = self.client.get(f"/api/v1/review/items/{item_id}/history")
+        self.assertEqual(history.status_code, 200)
+        payload = history.json()
+        self.assertEqual(payload["current_version_no"], 3)
+        self.assertEqual([version["source_action"] for version in payload["versions"]], ["manual_edit", "question_modify", "generate"])
+        self.assertEqual(payload["current_version"]["stem"], "手工编辑后的题干")
+        self.assertEqual(payload["current_version"]["validation_result"], {})
+        self.assertEqual(payload["current_version"]["evaluation_result"], {})
 
     def test_confirm_records_targeted_repair_approval_basis(self) -> None:
         with self._patched_runtime():
@@ -385,15 +426,26 @@ class ReviewWorkbenchSmokeTest(TestCase):
 
         history = self.client.get(f"/api/v1/review/items/{item_id}/history").json()
         current_version = history["current_version"]
-        self.assertEqual(current_version["prompt_template_name"], "main_idea_generate_default")
-        self.assertEqual(current_version["prompt_template_version"], "v2")
+        self.assertTrue(current_version["prompt_template_name"].startswith("main_idea_center_understanding_generate"))
+        self.assertTrue(current_version["prompt_template_version"])
 
     def test_controls_meta_endpoint_returns_controls(self) -> None:
         response = self.client.get("/api/v1/meta/question-types/main_idea/controls")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertTrue(any(control["control_key"] == "difficulty_target" for control in payload["controls"]))
-        self.assertTrue(any(control["control_key"] == "pattern_id" for control in payload["controls"]))
+        self.assertEqual(
+            [control["control_key"] for control in payload["controls"]],
+            ["abstraction_level", "statement_visibility", "main_point_source"],
+        )
+        self.assertEqual(payload["controls"][0]["label"], "抽象层级")
+
+    def test_sentence_order_controls_meta_marks_multi_select_limit(self) -> None:
+        response = self.client.get("/api/v1/meta/question-types/sentence_order/controls")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        distractor_modes = next(control for control in payload["controls"] if control["control_key"] == "distractor_modes")
+        self.assertEqual(distractor_modes["max_selected"], 2)
+        self.assertEqual(distractor_modes["options"][0]["label"], "首句错置")
 
     def test_item_controls_endpoint_returns_current_values(self) -> None:
         with self._patched_runtime():
@@ -403,7 +455,8 @@ class ReviewWorkbenchSmokeTest(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["item_id"], item_id)
-        self.assertTrue(any(control["control_key"] == "difficulty_target" for control in payload["controls"]))
+        self.assertTrue(any(control["control_key"] == "abstraction_level" for control in payload["controls"]))
+        self.assertFalse(any(control["control_key"] == "difficulty_target" for control in payload["controls"]))
 
     def test_diff_endpoint_detects_version_changes(self) -> None:
         with self._patched_runtime():
@@ -425,8 +478,8 @@ class ReviewWorkbenchSmokeTest(TestCase):
 
         item = self.client.get(f"/api/v1/questions/{item_id}").json()
         self.assertIn("evaluation_result", item)
-        self.assertEqual(item["evaluation_result"]["provider"], "openai")
-        self.assertIn("judge_prompt", item["evaluation_result"]["raw"])
+        self.assertEqual(item["evaluation_result"]["provider"], "generation_llm")
+        self.assertIsInstance(item["evaluation_result"]["raw"], dict)
 
     def test_fine_tune_alias_derives_new_version(self) -> None:
         with self._patched_runtime():
@@ -462,13 +515,16 @@ class ReviewWorkbenchSmokeTest(TestCase):
             item_id = self._generate_one().json()["items"][0]["item_id"]
             response = self.client.post(
                 f"/api/v1/questions/{item_id}/review-actions",
-                json={"action": "question_modify", "control_overrides": {"difficulty_target": "hard"}},
+                json={"action": "question_modify", "control_overrides": {"type_slots": {"abstraction_level": "high"}}},
             )
 
         self.assertEqual(response.status_code, 200)
         latest_action = self.client.get(f"/api/v1/questions/{item_id}/review-actions").json()[0]
         self.assertEqual(latest_action["payload"]["requested_action"], "question_modify")
-        self.assertEqual(latest_action["payload"]["patch"]["control_overrides"], {"difficulty_target": "hard"})
+        self.assertEqual(
+            latest_action["payload"]["patch"]["control_overrides"],
+            {"type_slots": {"abstraction_level": "high"}},
+        )
 
     def test_review_action_rejects_unknown_top_level_field(self) -> None:
         with self._patched_runtime():
@@ -612,9 +668,9 @@ class ReviewWorkbenchSmokeTest(TestCase):
         self.assertEqual(latest_action["payload"]["trust_level"], "low")
         self.assertEqual(latest_action["payload"]["audit_reason"], "manual_edit_result_touched_material_and_truth_like_fields")
 
-    def test_confirm_rejects_low_trust_manual_override(self) -> None:
+    def test_confirm_accepts_low_trust_manual_override(self) -> None:
         with self._patched_runtime():
-            item_id = self._generate_one().json()["items"][0]["item_id"]
+            item_id = self._save_base_review_item(item_id="item-manual-confirm")["item_id"]
             self.client.post(
                 f"/api/v1/questions/{item_id}/review-actions",
                 json={
@@ -631,14 +687,11 @@ class ReviewWorkbenchSmokeTest(TestCase):
                     },
                 },
             )
-            self._force_item_approvable(item_id)
             confirm = self.client.post(f"/api/v1/questions/{item_id}/confirm", json={})
-            approve = self.client.post(f"/api/v1/questions/{item_id}/review-actions", json={"action": "approve"})
 
-        self.assertEqual(confirm.status_code, 422)
-        self.assertEqual(approve.status_code, 200)
+        self.assertEqual(confirm.status_code, 200)
         latest_action = self.client.get(f"/api/v1/questions/{item_id}/review-actions").json()[0]
-        self.assertEqual(latest_action["action_type"], "approve")
+        self.assertEqual(latest_action["action_type"], "confirm")
         self.assertEqual(latest_action["payload"]["approval_basis"], "manual_override_high_risk_low")
         self.assertEqual(latest_action["payload"]["preceding_effective_action"], "manual_edit")
         self.assertEqual(latest_action["payload"]["preceding_semantic_class"], "manual_override_high_risk")
@@ -662,7 +715,7 @@ class ReviewWorkbenchSmokeTest(TestCase):
         with self._patched_runtime():
             response = self.client.post(
                 "/api/v1/questions/generate",
-                json={"question_focus": "标题填入题", "difficulty_level": "中等", "count": 2},
+                json={"question_focus": "center_understanding", "difficulty_level": "medium", "count": 2},
             )
             batch_id = response.json()["batch_id"]
             first_item_id = response.json()["items"][0]["item_id"]
@@ -729,8 +782,8 @@ class ReviewWorkbenchSmokeTest(TestCase):
             response = self.client.post(
                 "/api/v1/questions/generate",
                 json={
-                    "question_focus": "标题填入题",
-                    "difficulty_level": "中等",
+                    "question_focus": "center_understanding",
+                    "difficulty_level": "medium",
                     "count": 1,
                     "material_policy": {
                         "allow_reuse": True,
@@ -760,7 +813,7 @@ class ReviewWorkbenchSmokeTest(TestCase):
     def _generate_one(self):
         return self.client.post(
             "/api/v1/questions/generate",
-            json={"question_focus": "标题填入题", "difficulty_level": "中等", "count": 1},
+            json={"question_focus": "center_understanding", "difficulty_level": "medium", "count": 1},
         )
 
     def _force_item_approvable(self, item_id: str) -> None:

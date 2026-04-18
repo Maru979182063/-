@@ -34,7 +34,13 @@ class EvaluationService:
 
         judge_config = self.runtime_config.evaluation.judge
         if not judge_config.enabled:
-            raise RuntimeError("LLM judge is mandatory in the current runtime configuration and cannot be disabled.")
+            return {
+                "status": "skipped",
+                "provider": judge_config.provider,
+                "model_key": judge_config.model_key,
+                "judge_reason": "judge_disabled_runtime_advisory_only",
+                "raw": {},
+            }
 
         judge_prompt = self._build_judge_prompt(
             question_type=question_type,
@@ -55,6 +61,8 @@ class EvaluationService:
             schema_name="judge_result",
             schema=JudgeResult.model_json_schema(),
         )
+        if isinstance(result, dict) and not result.get("provider"):
+            result["provider"] = judge_config.provider
         normalized = JudgeResult.model_validate(result).model_dump()
         normalized["raw"] = {**(normalized.get("raw") or {}), "judge_prompt": judge_prompt}
         return normalized

@@ -26,10 +26,12 @@ class DemoShellSmokeTest(TestCase):
         response = self.client.get("/demo")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("前端工作台演示版", response.text)
+        self.assertIn("言语理解v0.6", response.text)
         self.assertIn('id="builderScreen"', response.text)
         self.assertIn('id="loadingScreen"', response.text)
         self.assertIn('id="resultScreen"', response.text)
+        self.assertIn('id="businessSubtype"', response.text)
+        self.assertIn('id="specialType"', response.text)
         self.assertIn("/demo-static/app_v2.js", response.text)
         self.assertIn("/demo-static/app_v2_zh_patch.js", response.text)
 
@@ -38,8 +40,8 @@ class DemoShellSmokeTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("QUESTION_FOCUS_OPTIONS", response.text)
+        self.assertIn("SPECIAL_TYPE_TREE", response.text)
+        self.assertIn("renderSubtypeOptions", response.text)
         self.assertIn("buildGeneratePayload", response.text)
-        self.assertIn("错误项定点修复", response.text)
         self.assertIn("renderDistractorPatchPanel", response.text)
         self.assertIn("apply-distractor-patch", response.text)
-        self.assertIn("正确项，已锁定", response.text)

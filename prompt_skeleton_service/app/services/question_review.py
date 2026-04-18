@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from app.core.exceptions import DomainError
 from app.schemas.question import QuestionReviewActionRequest
+from app.services.meta_service import MetaService
 from app.services.patch_scope_registry import resolve_action_scope
 from app.services.question_generation import QuestionGenerationService
 from app.services.question_repository import QuestionRepository
@@ -30,6 +31,8 @@ class QuestionReviewService:
     }
     MINOR_EDIT_ALLOWED_INPUT_FIELDS: set[str] = set()
     QUESTION_MODIFY_ALLOWED_INPUT_FIELDS = {"difficulty_target", "extra_constraints", "pattern_id", "type_slots"}
+    QUESTION_MODIFY_MAX_TYPE_SLOT_UPDATES = 2
+    QUESTION_MODIFY_MAX_MULTI_SELECT_VALUES = 2
     TEXT_MODIFY_ALLOWED_INPUT_FIELDS = {"material_id", "material_policy", "material_text"}
     MANUAL_EDIT_ALLOWED_INPUT_FIELDS = {"manual_patch"}
     MANUAL_EDIT_ALLOWED_PATCH_FIELDS = {"analysis", "answer", "material_text", "options", "stem"}
@@ -79,7 +82,7 @@ class QuestionReviewService:
         "question_type",
         "resolved_slots",
     }
-    MATERIAL_BOUNDARY_FIELDS = {"material_id", "material_selection", "material_source", "material_text", "source_tail"}
+    MATERIAL_BOUNDARY_FIELDS = {"material_id", "material_source", "material_text", "source_tail"}
 
     def __init__(self, repository: QuestionRepository, generation_service: QuestionGenerationService) -> None:
         self.repository = repository
@@ -709,6 +712,37 @@ class QuestionReviewService:
             fields.append("analysis")
         return fields
 
+    def _ensure_question_modify_limits(self, payload: Any) -> None:
+        if payload is None:
+            return
+        if not isinstance(payload, dict):
+            raise DomainError(
+                "question_modify type_slots payload must be an object.",
+                status_code=422,
+                details={"field": "type_slots"},
+            )
+        if len(payload) > self.QUESTION_MODIFY_MAX_TYPE_SLOT_UPDATES:
+            raise DomainError(
+                "question_modify accepts at most two type_slot updates per request.",
+                status_code=422,
+                details={
+                    "field": "type_slots",
+                    "limit": self.QUESTION_MODIFY_MAX_TYPE_SLOT_UPDATES,
+                    "received_keys": sorted(str(key) for key in payload.keys()),
+                },
+            )
+        for key, value in payload.items():
+            if isinstance(value, list) and len(value) > self.QUESTION_MODIFY_MAX_MULTI_SELECT_VALUES:
+                raise DomainError(
+                    "question_modify multi-select controls accept at most two values.",
+                    status_code=422,
+                    details={
+                        "field": f"type_slots.{key}",
+                        "limit": self.QUESTION_MODIFY_MAX_MULTI_SELECT_VALUES,
+                        "received_values": value,
+                    },
+                )
+
     def _validate_action_payload_against_item(
         self,
         *,
@@ -719,12 +753,14 @@ class QuestionReviewService:
         control_overrides = request.control_overrides or {}
         request_snapshot = item.get("request_snapshot") or {}
         if action == "question_modify":
+            question_type = str(item.get("question_type") or request_snapshot.get("question_type") or "").strip()
             allowed_extra_constraint_keys = {
                 str(key)
                 for key in (request_snapshot.get("extra_constraints") or {}).keys()
                 if str(key) not in self.INTERNAL_EXTRA_CONSTRAINT_FIELDS
             }
             allowed_type_slot_keys = {str(key) for key in (request_snapshot.get("type_slots") or {}).keys()}
+            allowed_type_slot_keys.update(MetaService.review_control_keys(question_type))
             self._ensure_nested_override_fields(
                 action=action,
                 parent_field="extra_constraints",
@@ -737,6 +773,7 @@ class QuestionReviewService:
                 payload=control_overrides.get("type_slots"),
                 allowed_fields=allowed_type_slot_keys,
             )
+            self._ensure_question_modify_limits(control_overrides.get("type_slots"))
             return
         if action == "manual_edit":
             manual_patch = control_overrides.get("manual_patch")
@@ -1102,7 +1139,11 @@ class QuestionReviewService:
     ) -> dict:
         if request.action in {"approve", "confirm"}:
             validation_result = item.get("validation_result") or {}
-            if item.get("current_status") == "auto_failed" or validation_result.get("passed") is False:
+            was_validation_blocked = (
+                item.get("current_status") == "auto_failed" or validation_result.get("passed") is False
+            )
+            requires_validation_gate = request.action == "approve"
+            if requires_validation_gate and was_validation_blocked:
                 raise DomainError(
                     "Blocked questions cannot be confirmed before revision.",
                     status_code=422,
@@ -1112,7 +1153,7 @@ class QuestionReviewService:
                         "review_status": item.get("statuses", {}).get("review_status"),
                     },
                 )
-            if request.action == "confirm" and (approval_context or {}).get("preceding_trust_level") == "low":
+            if request.action == "approve" and (approval_context or {}).get("preceding_trust_level") == "low":
                 raise DomainError(
                     "Low-trust reviewed items require explicit approve instead of confirm.",
                     status_code=422,
@@ -1123,7 +1164,10 @@ class QuestionReviewService:
             item["latest_action"] = request.action
             item["latest_action_at"] = self.repository._utc_now()
             approval_note = f"approval_basis:{(approval_context or {}).get('approval_basis', 'unknown')}"
-            item["notes"] = item.get("notes", []) + [f"review_action:{request.action}", approval_note]
+            notes = item.get("notes", []) + [f"review_action:{request.action}", approval_note]
+            if request.action == "confirm" and was_validation_blocked:
+                notes.append("manual_confirm_override_validation_gate")
+            item["notes"] = notes
             return item
         if request.action == "discard":
             item["statuses"]["review_status"] = "rejected"

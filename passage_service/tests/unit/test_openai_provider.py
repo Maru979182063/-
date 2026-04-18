@@ -64,17 +64,15 @@ class OpenAIProviderRetryTests(unittest.TestCase):
             _FakeResponse(
                 200,
                 {
-                    "output": [
+                    "choices": [
                         {
-                            "content": [
-                                {
-                                    "type": "output_text",
-                                    "text": json.dumps({"decision": "accept"}),
-                                }
-                            ]
+                            "message": {
+                                "content": json.dumps({"decision": "accept"})
+                            }
                         }
                     ]
                 },
+                path="/chat/completions",
             ),
         ]
 
@@ -124,26 +122,29 @@ class OpenAIProviderRetryTests(unittest.TestCase):
 
         self.assertEqual(_FakeClient.calls, 1)
 
-    def test_generate_json_falls_back_to_chat_completions_when_responses_gateway_is_unavailable(self) -> None:
+    def test_generate_json_falls_back_to_responses_when_chat_completions_is_unavailable(self) -> None:
         provider = OpenAIResponsesProvider.__new__(OpenAIResponsesProvider)
         provider.settings = type("Settings", (), {"openai_api_key": "test-key", "openai_base_url": "https://example.test"})()
         provider.timeout_seconds = 1
         provider.max_attempts = 2
 
         _FakeClient.responses = [
-            _FakeResponse(502, {"error": "bad gateway"}, path="/responses"),
+            _FakeResponse(404, {"error": "not found"}, path="/chat/completions"),
             _FakeResponse(
                 200,
                 {
-                    "choices": [
+                    "output": [
                         {
-                            "message": {
-                                "content": json.dumps({"decision": "fallback_accept"})
-                            }
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": json.dumps({"decision": "fallback_accept"}),
+                                }
+                            ]
                         }
-                    ]
+                    ],
                 },
-                path="/chat/completions",
+                path="/responses",
             ),
         ]
 
@@ -164,4 +165,4 @@ class OpenAIProviderRetryTests(unittest.TestCase):
             )
 
         self.assertEqual(result["decision"], "fallback_accept")
-        self.assertEqual(_FakeClient.paths, ["/responses", "/chat/completions"])
+        self.assertEqual(_FakeClient.paths, ["/chat/completions", "/responses"])

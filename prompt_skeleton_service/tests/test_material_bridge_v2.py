@@ -14,6 +14,10 @@ def _install_test_stubs() -> None:
         fastapi.FastAPI = type("FastAPI", (), {})
         fastapi.Request = type("Request", (), {})
         sys.modules["fastapi"] = fastapi
+    if "fastapi.exceptions" not in sys.modules:
+        exceptions = types.ModuleType("fastapi.exceptions")
+        exceptions.RequestValidationError = type("RequestValidationError", (Exception,), {})
+        sys.modules["fastapi.exceptions"] = exceptions
     if "fastapi.responses" not in sys.modules:
         responses = types.ModuleType("fastapi.responses")
         responses.JSONResponse = type("JSONResponse", (), {})
@@ -251,6 +255,60 @@ class MaterialBridgeV2UnitTest(TestCase):
 
         self.assertGreater(result["score"], -999.0)
         self.assertIn("sentence_order_unit_count_penalty", result["reason"])
+
+    def test_score_candidate_applies_stronger_reuse_penalty(self) -> None:
+        baseline = self.service._score_candidate(
+            {
+                "quality_score": 0.8,
+                "text": "绀轰緥鏉愭枡",
+                "article_profile": {},
+                "local_profile": {},
+                "retrieval_match_profile": {},
+                "business_feature_profile": {},
+                "question_ready_context": {},
+                "business_card_recommendations": [],
+                "usage_count": 0,
+            },
+            topic=None,
+            text_direction=None,
+            document_genre=None,
+            material_structure_label=None,
+            material_policy=None,
+            has_explicit_question_card=False,
+            requested_business_card_ids=[],
+            structure_constraints={},
+            query_terms=[],
+            target_length=None,
+            preference_profile=None,
+        )
+
+        reused = self.service._score_candidate(
+            {
+                "quality_score": 0.8,
+                "text": "绀轰緥鏉愭枡",
+                "article_profile": {},
+                "local_profile": {},
+                "retrieval_match_profile": {},
+                "business_feature_profile": {},
+                "question_ready_context": {},
+                "business_card_recommendations": [],
+                "usage_count": 2,
+            },
+            topic=None,
+            text_direction=None,
+            document_genre=None,
+            material_structure_label=None,
+            material_policy=None,
+            has_explicit_question_card=False,
+            requested_business_card_ids=[],
+            structure_constraints={},
+            query_terms=[],
+            target_length=None,
+            preference_profile=None,
+        )
+
+        self.assertAlmostEqual(baseline["score"] - reused["score"], 0.36, places=4)
+        self.assertIn("reuse_penalty=0.36", reused["reason"])
 
     def test_search_candidates_filters_review_pending_remote_items(self) -> None:
         self.service._post_v2_search = Mock(

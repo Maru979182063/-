@@ -1,4 +1,4 @@
-schema_version: material_card_registry.v1
+﻿schema_version: material_card_registry.v1
 registry_id: sentence_fill_material_cards_v1
 business_family_id: sentence_fill
 registry_role: intermediate_structure_cards
@@ -9,7 +9,7 @@ notes:
 cards:
 - card_id: fill_material.opening_summary
   display_name: 段首总起卡
-  selection_core: 空位位于段首，需要一句总起句统摄后文多个信息维度或分述方向。
+  selection_core: 空位位于段首，需要一句总起/统摄/定向句为后文建立稳定阅读方向。后文可以是多维分述，也可以围绕同一对象、任务或判断持续展开；不要求答案措辞已经接近唯一。
   structures:
   - 段首空位
   - 总领后文
@@ -23,13 +23,22 @@ cards:
   - 后文信息密集且维度较多
   - 存在明显分述关系
   - 可被一句话高位统摄
+  - 后文持续围绕同一对象、任务或判断展开
+  - first sentence already establishes the paragraph-level judgment, while the next 1-2 sentences mainly stay within the same object and serve as support rather than opening a new block
+  - the second sentence may concretize the same evaluation through ownership, usage restriction, scene condition, or one direct explanatory fact, without breaking the opening summary role
+  - restored opening works best as a full declarative summary judgment rather than a quote-led or question-led frame
   avoid_signals:
-  - 后文只单线推进
+  - 后文并不回收段首方向
   - 后文主题散乱不可压缩
   - 总起句会抢占后文结论功能
+  - opening is mainly framed by a proverb, quotation, poem line, or rhetorical question
+  - missing unit is still grammatically bound to the first sentence rather than functioning as a stand-alone summary sentence
+  - first sentence mainly serves as a shell for a quoted maxim, proverb, or question lead
+  - later discourse immediately unfolds as first/second reasons, Q-and-A, or explicit issue framing for the opening shell
   candidate_contract:
     raw_policy: whole_passage 或 multi_paragraph_unit 优先
     allowed_candidate_types: &id001
+    - closed_span
     - whole_passage
     - multi_paragraph_unit
     preferred_candidate_types: *id001
@@ -40,200 +49,202 @@ cards:
   - 只抓局部功能
   - 主题不匹配
 - card_id: fill_material.bridge_transition
-  display_name: 承上启下卡
-  selection_core: 空位位于段中，需要同时承接前文对象并自然引出后文下一层展开。
+  display_name: 鎵夸笂鍚笅鍗?
+  selection_core: 绌轰綅浣嶄簬娈典腑锛岄渶瑕佸悓鏃舵壙鎺ュ墠鏂囧璞″苟鑷劧寮曞嚭鍚庢枃涓嬩竴灞傚睍寮€銆?
   structures:
-  - 段中桥梁
-  - 双向验证
-  - 承前启后
+  - 娈典腑妗ユ
+  - 鍙屽悜楠岃瘉
+  - 鎵垮墠鍚悗
   required_signals:
     blank_position: middle
     function_type: bridge
     bidirectional_validation: '>=0.60'
     logic_relation: continuation
   preferred_signals:
-  - 前文先提出对象/问题
-  - 后文继续说明作用、机制或应用
-  - 空位明显承担过渡功能
+  - 鍓嶆枃鍏堟彁鍑哄璞?闂
+  - 鍚庢枃缁х画璇存槑浣滅敤銆佹満鍒舵垨搴旂敤
+  - 绌轰綅鏄庢樉鎵挎媴杩囨浮鍔熻兘
   avoid_signals:
-  - 只需单向连接即可
-  - 后文并未真正展开新层
-  - 前后话题断裂过强
+  - 鍙渶鍗曞悜杩炴帴鍗冲彲
+  - 鍚庢枃骞舵湭鐪熸灞曞紑鏂板眰
+  - 鍓嶅悗璇濋鏂杩囧己
   candidate_contract:
-    raw_policy: whole_passage 或 closed_span
+    raw_policy: whole_passage 鎴?closed_span
     allowed_candidate_types:
     - whole_passage
     - closed_span
     preferred_candidate_types: []
-  card_bias: 承接过渡型填空
+  card_bias: 鎵挎帴杩囨浮鍨嬪～绌?
   default_generation_archetype: bridge_transition
   distractor_bias:
-  - 解释提前
-  - 只承前不启后
-  - 话题断裂
+  - 瑙ｉ噴鎻愬墠
+  - 鍙壙鍓嶄笉鍚悗
+  - 璇濋鏂
 - card_id: fill_material.middle_focus_shift
-  display_name: 中间承接聚焦卡
-  selection_core: 前文总论较宽，后文开始集中解释某个关键因素，空位负责完成“收束到焦点”。
+  display_name: 涓棿鎵挎帴鑱氱劍鍗?
+  selection_core: 鍓嶆枃鎬昏杈冨锛屽悗鏂囧紑濮嬮泦涓В閲婃煇涓叧閿洜绱狅紝绌轰綅璐熻矗瀹屾垚鈥滄敹鏉熷埌鐒︾偣鈥濄€?
   structures:
-  - 段中聚焦
-  - 总到分
-  - 焦点切换
+  - 娈典腑鑱氱劍
+  - 鎬诲埌鍒?
+  - 鐒︾偣鍒囨崲
   required_signals:
     blank_position: middle
     function_type: lead_next
     logic_relation: focus_shift
     context_dependency: '>=0.70'
   preferred_signals:
-  - 前文提出“因素众多/方面很多”等宽口径表述
-  - 后文只聚焦一个关键因素
-  - 空位需要做压缩与收束
+  - 鍓嶆枃鎻愬嚭鈥滃洜绱犱紬澶?鏂归潰寰堝鈥濈瓑瀹藉彛寰勮〃杩?
+  - 鍚庢枃鍙仛鐒︿竴涓叧閿洜绱?
+  - 绌轰綅闇€瑕佸仛鍘嬬缉涓庢敹鏉?
   avoid_signals:
-  - 后文仍是并列展开
-  - 前文未形成总论
-  - 焦点不唯一
+  - 鍚庢枃浠嶆槸骞跺垪灞曞紑
+  - 鍓嶆枃鏈舰鎴愭€昏
+  - 鐒︾偣涓嶅敮涓€
   candidate_contract:
-    raw_policy: closed_span 或 multi_paragraph_unit
+    raw_policy: closed_span 鎴?multi_paragraph_unit
     allowed_candidate_types:
     - closed_span
     - multi_paragraph_unit
     preferred_candidate_types: []
-  card_bias: 聚焦转入型填空
+  card_bias: 鑱氱劍杞叆鍨嬪～绌?
   default_generation_archetype: middle_focus_shift
   distractor_bias:
-  - 单一局部因素项
-  - 空泛综合项
-  - 焦点错位项
+  - 鍗曚竴灞€閮ㄥ洜绱犻」
+  - 绌烘硾缁煎悎椤?
+  - 鐒︾偣閿欎綅椤?
 - card_id: fill_material.middle_explanation
-  display_name: 中间解释卡
-  selection_core: 前文抛出抽象概念或判断，后文举例或细化，空位承担解释桥梁作用。
+  display_name: 涓棿瑙ｉ噴鍗?
+  selection_core: 鍓嶆枃鎶涘嚭鎶借薄姒傚康鎴栧垽鏂紝鍚庢枃涓句緥鎴栫粏鍖栵紝绌轰綅鎵挎媴瑙ｉ噴妗ユ浣滅敤銆?
   structures:
-  - 概念后置解释
-  - 解释层
-  - 功能桥梁
+  - 姒傚康鍚庣疆瑙ｉ噴
+  - 瑙ｉ噴灞?
+  - 鍔熻兘妗ユ
   required_signals:
     blank_position: middle
     function_type: carry_previous
     logic_relation: explanation
   preferred_signals:
-  - 前文概念需要说明
-  - 后文继续举例或细化
-  - 空位更像定义/解释句
+  - 鍓嶆枃姒傚康闇€瑕佽鏄?
+  - 鍚庢枃缁х画涓句緥鎴栫粏鍖?
+  - 绌轰綅鏇村儚瀹氫箟/瑙ｉ噴鍙?
   avoid_signals:
-  - 空位更像总结句
-  - 空位直接是案例句
-  - 前文概念已被解释完成
+  - 绌轰綅鏇村儚鎬荤粨鍙?
+  - 绌轰綅鐩存帴鏄渚嬪彞
+  - 鍓嶆枃姒傚康宸茶瑙ｉ噴瀹屾垚
   candidate_contract:
-    raw_policy: closed_span 优先
+    raw_policy: closed_span 浼樺厛
     allowed_candidate_types: &id002
     - closed_span
     preferred_candidate_types: *id002
-  card_bias: 解释补足型填空
+  card_bias: 瑙ｉ噴琛ヨ冻鍨嬪～绌?
   default_generation_archetype: middle_explanation
   distractor_bias:
-  - 总结句错位
-  - 案例句提前
-  - 功能层级跳跃
+  - 鎬荤粨鍙ラ敊浣?
+  - 妗堜緥鍙ユ彁鍓?
+  - 鍔熻兘灞傜骇璺宠穬
 - card_id: fill_material.ending_summary
-  display_name: 尾句总结卡
-  selection_core: 空位位于段尾，前文围绕单一问题推进，需要一句总结句统一回收主线任务。
+  display_name: 灏惧彞鎬荤粨鍗?
+  selection_core: 绌轰綅浣嶄簬娈靛熬锛屽墠鏂囧洿缁曞崟涓€闂鎺ㄨ繘锛岄渶瑕佷竴鍙ユ€荤粨鍙ョ粺涓€鍥炴敹涓荤嚎浠诲姟銆?
   structures:
-  - 段尾收束
-  - 主线提炼
-  - 对象绑定
+  - 娈靛熬鏀舵潫
+  - 涓荤嚎鎻愮偧
+  - 瀵硅薄缁戝畾
   required_signals:
     blank_position: ending
     function_type: conclusion
     logic_relation: summary
   preferred_signals:
-  - 前文信息点较多但主线单一
-  - 段尾有明显总结需求
-  - 正确项需保留对象与任务指向
+  - 鍓嶆枃淇℃伅鐐硅緝澶氫絾涓荤嚎鍗曚竴
+  - 娈靛熬鏈夋槑鏄炬€荤粨闇€姹?
+  - 姝ｇ‘椤归渶淇濈暀瀵硅薄涓庝换鍔℃寚鍚?
   avoid_signals:
-  - 结尾仍需新增论证
-  - 只有局部结论无需全段回收
-  - 总结过宽导致失焦
+  - 缁撳熬浠嶉渶鏂板璁鸿瘉
+  - 鍙湁灞€閮ㄧ粨璁烘棤闇€鍏ㄦ鍥炴敹
+  - 鎬荤粨杩囧瀵艰嚧澶辩劍
   candidate_contract:
-    raw_policy: whole_passage 或 multi_paragraph_unit
+    raw_policy: whole_passage 鎴?multi_paragraph_unit
     allowed_candidate_types:
+    - closed_span
     - whole_passage
     - multi_paragraph_unit
     preferred_candidate_types: []
-  card_bias: 段尾概括型填空
+  card_bias: 娈靛熬姒傛嫭鍨嬪～绌?
   default_generation_archetype: ending_summary
   distractor_bias:
-  - 泛化概括
-  - 偏离主线
-  - 方向相反
+  - 娉涘寲姒傛嫭
+  - 鍋忕涓荤嚎
+  - 鏂瑰悜鐩稿弽
 - card_id: fill_material.ending_elevation
-  display_name: 尾句升华卡
-  selection_core: 前文以实验、案例或事实为主，空位位于段尾，需要回收为更高一层的观点或价值判断。
+  display_name: 灏惧彞鍗囧崕鍗?
+  selection_core: 鍓嶆枃浠ュ疄楠屻€佹渚嬫垨浜嬪疄涓轰富锛岀┖浣嶄綅浜庢灏撅紝闇€瑕佸洖鏀朵负鏇撮珮涓€灞傜殑瑙傜偣鎴栦环鍊煎垽鏂€?
   structures:
-  - 案例回收
-  - 观点升华
-  - 事实到价值
+  - 妗堜緥鍥炴敹
+  - 瑙傜偣鍗囧崕
+  - 浜嬪疄鍒颁环鍊?
   required_signals:
     blank_position: ending
     function_type: conclusion
     logic_relation: elevation
     abstraction_level: '>=0.60'
   preferred_signals:
-  - 前文案例充分
-  - 尾句适合回到中心观点
-  - 升华不脱离事实依据
+  - 鍓嶆枃妗堜緥鍏呭垎
+  - 灏惧彞閫傚悎鍥炲埌涓績瑙傜偣
+  - 鍗囧崕涓嶈劚绂讳簨瀹炰緷鎹?
   avoid_signals:
-  - 前文本就是抽象论证
-  - 升华空间过小
-  - 正确项停留在案例层
+  - 鍓嶆枃鏈氨鏄娊璞¤璇?
+  - 鍗囧崕绌洪棿杩囧皬
+  - 姝ｇ‘椤瑰仠鐣欏湪妗堜緥灞?
   candidate_contract:
-    raw_policy: whole_passage 优先
+    raw_policy: whole_passage 浼樺厛
     allowed_candidate_types: &id003
+    - closed_span
     - whole_passage
     preferred_candidate_types: *id003
-  card_bias: 案例升华型填空
+  card_bias: 妗堜緥鍗囧崕鍨嬪～绌?
   default_generation_archetype: ending_elevation
   distractor_bias:
-  - 跑题比较
-  - 单一品质项
-  - 物种/对象差异项
+  - 璺戦姣旇緝
+  - 鍗曚竴鍝佽川椤?
+  - 鐗╃/瀵硅薄宸紓椤?
 - card_id: fill_material.inserted_reference_match
-  display_name: 定位插入卡
-  selection_core: 空位为插入型，需要同时匹配前后文中的指代对象、主语或理论说明范围。
+  display_name: 瀹氫綅鎻掑叆鍗?
+  selection_core: 绌轰綅涓烘彃鍏ュ瀷锛岄渶瑕佸悓鏃跺尮閰嶅墠鍚庢枃涓殑鎸囦唬瀵硅薄銆佷富璇垨鐞嗚璇存槑鑼冨洿銆?
   structures:
-  - 插入定位
-  - 指代匹配
-  - 前后双卡位
+  - 鎻掑叆瀹氫綅
+  - 鎸囦唬鍖归厤
+  - 鍓嶅悗鍙屽崱浣?
   required_signals:
     blank_position: inserted
     function_type: reference_summary
     logic_relation: reference_match
     reference_dependency: '>=0.60'
   preferred_signals:
-  - 前文提出理论/对象
-  - 后文继续解释其适用范围
-  - 候选句能同时卡住前后文
+  - 鍓嶆枃鎻愬嚭鐞嗚/瀵硅薄
+  - 鍚庢枃缁х画瑙ｉ噴鍏堕€傜敤鑼冨洿
+  - 鍊欓€夊彞鑳藉悓鏃跺崱浣忓墠鍚庢枃
   avoid_signals:
-  - 无明确指代对象
-  - 只能承前不能启后
-  - 语义近似但位置不对
+  - 鏃犳槑纭寚浠ｅ璞?
+  - 鍙兘鎵垮墠涓嶈兘鍚悗
+  - 璇箟杩戜技浣嗕綅缃笉瀵?
   candidate_contract:
-    raw_policy: insertion_context_unit 或 closed_span
+    raw_policy: insertion_context_unit 鎴?closed_span
     allowed_candidate_types:
     - closed_span
     - insertion_context_unit
     preferred_candidate_types: []
-  card_bias: 插入定位型填空
+  card_bias: 鎻掑叆瀹氫綅鍨嬪～绌?
   default_generation_archetype: inserted_reference_match
   distractor_bias:
-  - 指代缺失
-  - 只承前不启后
-  - 勉强承接但无法引后文
+  - 鎸囦唬缂哄け
+  - 鍙壙鍓嶄笉鍚悗
+  - 鍕夊己鎵挎帴浣嗘棤娉曞紩鍚庢枃
 - card_id: fill_material.comprehensive_multi_match
-  display_name: 综合多维匹配卡
-  selection_core: 空位同时受位置、逻辑、指代等多重条件制约，必须做综合判断而非单维定位。
+  display_name: 缁煎悎澶氱淮鍖归厤鍗?
+  selection_core: 绌轰綅鍚屾椂鍙椾綅缃€侀€昏緫銆佹寚浠ｇ瓑澶氶噸鏉′欢鍒剁害锛屽繀椤诲仛缁煎悎鍒ゆ柇鑰岄潪鍗曠淮瀹氫綅銆?
   structures:
-  - 多条件叠加
-  - 高依赖
-  - 综合判定
+  - 澶氭潯浠跺彔鍔?
+  - 楂樹緷璧?
+  - 缁煎悎鍒ゅ畾
   required_signals:
     function_type: bridge
     logic_relation: multi_constraint
@@ -241,22 +252,196 @@ cards:
     bidirectional_validation: '>=0.70'
     reference_dependency: '>=0.70'
   preferred_signals:
-  - 至少两个以上线索共同决定答案
-  - 既有对象限制又有结构位置要求
-  - 单看关键词无法作答
+  - 鑷冲皯涓や釜浠ヤ笂绾跨储鍏卞悓鍐冲畾绛旀
+  - 鏃㈡湁瀵硅薄闄愬埗鍙堟湁缁撴瀯浣嶇疆瑕佹眰
+  - 鍗曠湅鍏抽敭璇嶆棤娉曚綔绛?
   avoid_signals:
-  - 只需单维定位即可
-  - 逻辑或位置约束很弱
-  - 指代关系模糊不可判定
+  - 鍙渶鍗曠淮瀹氫綅鍗冲彲
+  - 閫昏緫鎴栦綅缃害鏉熷緢寮?
+  - 鎸囦唬鍏崇郴妯＄硦涓嶅彲鍒ゅ畾
   candidate_contract:
-    raw_policy: multi_paragraph_unit 优先
+    raw_policy: multi_paragraph_unit 浼樺厛
     allowed_candidate_types: &id004
     - multi_paragraph_unit
     preferred_candidate_types: *id004
-  card_bias: 综合高阶型填空
+  card_bias: 缁煎悎楂橀樁鍨嬪～绌?
   default_generation_archetype: comprehensive_multi_match
   distractor_bias:
-  - 仅指代匹配
-  - 仅逻辑匹配
-  - 仅结构匹配
+  - 浠呮寚浠ｅ尮閰?
+  - 浠呴€昏緫鍖归厤
+  - 浠呯粨鏋勫尮閰?
+- card_id: fill_material.opening_topic_intro
+  display_name: Opening Topic Intro
+  selection_core: Opening blank that establishes the passage entry point by introducing the topic, object, issue scope, or evaluative direction that the following passage keeps expanding, without already compressing the whole passage into one summary judgment; this especially includes quote-led, proverb-led, poem-led, question-led, or scene-setting openers.
+  structures:
+  - opening_intro
+  - topic_entry
+  - scope_anchor
+  required_signals:
+    blank_position: opening
+    function_type: topic_intro
+    logic_relation: continuation
+  preferred_signals:
+  - topic/object is explicitly positioned at the opening
+  - opening may take the form of a proverb, quotation, poem line, question, or scene-setting line that frames the topic
+  - opening is introduced by forms like 姝ｆ墍璋? 鍙よ瘲浜? 淇楄瘽璇? 璇曢棶, 閭ｄ箞, or a quoted maxim
+  - following sentences expand on that object
+  - following sentences keep the same issue scope or stance direction
+  - downstream may immediately unfold as reason enumeration, example explanation, or stance justification for the opening frame
+  - one immediate case-launching or example sentence after the opener is still acceptable when that example is only used to unfold the same topic entry
+  - quote-led or slogan-led openings that immediately lock onto a historical subject, commemorative object, or collective value direction still count as topic-entry units
+  - the opening primarily frames the topic or stance rather than fully summarizing all downstream claims
+  - replacing it with a generic opener would damage topic stability or scope anchoring
+  avoid_signals:
+  - direct one-sentence condensation of the whole downstream argument
+  - generic opening sentence with no object, scope, or stance anchor
+  - no downstream expansion on the opening object or issue
+  - broad opener remains acceptable after removing the current slot role
+  - the example/background block itself has already become the real main unit, while the opener can be freely replaced
+  candidate_contract:
+    raw_policy: closed_span or whole_passage
+    allowed_candidate_types:
+    - closed_span
+    - whole_passage
+    preferred_candidate_types: []
+  card_bias: opening topic-entry fill
+  default_generation_archetype: topic_introduction
+  distractor_bias:
+  - generic opener
+  - background sentence as topic lead
+  - no downstream recovery
+- card_id: fill_material.opening_clause_lead
+  display_name: Opening Clause Lead
+  selection_core: Opening blank inside the first sentence where the missing clause completes the sentence-internal lead, stance, or scope-setting frame rather than acting as a full independent opening sentence; the restored clause may carry the paragraph's global judgment, but it is still syntactically bound to the first sentence.
+  structures:
+  - opening_clause
+  - intra_sentence_lead
+  - local_topic_binding
+  required_signals:
+    blank_position: opening
+    function_type: topic_intro
+    logic_relation: continuation
+    context_dependency: '>=0.56'
+  preferred_signals:
+  - blank lives inside the first sentence
+  - the clause must co-complete the sentence with surrounding words
+  - topic entry or evaluative direction depends on sentence-internal structure
+  - later sentences continue the stance, object, or policy frame established by the first sentence
+  - later sentences may enumerate reasons, evidence, or consequences for the restored first-sentence judgment
+  - restored clause is followed by explicit reason listing such as 绗竴涓師鍥?绗簩涓師鍥? 棣栧厛/鍏舵, 涓€鏂归潰/鍙︿竴鏂归潰
+  - removing the clause would collapse the first sentence's evaluative or policy stance, even if later discourse still expands that same stance
+  - first sentence may take the form of a contrastive claim such as A says ... but research/practice shows ..., with the next sentence supplying direct evidence for that claim
+  avoid_signals:
+  - full-sentence summary opener
+  - middle bridge disguised as opening
+  - no clear clause boundary role
+  - later sentences do not inherit the first-sentence frame
+  - quote-led or proverb-led opening whose main role is topic framing rather than sentence-internal completion
+  candidate_contract:
+    raw_policy: closed_span preferred
+    allowed_candidate_types:
+    - closed_span
+    preferred_candidate_types:
+    - closed_span
+  card_bias: opening clause-level fill
+  default_generation_archetype: topic_introduction
+  distractor_bias:
+  - whole-sentence summary confusion
+  - middle bridge confusion
+  - unconstrained clause insertion
+- card_id: fill_material.middle_enumeration_completion
+  display_name: Middle Enumeration Completion
+  selection_core: Middle blank inside an enumeration/list frame where the missing unit is a bounded list item rather than a generic bridge sentence.
+  structures:
+  - enumeration_frame
+  - item_completion
+  - bounded_local_slot
+  required_signals:
+    blank_position: middle
+    function_type: carry_previous
+    logic_relation: explanation
+    context_dependency: '>=0.60'
+  preferred_signals:
+  - explicit list or numbered frame
+  - blank is clearly one missing item in the frame
+  - answer is constrained by both local slot role and surrounding list logic
+  avoid_signals:
+  - generic bridge-only sentence
+  - no enumeration frame
+  - many abstract fillers would fit equally well
+  candidate_contract:
+    raw_policy: closed_span preferred
+    allowed_candidate_types:
+    - closed_span
+    preferred_candidate_types:
+    - closed_span
+  card_bias: enumerated-item completion fill
+  default_generation_archetype: middle_explanation
+  distractor_bias:
+  - generic transition
+  - wrong item role
+  - context echo without true completion
+- card_id: fill_material.ending_clause_summary
+  display_name: Ending Clause Summary
+  selection_core: Ending blank inside the closing sentence where the missing clause is the key closing component, not a brand-new argument.
+  structures:
+  - ending_clause
+  - local_closure
+  - closing_component
+  required_signals:
+    blank_position: ending
+    function_type: conclusion
+    logic_relation: summary
+    context_dependency: '>=0.56'
+  preferred_signals:
+  - blank is part of the last sentence
+  - sentence only closes after the clause is restored
+  - clause recovers the passage task instead of opening new reasoning
+  avoid_signals:
+  - decorative phrase only
+  - new argument introduced too late
+  - no real closing need
+  candidate_contract:
+    raw_policy: closed_span or whole_passage
+    allowed_candidate_types:
+    - closed_span
+    - whole_passage
+    preferred_candidate_types: []
+  card_bias: ending clause-level closure fill
+  default_generation_archetype: ending_summary
+  distractor_bias:
+  - closing ornament
+  - late new claim
+  - no task recovery
+- card_id: fill_material.ending_countermeasure
+  display_name: Ending Countermeasure
+  selection_core: Ending blank that lands the passage on a countermeasure/action direction after analysis or diagnosis.
+  structures:
+  - ending_countermeasure
+  - problem_to_action
+  - action_landing
+  required_signals:
+    blank_position: ending
+    function_type: countermeasure
+    logic_relation: continuation
+  preferred_signals:
+  - earlier text diagnoses a problem or tension
+  - blank lands on an action or countermeasure direction
+  - replacing it with plain summary would lose the action landing
+  avoid_signals:
+  - action call with no diagnosed issue
+  - pure value statement without action landing
+  - generic conclusion sentence
+  candidate_contract:
+    raw_policy: closed_span or whole_passage
+    allowed_candidate_types:
+    - closed_span
+    - whole_passage
+    preferred_candidate_types: []
+  card_bias: ending countermeasure fill
+  default_generation_archetype: propose_countermeasure
+  distractor_bias:
+  - generic conclusion
+  - value-only uplift
+  - action without diagnostic grounding
 normalized_from: sentence_fill_intermediate_material_cards.yaml

@@ -23,15 +23,44 @@ class SourceQuestionAnalyzerUnitTest(TestCase):
     def setUp(self) -> None:
         self.analyzer = SourceQuestionAnalyzer()
 
+    def test_infer_request_target_routes_title_like_stem_to_center_understanding(self) -> None:
+        source_question = SourceQuestionPayload(
+            passage="研究人员分析了海洋温度变化如何影响全球气候，并进一步解释其预测价值。",
+            stem="下列最适合作为这段文字标题的是：",
+            options={"A": "海洋温度", "B": "全球气候", "C": "预测模型", "D": "变化机制"},
+        )
+
+        result = self.analyzer.infer_request_target(source_question)
+
+        self.assertEqual(result["question_type"], "main_idea")
+        self.assertEqual(result["business_subtype"], "center_understanding")
+
+    def test_infer_request_target_routes_best_title_stem_to_center_understanding(self) -> None:
+        source_question = SourceQuestionPayload(
+            passage="研究围绕社区花园如何从单一景观设施转向兼具生态、教育和社会互动功能的公共空间展开。",
+            stem="下列最恰当的标题是：",
+            options={
+                "A": "社区花园的财政投入",
+                "B": "社区花园的复合公共价值",
+                "C": "景观设计的技术争议",
+                "D": "自然教育的流行趋势",
+            },
+        )
+
+        result = self.analyzer.infer_request_target(source_question)
+
+        self.assertEqual(result["question_type"], "main_idea")
+        self.assertEqual(result["business_subtype"], "center_understanding")
+
     def test_sentence_order_analysis_normalizes_reference_unit_count_to_six(self) -> None:
         source_question = SourceQuestionPayload(
             passage="。".join(f"这是第{i}句" for i in range(1, 25)) + "。",
             stem="将下列句子重新排列，语序正确的一项是",
             options={
-                "A": "①②③④⑤⑥",
-                "B": "⑥⑤④③②①",
-                "C": "①③⑤②④⑥",
-                "D": "②①③④⑥⑤",
+                "A": "①②③④",
+                "B": "②③④①",
+                "C": "①③②④",
+                "D": "④①②③",
             },
         )
 

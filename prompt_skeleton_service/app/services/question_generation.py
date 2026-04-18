@@ -1,6 +1,5 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 import random
@@ -27,9 +26,11 @@ from app.schemas.question import (
 )
 from app.schemas.runtime import QuestionRuntimeConfig
 from app.services.evaluation_service import EvaluationService
+from app.services.distill_runtime_overlay import DistillRuntimeOverlayService
 from app.services.input_decoder import DIFFICULTY_MAPPING
 from app.services.llm_gateway import LLMGatewayService
 from app.services.material_bridge import MaterialBridgeService
+from app.services.meta_service import MetaService
 from app.services.prompt_orchestrator import PromptOrchestratorService
 from app.services.question_card_binding import QuestionCardBindingService
 from app.services.question_generation_prompt_assets import load_question_generation_prompt_assets
@@ -104,14 +105,19 @@ class MaterialRefinementDraft(BaseModel):
 class QuestionGenerationService:
     MATERIAL_REFINEMENT_READABILITY_ASSIST = "readability_assist"
     MATERIAL_REFINEMENT_THEME_PRESERVING = "theme_preserving_rewrite"
+    MATERIAL_REFINEMENT_FAMILY_COMPLIANCE = "family_shape_compliance"
     JUDGE_OVERALL_PASS_THRESHOLD = 80
     JUDGE_MATERIAL_ALIGNMENT_THRESHOLD = 70
     JUDGE_ANSWER_ANALYSIS_THRESHOLD = 70
     JUDGE_HARD_DIFFICULTY_THRESHOLD = 68
     QUALITY_REPAIR_RETRY_THRESHOLD = 84
+    CONSISTENCY_HARD_FAIL_CHECKS = (
+        "analysis_answer_consistency",
+        "sentence_fill_anchor_grounding",
+        "sentence_order_reference_unit_alignment",
+    )
     MAX_ALIGNMENT_RETRIES = 2
     MAX_QUALITY_REPAIR_RETRIES = 2
-    RACE_CANDIDATE_COUNT = 2
     INTERNAL_EXTRA_CONSTRAINT_FIELDS = {
         "reference_business_cards",
         "reference_query_terms",
@@ -188,6 +194,46 @@ class QuestionGenerationService:
                 "logic_relation": "multi_constraint",
             },
         },
+        ("sentence_order", "dual_anchor_lock"): {
+            "preferred_business_card_ids": ["sentence_order__head_tail_lock__abstract"],
+            "structure_constraints": {
+                "opening_anchor_type": "explicit_topic",
+                "middle_structure_type": "local_binding",
+                "closing_anchor_type": "conclusion",
+            },
+        },
+        ("sentence_order", "carry_parallel_expand"): {
+            "preferred_business_card_ids": ["sentence_order__deterministic_binding__abstract"],
+            "structure_constraints": {
+                "opening_anchor_type": "upper_context_link",
+                "middle_structure_type": "parallel_expansion",
+                "closing_anchor_type": "summary",
+            },
+        },
+        ("sentence_order", "viewpoint_reason_action"): {
+            "preferred_business_card_ids": ["sentence_order__discourse_logic__abstract"],
+            "structure_constraints": {
+                "opening_anchor_type": "viewpoint_opening",
+                "middle_structure_type": "cause_effect_chain",
+                "closing_anchor_type": "summary",
+            },
+        },
+        ("sentence_order", "problem_solution_case_blocks"): {
+            "preferred_business_card_ids": ["sentence_order__discourse_logic__abstract"],
+            "structure_constraints": {
+                "opening_anchor_type": "problem_opening",
+                "middle_structure_type": "problem_solution_blocks",
+                "closing_anchor_type": "case_support",
+            },
+        },
+        ("sentence_order", "timeline_action_sequence"): {
+            "preferred_business_card_ids": ["sentence_order__timeline_action_sequence__abstract"],
+            "structure_constraints": {
+                "opening_anchor_type": "background_intro",
+                "middle_structure_type": "cause_effect_chain",
+                "closing_anchor_type": "summary",
+            },
+        },
     }
     def __init__(
         self,
@@ -209,6 +255,7 @@ class QuestionGenerationService:
         self.snapshot_builder = QuestionSnapshotBuilder(runtime_config)
         self.evaluator = EvaluationService(runtime_config, prompt_template_registry)
         self.question_card_binding = QuestionCardBindingService()
+        self.distill_runtime_overlay = DistillRuntimeOverlayService()
         self.source_question_analyzer = SourceQuestionAnalyzer(runtime_config)
         self.source_question_parser = SourceQuestionParserService(runtime_config)
         self.prompt_assets = load_question_generation_prompt_assets()
@@ -229,12 +276,7 @@ class QuestionGenerationService:
         request_snapshot: dict[str, Any] | None,
         material: MaterialSelectionResult,
     ) -> str:
-        snapshot = request_snapshot or {}
-        question_type = str(snapshot.get("question_type") or "").strip()
-        business_subtype = str(snapshot.get("business_subtype") or "").strip()
-        if question_type == "main_idea" and business_subtype == "center_understanding":
-            return cls.MATERIAL_REFINEMENT_THEME_PRESERVING
-        return cls.MATERIAL_REFINEMENT_READABILITY_ASSIST
+        return cls.MATERIAL_REFINEMENT_FAMILY_COMPLIANCE
 
     def _build_material_refinement_prompts(
         self,
@@ -242,7 +284,55 @@ class QuestionGenerationService:
         refinement_mode: str,
         cleaned_seed: str,
         original_text: str,
+        request_snapshot: dict[str, Any] | None = None,
+        compliance_profile: dict[str, Any] | None = None,
+        compliance_report: dict[str, Any] | None = None,
     ) -> tuple[str, str]:
+        snapshot = request_snapshot or {}
+        question_type = str(snapshot.get("question_type") or "").strip()
+        business_subtype = str(snapshot.get("business_subtype") or "").strip()
+        profile = compliance_profile or self._material_compliance_profile(
+            question_type=question_type,
+            business_subtype=business_subtype,
+        )
+        report = compliance_report or self._assess_material_compliance(cleaned_seed, profile)
+        issue_labels = [str(item) for item in (report.get("issues") or []) if str(item).strip()]
+        family_label = str(profile.get("family_label") or question_type or "general").strip()
+        repair_permissions = [str(item) for item in (profile.get("repair_permissions") or []) if str(item).strip()]
+        hard_guards = [str(item) for item in (profile.get("hard_guards") or []) if str(item).strip()]
+        leaf_repair_policy = str(profile.get("leaf_structure_policy") or "").strip()
+
+        if refinement_mode == self.MATERIAL_REFINEMENT_FAMILY_COMPLIANCE:
+            system_prompt = (
+                "你是一名公考真题材料修复助手。你的唯一优先目标，是把输入材料修到像真正会进入公考命题的材料。"
+                "不要满足于可读或逻辑对，而要追求读起来就像真题材料。"
+                "每次都必须先审查材料是否已经具备真题感；如果不具备，就主动重写到具备为止。"
+                "你必须优先修复这些问题：新闻摘录感、评论切片感、条目体、手册体、小标题堆叠、资讯拼接、局部槽位太硬、上下文不自然、叶族结构不明显。"
+                "允许在保留合法性真值的前提下做强修：重写句子、重组局部表达、补足自然上下文、压缩或扩展到更像真题的段落长度、把碎信息改写成自然正文。"
+                "除合法性硬边界外，不要被原文表面句式束缚；如果原文展示形态不像真题，应优先改成像真题。"
+                "绝对禁止新增原文没有的事实、数据、背景、立场和论证终点；绝对禁止改变主旨与合法性真值。"
+            )
+            user_prompt = "\n\n".join(
+                [
+                    f"请把下面材料修整成适合 {family_label} 制题前使用的真题材料形态。",
+                    "最高目标：读起来像公考真题材料，而不是资讯摘录、评论切片、手册条目或知识点提纲。",
+                    "如果当前材料只是基本可读但还不像真题，请继续主动修，直到像真题为止。",
+                    f"当前合规问题：{'; '.join(issue_labels) if issue_labels else '无显式问题，但需要做母族规格化。'}",
+                    f"长度约束：建议正文长度在 {profile.get('min_chars')} - {profile.get('max_chars')} 字符之间。",
+                    f"形态要求：{'; '.join(profile.get('requirements') or [])}",
+                    f"叶族结构策略：{leaf_repair_policy or '如果材料局部角色不够明显、叶族结构不清，请在不改变合法性真值的前提下主动修清。'}",
+                    f"允许修复动作：{'; '.join(repair_permissions) if repair_permissions else '删除标题编号、改成连续正文、补足最小必要上下文、增强局部承接。'}",
+                    f"硬边界：{'; '.join(hard_guards) if hard_guards else '不得新增事实，不得改变主旨、结论方向和合法性真值。'}",
+                    "额外强约束：不要保留省略号新闻腔、不要保留碎标题/碎评述、不要只给一句半的硬槽位材料、不要让空位前后像机械拼接。",
+                    "禁止：新增事实、改主旨、改结论方向、凭空补背景、重写成另一篇文章。",
+                    "[清理后基底文段]",
+                    cleaned_seed,
+                    "[原始文段]",
+                    original_text,
+                ]
+            )
+            return system_prompt, user_prompt
+
         if refinement_mode == self.MATERIAL_REFINEMENT_THEME_PRESERVING:
             system_prompt = (
                 "你是一名主旨保持型材料改写助手。请把输入材料改写成更适合独立阅读和出题使用的自然文段。"
@@ -287,6 +377,15 @@ class QuestionGenerationService:
         prepared_request = self._prepare_request(request)
         decoded, target_override_warning = self._decode_generation_target(prepared_request)
         standard_request = dict(decoded["standard_request"])
+        requested_pattern_id = self._extract_requested_pattern_id(
+            type_slots=prepared_request.type_slots,
+            extra_constraints=deepcopy(prepared_request.extra_constraints or {}),
+        )
+        if requested_pattern_id:
+            standard_request["pattern_id"] = requested_pattern_id
+            batch_meta_payload = decoded.get("batch_meta") or {}
+            if isinstance(batch_meta_payload, dict):
+                batch_meta_payload["pattern_id"] = requested_pattern_id
         question_card_binding = self._resolve_question_card_binding(
             question_card_id=prepared_request.question_card_id,
             question_type=standard_request["question_type"],
@@ -297,6 +396,15 @@ class QuestionGenerationService:
             standard_request=standard_request,
             question_card_binding=question_card_binding,
         )
+        pattern_warnings: list[str] = []
+        standard_request["pattern_id"] = self._normalize_requested_pattern_id(
+            question_type=standard_request["question_type"],
+            pattern_id=standard_request.get("pattern_id"),
+            warnings=pattern_warnings,
+        )
+        batch_meta_payload = decoded.get("batch_meta") or {}
+        if isinstance(batch_meta_payload, dict):
+            batch_meta_payload["pattern_id"] = standard_request.get("pattern_id")
         effective_difficulty_target = self._effective_difficulty_target(
             standard_request["difficulty_target"],
             use_reference_question=bool(request.source_question),
@@ -350,63 +458,34 @@ class QuestionGenerationService:
         )
 
         items: list[dict] = []
-        accepted_candidates: list[dict] = []
         rejected_attempts: list[dict] = []
         rejected_candidates: list[dict] = []
-        race_material_limit = max(self.RACE_CANDIDATE_COUNT, effective_count)
-        if self._should_use_compact_main_idea_path(source_question_analysis):
-            race_material_limit = effective_count
-        race_materials = materials[: race_material_limit]
-        race_results: list[dict] = []
-        with ThreadPoolExecutor(max_workers=max(1, min(len(race_materials), self.RACE_CANDIDATE_COUNT))) as executor:
-            future_map = {
-                executor.submit(
-                    self._run_race_candidate,
-                    material=race_materials[index],
-                    index=index,
-                    standard_request=standard_request,
-                    source_question_analysis=source_question_analysis,
-                    request_snapshot=request_snapshot,
-                    batch_id=batch_id,
-                    request_id=request_id,
-                ): index
-                for index in range(len(race_materials))
-            }
-            for future in as_completed(future_map):
-                race_results.append(future.result())
-
-        race_results.sort(key=lambda entry: entry["index"])
-        for result in race_results:
-            if result["accepted"]:
-                accepted_candidates.append(result["candidate"])
-                continue
-            rejected_attempts.append(result["summary"])
-            rejected_candidates.append(result["candidate"])
-
-        if accepted_candidates:
-            accepted_candidates.sort(key=lambda entry: entry["rank_score"], reverse=True)
-            winners = accepted_candidates[:effective_count]
-            for winner in winners:
-                built_item = winner["item"]
-                self.repository.save_version(built_item.pop("_version_record"))
-                self.repository.save_item(built_item)
-                items.append(built_item)
-            if len(accepted_candidates) > 1:
-                material_warnings.append("Race mode enabled: returned the highest-scoring acceptable candidate from this round.")
+        selected_materials = materials[: max(1, effective_count)]
+        for material_index, material in enumerate(selected_materials):
+            retry_result = self._run_primary_candidate_with_retries(
+                material=material,
+                material_index=material_index,
+                retry_limit=3,
+                standard_request=standard_request,
+                source_question_analysis=source_question_analysis,
+                request_snapshot=request_snapshot,
+                batch_id=batch_id,
+                request_id=request_id,
+            )
+            rejected_attempts.extend(retry_result["rejected_attempts"])
+            if retry_result.get("best_rejected_candidate") is not None:
+                rejected_candidates.append(retry_result["best_rejected_candidate"])
+            if not retry_result["accepted"]:
+                break
+            built_item = retry_result["item"]
+            self.repository.save_version(built_item.pop("_version_record"))
+            self.repository.save_item(built_item)
+            items.append(built_item)
+            if len(items) >= effective_count:
+                break
 
         fallback_record_path: str | None = None
-        needs_review_fallback = len(items) < effective_count and bool(rejected_candidates)
-        if not items and standard_request["question_type"] == "sentence_order" and not rejected_candidates:
-            raise DomainError(
-                "No eligible sentence_order materials passed validation from passage_service.",
-                status_code=422,
-                details={
-                    "question_type": standard_request["question_type"],
-                    "reason": "empty_effective_material_pool",
-                },
-            )
-
-        if rejected_attempts and (not items or needs_review_fallback):
+        if rejected_attempts and len(items) < effective_count:
             fallback_record_path = self._write_failure_markdown_record(
                 batch_id=batch_id,
                 request_id=request_id,
@@ -415,9 +494,18 @@ class QuestionGenerationService:
                 rejected_attempts=rejected_attempts,
             )
 
-        if not items and not rejected_candidates:
+        added_fallback_count = 0
+        if len(items) < effective_count and rejected_candidates:
+            added_fallback_count = self._append_review_fallback_items(
+                items=items,
+                rejected_candidates=rejected_candidates,
+                limit=effective_count,
+                failure_record_path=fallback_record_path,
+            )
+
+        if len(items) < effective_count:
             raise DomainError(
-                "No acceptable questions passed validation after retries.",
+                "Primary generation flow could not produce enough validator-passing questions within 3 attempts.",
                 status_code=422,
                 details={
                     "question_type": standard_request["question_type"],
@@ -427,34 +515,22 @@ class QuestionGenerationService:
                 },
             )
 
-        if needs_review_fallback:
-            added_fallback_count = self._append_review_fallback_items(
-                items=items,
-                rejected_candidates=rejected_candidates,
-                limit=effective_count,
-                failure_record_path=fallback_record_path,
-            )
-            if added_fallback_count:
-                if not accepted_candidates:
-                    material_warnings.append(
-                        "No question fully passed validation after retries; returned the highest-scoring blocked attempt for manual review."
-                    )
-                else:
-                    material_warnings.append(
-                        "Returned additional blocked attempts for frontend display because the fully accepted result count was below the requested count."
-                    )
-                if fallback_record_path:
-                    material_warnings.append(f"Failure reasons were recorded to: {fallback_record_path}")
-
-        generation_warnings = decoded.get("warnings", []) + ([target_override_warning] if target_override_warning else []) + material_warnings
+        generation_warnings = (
+            decoded.get("warnings", [])
+            + pattern_warnings
+            + ([target_override_warning] if target_override_warning else [])
+            + material_warnings
+        )
         if rejected_attempts:
             generation_warnings.append(
-                f"Filtered out {len(rejected_attempts)} low-quality generation attempts before returning results."
+                f"Primary flow retried {len(rejected_attempts)} time(s) before returning validator-passing results."
             )
-        if len(items) < effective_count:
+        if added_fallback_count:
             generation_warnings.append(
-                f"Only {len(items)} acceptable question(s) passed validation, below the requested {effective_count}."
+                f"Returned {added_fallback_count} blocked attempt(s) for manual review so the workbench still has reviewable questions."
             )
+            if fallback_record_path:
+                generation_warnings.append(f"Failure reasons were recorded to: {fallback_record_path}")
 
         response = {
             "batch_id": batch_id,
@@ -465,7 +541,7 @@ class QuestionGenerationService:
                 "Materials are fetched from the passage_service V2 material pool at generation time.",
                 "If a reference question is provided, retrieval and generation both reuse its business-card and length signals.",
                 "Reference-question runs raise generation difficulty by one level and treat the reference question as a style template.",
-                "When fully accepted items are insufficient, the highest-scoring blocked attempts may still be returned for frontend display and manual review.",
+                "Primary generation no longer uses race-mode parallel candidates; each selected material is generated through a single chain with up to three retries.",
                 "Batch review actions are not wired yet; this slice persists generated items for later review work.",
             ],
         }
@@ -487,12 +563,11 @@ class QuestionGenerationService:
         effective_count: int,
     ) -> tuple[list[MaterialSelectionResult], list[str]]:
         if request.user_material is not None and request_snapshot.get("generation_mode") == "forced_user_material":
-            forced_count = max(effective_count, self.RACE_CANDIDATE_COUNT)
             materials = self._build_forced_user_material_candidates(
                 user_material=request.user_material,
                 question_card_binding=question_card_binding,
                 request_snapshot=request_snapshot,
-                count=forced_count,
+                count=max(1, effective_count),
             )
             return materials, [
                 "Forced user-material mode enabled: using the user-supplied passage directly and bypassing passage_service retrieval.",
@@ -501,6 +576,11 @@ class QuestionGenerationService:
 
         bridge_hints = self._merge_material_bridge_hints(
             self._material_bridge_hints(source_question_analysis),
+            self._requested_taxonomy_bridge_hints(
+                question_type=standard_request["question_type"],
+                type_slots=request.type_slots,
+                extra_constraints=request.extra_constraints,
+            ),
             self._requested_pattern_bridge_hints(
                 question_type=standard_request["question_type"],
                 pattern_id=standard_request.get("pattern_id"),
@@ -513,7 +593,7 @@ class QuestionGenerationService:
             question_card_id=question_card_binding.get("question_card_id"),
             difficulty_target=standard_request["difficulty_target"],
             topic=request.topic,
-            text_direction=request.text_direction,
+            text_direction=None,
             document_genre=(
                 request.material_policy.preferred_document_genres[0]
                 if request.material_policy and request.material_policy.preferred_document_genres
@@ -627,6 +707,35 @@ class QuestionGenerationService:
     def _normalize_user_material_payload_dict(user_material: dict[str, Any] | None) -> dict[str, Any]:
         return normalize_user_material_payload(user_material)
 
+    @staticmethod
+    def _coerce_option_text(value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if value is None:
+            return ""
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump()
+            if dumped is not value:
+                return QuestionGenerationService._coerce_option_text(dumped)
+        if isinstance(value, dict):
+            for key in ("text", "option_text", "value", "content", "option"):
+                candidate = value.get(key)
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+            for candidate in value.values():
+                normalized = QuestionGenerationService._coerce_option_text(candidate)
+                if normalized:
+                    return normalized
+            return ""
+        if isinstance(value, (list, tuple)):
+            for candidate in value:
+                normalized = QuestionGenerationService._coerce_option_text(candidate)
+                if normalized:
+                    return normalized
+            return ""
+        return str(value).strip()
+
     def _decode_generation_target(self, request: QuestionGenerateRequest) -> tuple[dict, str | None]:
         if request.question_card_id:
             return self._build_explicit_question_card_decode_result(request), None
@@ -643,11 +752,22 @@ class QuestionGenerationService:
         difficulty_target = self._normalize_difficulty_level(request.difficulty_level)
         requested_count = request.count or 1
         effective_count, count_warnings = self._normalize_requested_count(requested_count)
+        merged_extra_constraints = self._merge_request_extra_constraints(request)
+        requested_pattern_id = self._extract_requested_pattern_id(
+            type_slots=request.type_slots,
+            extra_constraints=merged_extra_constraints,
+        )
+        pattern_warnings: list[str] = []
+        requested_pattern_id = self._normalize_requested_pattern_id(
+            question_type=runtime_binding["question_type"],
+            pattern_id=requested_pattern_id,
+            warnings=pattern_warnings,
+        )
 
         standard_request = {
             "question_type": runtime_binding["question_type"],
             "business_subtype": runtime_binding.get("business_subtype"),
-            "pattern_id": None,
+            "pattern_id": requested_pattern_id,
             "difficulty_target": difficulty_target,
             "topic": request.topic,
             "count": effective_count,
@@ -655,14 +775,14 @@ class QuestionGenerationService:
             "use_fewshot": request.use_fewshot,
             "fewshot_mode": request.fewshot_mode,
             "type_slots": deepcopy(request.type_slots or {}),
-            "extra_constraints": self._merge_request_extra_constraints(request),
+            "extra_constraints": merged_extra_constraints,
         }
         batch_meta = BatchMeta(
             requested_count=requested_count,
             effective_count=effective_count,
             question_type=runtime_binding["question_type"],
             business_subtype=runtime_binding.get("business_subtype"),
-            pattern_id=None,
+            pattern_id=requested_pattern_id,
             difficulty_target=difficulty_target,
         )
         return {
@@ -670,15 +790,51 @@ class QuestionGenerationService:
             "selected_special_type": None,
             "standard_request": standard_request,
             "batch_meta": batch_meta.model_dump(),
-            "warnings": list(count_warnings),
+            "warnings": list(count_warnings) + pattern_warnings,
         }
 
     def _build_decode_request(self, request: QuestionGenerateRequest) -> tuple[DifyFormInput, str | None]:
         current_focus = str(request.question_focus or "").strip()
+        current_business_subtype = str(request.business_subtype or "").strip()
         selected_special_types = [item for item in (request.special_question_types or []) if str(item).strip()]
         if current_focus.lower() in {"select", "auto"} or current_focus in {"不指定", "不指定（自动匹配）", "请选择"}:
             current_focus = ""
-        return request.to_dify_form_input(), None
+        if current_business_subtype.lower() in {"select", "auto"} or current_business_subtype in {
+            "不指定",
+            "不指定（自动匹配）",
+            "请选择",
+        }:
+            current_business_subtype = ""
+
+        warning_parts: list[str] = []
+        if request.source_question is not None and (not current_focus or not current_business_subtype) and not selected_special_types:
+            inferred_target = self.source_question_analyzer.infer_request_target(request.source_question) or {}
+            inferred_focus = self._focus_value_for_target(
+                question_type=str(inferred_target.get("question_type") or "").strip(),
+                business_subtype=inferred_target.get("business_subtype"),
+            )
+            inferred_business_subtype = self._ui_business_subtype_for_target(
+                question_type=str(inferred_target.get("question_type") or "").strip(),
+                business_subtype=inferred_target.get("business_subtype"),
+            )
+            if not current_focus and inferred_focus:
+                current_focus = inferred_focus
+                warning_parts.append(f"question_focus={inferred_focus}")
+            if not current_business_subtype and inferred_business_subtype:
+                current_business_subtype = inferred_business_subtype
+                warning_parts.append(f"business_subtype={inferred_business_subtype}")
+
+        decode_request = request.to_dify_form_input().model_copy(
+            update={
+                "question_focus": current_focus,
+                "business_subtype": current_business_subtype or None,
+                "special_question_types": selected_special_types,
+            }
+        )
+        warning = None
+        if warning_parts:
+            warning = "reference_question_inferred_target_applied: " + ", ".join(warning_parts)
+        return decode_request, warning
 
     @staticmethod
     def _focus_value_for_target(*, question_type: str, business_subtype: str | None) -> str | None:
@@ -686,12 +842,18 @@ class QuestionGenerationService:
             return "sentence_order"
         if question_type == "sentence_fill":
             return "sentence_fill"
-        if question_type == "continuation":
-            return "continuation"
-        if question_type == "main_idea" and business_subtype == "title_selection":
-            return "title_selection"
-        if question_type == "main_idea" and business_subtype == "center_understanding":
+        if question_type == "main_idea" and business_subtype in {"center_understanding", "title_selection"}:
             return "center_understanding"
+        return None
+
+    @staticmethod
+    def _ui_business_subtype_for_target(*, question_type: str, business_subtype: str | None) -> str | None:
+        if question_type == "sentence_order":
+            return "sentence_order_selection"
+        if question_type == "sentence_fill":
+            return "sentence_fill_selection"
+        if question_type == "main_idea" and business_subtype in {"center_understanding", "title_selection"}:
+            return business_subtype
         return None
 
     @staticmethod
@@ -731,15 +893,83 @@ class QuestionGenerationService:
     @staticmethod
     def _merge_request_extra_constraints(request: QuestionGenerateRequest) -> dict:
         merged = deepcopy(request.extra_constraints or {})
-        if request.text_direction:
-            merged.setdefault("text_direction", request.text_direction)
+        if not isinstance(merged, dict):
+            return {}
+        merged.pop("text_direction", None)
+        merged.pop("\u6587\u672c\u65b9\u5411", None)
         return merged
 
+    @staticmethod
+    def _extract_requested_pattern_id(
+        *,
+        type_slots: dict[str, Any] | None,
+        extra_constraints: dict[str, Any] | None,
+    ) -> str | None:
+        if isinstance(type_slots, dict):
+            raw_value = str(type_slots.get("pattern_id") or "").strip()
+            if raw_value:
+                return raw_value
+        if isinstance(extra_constraints, dict):
+            raw_value = str(extra_constraints.pop("pattern_id", "") or "").strip()
+            if raw_value:
+                return raw_value
+        return None
+
+    def _enabled_pattern_ids_for_question_type(self, question_type: str | None) -> set[str] | None:
+        normalized_question_type = str(question_type or "").strip()
+        if not normalized_question_type:
+            return None
+        registry = getattr(getattr(self, "orchestrator", None), "registry", None)
+        if registry is None or not hasattr(registry, "list_enabled_patterns"):
+            return None
+        try:
+            return {
+                str(pattern_id).strip()
+                for pattern_id in (registry.list_enabled_patterns(normalized_question_type) or [])
+                if str(pattern_id).strip()
+            }
+        except Exception:  # noqa: BLE001
+            logger.exception("pattern_registry_lookup_failed", extra={"question_type": normalized_question_type})
+            return None
+
+    def _normalize_requested_pattern_id(
+        self,
+        *,
+        question_type: str | None,
+        pattern_id: str | None,
+        warnings: list[str] | None = None,
+    ) -> str | None:
+        normalized_pattern_id = str(pattern_id or "").strip()
+        if not normalized_pattern_id:
+            return None
+        enabled_pattern_ids = self._enabled_pattern_ids_for_question_type(question_type)
+        if enabled_pattern_ids is None or normalized_pattern_id in enabled_pattern_ids:
+            return normalized_pattern_id
+        warning = (
+            f"Ignored stale pattern_id '{normalized_pattern_id}' for question_type "
+            f"'{str(question_type or '').strip() or 'unknown'}'."
+        )
+        logger.warning(
+            "stale_pattern_id_ignored",
+            extra={
+                "question_type": str(question_type or "").strip(),
+                "pattern_id": normalized_pattern_id,
+                "enabled_patterns": sorted(enabled_pattern_ids),
+            },
+        )
+        if warnings is not None:
+            warnings.append(warning)
+        return None
+
     def _build_prompt_request_from_snapshot(self, request_snapshot: dict) -> PromptBuildRequest:
+        normalized_pattern_id = self._normalize_requested_pattern_id(
+            question_type=request_snapshot.get("question_type"),
+            pattern_id=request_snapshot.get("pattern_id"),
+        )
         return PromptBuildRequest(
             question_type=request_snapshot["question_type"],
             business_subtype=request_snapshot.get("business_subtype"),
-            pattern_id=request_snapshot.get("pattern_id"),
+            pattern_id=normalized_pattern_id,
             difficulty_target=request_snapshot["difficulty_target"],
             topic=request_snapshot.get("topic"),
             count=1,
@@ -849,21 +1079,51 @@ class QuestionGenerationService:
                 )
             )
         )
-        response = self.llm_gateway.generate_json(
-            route=route,
-            system_prompt=system_prompt,
-            user_prompt=final_user_prompt,
-            schema_name="generated_question",
-            schema=GeneratedQuestionDraft.model_json_schema(),
-        )
+        try:
+            response = self.llm_gateway.generate_json(
+                route=route,
+                system_prompt=system_prompt,
+                user_prompt=final_user_prompt,
+                schema_name="generated_question",
+                schema=GeneratedQuestionDraft.model_json_schema(),
+            )
+        except DomainError as exc:
+            if built_item["question_type"] == "sentence_order" and self._can_fallback_sentence_order_from_gateway_error(exc):
+                fallback_question = self._build_sentence_order_fallback_question(
+                    built_item=built_item,
+                    material=material,
+                    reason=f"gateway::{exc.message}",
+                )
+                return fallback_question, {"gateway_fallback": exc.details or {}}
+            raise
         try:
             generated = self.generated_question_adapter.validate_python(response)
         except Exception as exc:  # noqa: BLE001
-            raise DomainError(
-                "Structured model output could not be parsed into GeneratedQuestion.",
-                status_code=502,
-                details={"reason": str(exc)},
-            ) from exc
+            repaired_response = self._repair_generated_question_response(response)
+            if repaired_response is not None:
+                try:
+                    generated = self.generated_question_adapter.validate_python(repaired_response)
+                except Exception:  # noqa: BLE001
+                    generated = None
+                else:
+                    response = repaired_response
+            else:
+                generated = None
+            if generated is not None:
+                pass
+            elif built_item["question_type"] == "sentence_order":
+                fallback_question = self._build_sentence_order_fallback_question(
+                    built_item=built_item,
+                    material=material,
+                    reason=str(exc),
+                )
+                return fallback_question, response
+            else:
+                raise DomainError(
+                    "Structured model output could not be parsed into GeneratedQuestion.",
+                    status_code=502,
+                    details={"reason": str(exc)},
+                ) from exc
         metadata = {
             "material_id": material.material_id,
             "article_id": material.article_id,
@@ -881,10 +1141,156 @@ class QuestionGenerationService:
             analysis=generated.analysis,
             metadata=metadata,
         )
+        if built_item["question_type"] == "sentence_fill":
+            generated_question = self._enforce_sentence_fill_original_answer(
+                generated_question=generated_question,
+                material=material,
+            )
         if built_item["question_type"] == "sentence_order":
             generated_question = self.build_sentence_order_question(generated_question, material_text=material.text)
             generated_question = self._enforce_sentence_order_six_unit_output(generated_question)
         return self._remap_answer_position(generated_question), response
+
+    @staticmethod
+    def _can_fallback_sentence_order_from_gateway_error(exc: DomainError) -> bool:
+        details = exc.details if isinstance(exc.details, dict) else {}
+        if "text_preview" in details or "fallback_retry_text_preview" in details:
+            return True
+        if details.get("provider") and details.get("status_code") in {401, 403, 429, 500, 502, 503, 504}:
+            return True
+        message = str(exc.message or "")
+        return "structured text" in message.lower() or "json" in message.lower()
+
+    def _build_sentence_order_fallback_question(
+        self,
+        *,
+        built_item: dict[str, Any],
+        material: MaterialSelectionResult,
+        reason: str,
+    ) -> GeneratedQuestion:
+        fallback_question = GeneratedQuestion(
+            question_type=built_item["question_type"],
+            business_subtype=built_item.get("business_subtype"),
+            pattern_id=built_item.get("pattern_id"),
+            stem="将以下句子重新排列，语序正确的一项是：",
+            original_sentences=[],
+            correct_order=[],
+            options={"A": "123456", "B": "123546", "C": "124356", "D": "213456"},
+            answer="A",
+            analysis="",
+            metadata={
+                "material_id": material.material_id,
+                "article_id": material.article_id,
+                "batch_prompt_pattern": built_item["selected_pattern"],
+                "sentence_order_fallback_rebuilt": True,
+                "sentence_order_fallback_reason": reason,
+            },
+        )
+        fallback_question = self.build_sentence_order_question(
+            fallback_question,
+            material_text=material.text,
+        )
+        fallback_question = self._enforce_sentence_order_six_unit_output(fallback_question)
+        return self._remap_answer_position(fallback_question)
+
+    def _repair_generated_question_response(self, response: Any) -> dict[str, Any] | None:
+        if not isinstance(response, dict):
+            return None
+        repaired = dict(response)
+        question_payload = repaired.get("question")
+        if not isinstance(question_payload, dict):
+            nested_generated_question = repaired.get("generated_question")
+            if isinstance(nested_generated_question, dict):
+                question_payload = nested_generated_question
+        if isinstance(question_payload, dict):
+            question_stem = question_payload.get("stem") or question_payload.get("question_stem")
+            question_original_sentences = question_payload.get("original_sentences")
+            question_correct_order = question_payload.get("correct_order")
+            question_options = question_payload.get("options")
+            question_answer = question_payload.get("answer")
+            question_analysis = question_payload.get("analysis")
+            if question_stem and not isinstance(repaired.get("stem"), str):
+                repaired["stem"] = question_stem
+            elif question_stem and not str(repaired.get("stem") or "").strip():
+                repaired["stem"] = question_stem
+            original_sentences_missing = not isinstance(repaired.get("original_sentences"), list) or not repaired.get("original_sentences")
+            if isinstance(question_original_sentences, list) and original_sentences_missing:
+                repaired["original_sentences"] = question_original_sentences
+            correct_order_missing = not isinstance(repaired.get("correct_order"), list) or not repaired.get("correct_order")
+            if isinstance(question_correct_order, list) and correct_order_missing:
+                repaired["correct_order"] = question_correct_order
+            options_payload = repaired.get("options")
+            options_missing = (
+                (not isinstance(options_payload, dict) or not any(self._coerce_option_text(value) for value in options_payload.values()))
+                and (not isinstance(options_payload, list) or not any(self._coerce_option_text(value) for value in options_payload))
+            )
+            if isinstance(question_options, (dict, list)) and options_missing:
+                repaired["options"] = question_options
+            if question_answer and str(repaired.get("answer") or "").strip().upper() not in {"A", "B", "C", "D"}:
+                repaired["answer"] = question_answer
+            if question_analysis and not str(repaired.get("analysis") or "").strip():
+                repaired["analysis"] = question_analysis
+
+        if not str(repaired.get("stem") or "").strip():
+            for fallback_key in ("question", "question_stem", "prompt"):
+                fallback_value = str(repaired.get(fallback_key) or "").strip()
+                if fallback_value:
+                    repaired["stem"] = fallback_value
+                    break
+
+        options_payload = repaired.get("options")
+        normalized_options: dict[str, str] = {}
+        if isinstance(options_payload, dict):
+            for key, value in options_payload.items():
+                letter = str(key or "").strip().upper()
+                if letter in {"A", "B", "C", "D"}:
+                    normalized_options[letter] = self._coerce_option_text(value)
+            if len(normalized_options) < 4:
+                # Recover non-standard keys such as option_a / a_option.
+                for key, value in options_payload.items():
+                    key_text = str(key or "").strip().lower()
+                    for letter in ("a", "b", "c", "d"):
+                        if letter in key_text and letter.upper() not in normalized_options:
+                            normalized_options[letter.upper()] = self._coerce_option_text(value)
+                            break
+        elif isinstance(options_payload, list):
+            for letter, value in zip(("A", "B", "C", "D"), options_payload[:4], strict=False):
+                normalized_options[letter] = self._coerce_option_text(value)
+
+        for letter in ("A", "B", "C", "D"):
+            normalized_options.setdefault(letter, "")
+
+        for letter, text in list(normalized_options.items()):
+            normalized_options[letter] = re.sub(rf"^\s*{letter}[\.\u3001\uff0e:：]\s*", "", text).strip()
+
+        repaired["options"] = normalized_options
+        repaired["stem"] = str(repaired.get("stem") or "").strip()
+        repaired["analysis"] = str(repaired.get("analysis") or "").strip()
+
+        answer = str(repaired.get("answer") or "").strip().upper()
+        if answer not in {"A", "B", "C", "D"}:
+            answer = "A"
+        repaired["answer"] = answer
+
+        original_sentences = repaired.get("original_sentences")
+        if not isinstance(original_sentences, list):
+            repaired["original_sentences"] = []
+        else:
+            repaired["original_sentences"] = [str(item or "").strip() for item in original_sentences if str(item or "").strip()]
+
+        correct_order = repaired.get("correct_order")
+        if isinstance(correct_order, list):
+            normalized_order: list[int] = []
+            for item in correct_order:
+                try:
+                    normalized_order.append(int(item))
+                except (TypeError, ValueError):
+                    continue
+            repaired["correct_order"] = normalized_order
+        else:
+            repaired["correct_order"] = []
+
+        return repaired
 
     def _run_targeted_question_repair(
         self,
@@ -953,6 +1359,11 @@ class QuestionGenerationService:
             repaired_question=revised_question,
             repair_plan=repair_plan,
         )
+        if built_item["question_type"] == "sentence_fill":
+            merged_question = self._enforce_sentence_fill_original_answer(
+                generated_question=merged_question,
+                material=material,
+            )
         if built_item["question_type"] == "sentence_order":
             merged_question = self._enforce_sentence_order_six_unit_output(merged_question)
         return self._remap_answer_position(merged_question), response
@@ -1024,7 +1435,10 @@ class QuestionGenerationService:
             difficulty_fit=built_item.get("difficulty_fit"),
             source_question=(built_item.get("request_snapshot") or {}).get("source_question"),
             source_question_analysis=(built_item.get("request_snapshot") or {}).get("source_question_analysis"),
+            resolved_slots=built_item.get("resolved_slots"),
+            control_logic=built_item.get("control_logic"),
         )
+        self._apply_consistency_hard_fail_gate(validation_result=validation_result)
         evaluation_result = self.evaluator.evaluate(
             question_type=built_item["question_type"],
             business_subtype=built_item.get("business_subtype"),
@@ -1156,7 +1570,10 @@ class QuestionGenerationService:
             difficulty_fit=built_item.get("difficulty_fit"),
             source_question=(built_item.get("request_snapshot") or {}).get("source_question"),
             source_question_analysis=(built_item.get("request_snapshot") or {}).get("source_question_analysis"),
+            resolved_slots=built_item.get("resolved_slots"),
+            control_logic=built_item.get("control_logic"),
         )
+        self._apply_consistency_hard_fail_gate(validation_result=validation_result)
         evaluation_result = self.evaluator.evaluate(
             question_type=built_item["question_type"],
             business_subtype=built_item.get("business_subtype"),
@@ -1496,10 +1913,13 @@ class QuestionGenerationService:
             difficulty_fit=item.get("difficulty_fit"),
             source_question=(item.get("request_snapshot") or {}).get("source_question"),
             source_question_analysis=(item.get("request_snapshot") or {}).get("source_question_analysis"),
+            resolved_slots=item.get("resolved_slots"),
+            control_logic=item.get("control_logic"),
         )
+        self._apply_consistency_hard_fail_gate(validation_result=validation_result)
         version_no = int(item.get("current_version_no", 1)) + 1
         item["current_version_no"] = version_no
-        item["current_status"] = "pending_review" if validation_result.passed else "auto_failed"
+        item["current_status"] = "generated" if validation_result.passed else "auto_failed"
         item["validation_result"] = validation_result.model_dump()
         item["evaluation_result"] = self.evaluator.evaluate(
             question_type=item["question_type"],
@@ -1522,6 +1942,7 @@ class QuestionGenerationService:
         item["latest_action"] = "minor_edit"
         item["latest_action_at"] = self.repository._utc_now()
         item["notes"] = item.get("notes", []) + [f"minor_edit applied: {instruction or 'no instruction'}"]
+        self._apply_manual_override_review_surface(item)
         item["_version_record"] = self._build_version_record(
             item=item,
             source_action="minor_edit",
@@ -1556,6 +1977,11 @@ class QuestionGenerationService:
         material = MaterialSelectionResult.model_validate(item["material_selection"])
         material = self._annotate_material_usage(material)
         material = self._refine_material_if_needed(material, request_snapshot=request_snapshot)
+        material = self._prepare_question_service_material(
+            material=material,
+            question_type=request_snapshot["question_type"],
+            request_snapshot=request_snapshot,
+        )
         return self._build_generated_item(
             build_request=self._build_prompt_request_from_snapshot(request_snapshot),
             material=material,
@@ -1577,6 +2003,19 @@ class QuestionGenerationService:
         requested_material_id = control_overrides.get("material_id")
         material_policy = self._material_policy_from_snapshot(request_snapshot)
         manual_material_text = self._clean_material_text(str(control_overrides.get("material_text") or "").strip())
+        source_question_analysis = request_snapshot.get("source_question_analysis") or {}
+        bridge_hints = self._merge_material_bridge_hints(
+            self._material_bridge_hints(source_question_analysis),
+            self._requested_taxonomy_bridge_hints(
+                question_type=request_snapshot["question_type"],
+                type_slots=request_snapshot.get("type_slots"),
+                extra_constraints=request_snapshot.get("extra_constraints"),
+            ),
+            self._requested_pattern_bridge_hints(
+                question_type=request_snapshot["question_type"],
+                pattern_id=request_snapshot.get("pattern_id"),
+            ),
+        )
         if manual_material_text:
             materials = [self._build_manual_material_selection(item=item, text=manual_material_text)]
             warnings = ["Manual material override was used for text_modify."]
@@ -1587,7 +2026,14 @@ class QuestionGenerationService:
                 question_card_id=request_snapshot.get("question_card_id"),
                 document_genre=(material_policy.preferred_document_genres[0] if material_policy and material_policy.preferred_document_genres else None),
                 material_structure_label=request_snapshot.get("material_structure"),
-                exclude_material_ids=None,
+                business_card_ids=bridge_hints["business_card_ids"],
+                preferred_business_card_ids=bridge_hints["preferred_business_card_ids"],
+                query_terms=bridge_hints["query_terms"],
+                target_length=source_question_analysis.get("target_length"),
+                length_tolerance=(source_question_analysis.get("length_tolerance") or 120),
+                structure_constraints=bridge_hints["structure_constraints"],
+                enable_anchor_adaptation=bool(source_question_analysis),
+                exclude_material_ids={previous_material_id} if previous_material_id else None,
                 limit=24,
                 difficulty_target=request_snapshot.get("difficulty_target", "medium"),
                 preference_profile=request_snapshot.get("preference_profile"),
@@ -1596,21 +2042,13 @@ class QuestionGenerationService:
             materials = [candidate for candidate in replacement_candidates if candidate.material_id == requested_material_id]
             warnings = []
         else:
-            source_question_analysis = request_snapshot.get("source_question_analysis") or {}
-            bridge_hints = self._merge_material_bridge_hints(
-                self._material_bridge_hints(source_question_analysis),
-                self._requested_pattern_bridge_hints(
-                    question_type=request_snapshot["question_type"],
-                    pattern_id=request_snapshot.get("pattern_id"),
-                ),
-            )
             materials, warnings = self.material_bridge.select_materials(
                 question_type=request_snapshot["question_type"],
                 business_subtype=request_snapshot.get("business_subtype"),
                 question_card_id=request_snapshot.get("question_card_id"),
                 difficulty_target=request_snapshot["difficulty_target"],
                 topic=request_snapshot.get("topic"),
-                text_direction=((request_snapshot.get("extra_constraints") or {}).get("text_direction")),
+                text_direction=None,
                 document_genre=(material_policy.preferred_document_genres[0] if material_policy and material_policy.preferred_document_genres else None),
                 material_policy=material_policy,
                 count=1,
@@ -1631,12 +2069,17 @@ class QuestionGenerationService:
                 status_code=422,
                 details={"item_id": item["item_id"], "previous_material_id": previous_material_id, "requested_material_id": requested_material_id},
             )
-        rebuilt = self._build_generated_item(
-            build_request=self._build_prompt_request_from_snapshot(request_snapshot),
+        prepared_material = self._prepare_question_service_material(
             material=self._refine_material_if_needed(
                 self._annotate_material_usage(materials[0]),
                 request_snapshot=request_snapshot,
             ),
+            question_type=request_snapshot["question_type"],
+            request_snapshot=request_snapshot,
+        )
+        rebuilt = self._build_generated_item(
+            build_request=self._build_prompt_request_from_snapshot(request_snapshot),
+            material=prepared_material,
             batch_id=item["batch_id"],
             item_id=item["item_id"],
             request_snapshot=request_snapshot,
@@ -1708,44 +2151,19 @@ class QuestionGenerationService:
         revised_item["material_usage_count_before"] = edited_material.usage_count_before
         revised_item["material_previously_used"] = edited_material.previously_used
         revised_item["material_last_used_at"] = edited_material.last_used_at
+        revised_item["manual_override_active"] = True
         revised_item["preference_profile"] = self._preference_profile_from_snapshot(revised_item.get("request_snapshot") or {})
-        revised_item["feedback_snapshot"] = self._feedback_snapshot_from_material(edited_material)
-
-        validation_result = self.validator.validate(
-            question_type=revised_item["question_type"],
-            business_subtype=revised_item.get("business_subtype"),
-            generated_question=edited_question,
-            material_text=edited_material.text,
-            original_material_text=edited_material.original_text,
-            material_source=edited_material.source,
-            validator_contract=edited_material.validator_contract,
-            difficulty_fit=revised_item.get("difficulty_fit"),
-            source_question=(revised_item.get("request_snapshot") or {}).get("source_question"),
-            source_question_analysis=(revised_item.get("request_snapshot") or {}).get("source_question_analysis"),
-        )
-        revised_item["validation_result"] = validation_result.model_dump()
-        revised_item["evaluation_result"] = self.evaluator.evaluate(
-            question_type=revised_item["question_type"],
-            business_subtype=revised_item.get("business_subtype"),
-            generated_question=edited_question,
-            validation_result=validation_result,
-            material_text=edited_material.text,
-            difficulty_fit=revised_item.get("difficulty_fit"),
-        )
-        self._apply_evaluation_gate(
-            validation_result=validation_result,
-            evaluation_result=revised_item["evaluation_result"],
-            difficulty_target=str(revised_item.get("difficulty_target") or ""),
-        )
-        revised_item["validation_result"] = validation_result.model_dump()
+        revised_item["feedback_snapshot"] = {}
+        revised_item["validation_result"] = None
+        revised_item["evaluation_result"] = None
 
         version_no = int(item.get("current_version_no", 1)) + 1
         revised_item["current_version_no"] = version_no
         revised_item["revision_count"] = int(item.get("revision_count", 0)) + 1
-        revised_item["current_status"] = "pending_review" if validation_result.passed else "auto_failed"
+        revised_item["current_status"] = "generated"
         revised_item["statuses"]["generation_status"] = "success"
-        revised_item["statuses"]["validation_status"] = validation_result.validation_status
-        revised_item["statuses"]["review_status"] = "waiting_review" if validation_result.passed else "needs_revision"
+        revised_item["statuses"]["validation_status"] = "not_started"
+        revised_item["statuses"]["review_status"] = "waiting_review"
         revised_item["latest_action"] = "manual_edit"
         revised_item["latest_action_at"] = self.repository._utc_now()
         revised_item["notes"] = revised_item.get("notes", []) + [f"manual_edit: {instruction or 'saved from UI'}"]
@@ -1765,7 +2183,7 @@ class QuestionGenerationService:
             raw_model_output=None,
             parsed_structured_output=revised_item["generated_question"],
             parse_error=None,
-            validation_result=revised_item["validation_result"],
+            validation_result=None,
         )
         runtime_snapshot = self._attach_feedback_runtime_context(
             built_item=revised_item,
@@ -1784,11 +2202,21 @@ class QuestionGenerationService:
             raw_model_output=None,
             parsed_structured_output=revised_item["generated_question"],
             parse_error=None,
-            validation_result=revised_item["validation_result"],
-            evaluation_result=revised_item["evaluation_result"],
+            validation_result=None,
+            evaluation_result=None,
             runtime_snapshot=runtime_snapshot,
         )
         return revised_item
+
+    @staticmethod
+    def _apply_manual_override_review_surface(item: dict[str, Any]) -> None:
+        if not bool(item.get("manual_override_active")):
+            return
+        statuses = item.setdefault("statuses", {})
+        item["current_status"] = "generated"
+        statuses["generation_status"] = "success"
+        statuses["validation_status"] = "not_started"
+        statuses["review_status"] = "waiting_review"
 
     def _enforce_analysis_only_scope(
         self,
@@ -2104,6 +2532,8 @@ class QuestionGenerationService:
             difficulty_fit=revised_item.get("difficulty_fit"),
             source_question=(revised_item.get("request_snapshot") or {}).get("source_question"),
             source_question_analysis=(revised_item.get("request_snapshot") or {}).get("source_question_analysis"),
+            resolved_slots=revised_item.get("resolved_slots"),
+            control_logic=revised_item.get("control_logic"),
         )
         revised_item["validation_result"] = validation_result.model_dump()
         revised_item["evaluation_result"] = self.evaluator.evaluate(
@@ -2124,7 +2554,7 @@ class QuestionGenerationService:
         version_no = int(item.get("current_version_no", 1)) + 1
         revised_item["current_version_no"] = version_no
         revised_item["revision_count"] = int(item.get("revision_count", 0)) + 1
-        revised_item["current_status"] = "pending_review" if validation_result.passed else "auto_failed"
+        revised_item["current_status"] = "generated" if validation_result.passed else "auto_failed"
         revised_item["statuses"]["generation_status"] = "success"
         revised_item["statuses"]["validation_status"] = validation_result.validation_status
         revised_item["statuses"]["review_status"] = "waiting_review" if validation_result.passed else "needs_revision"
@@ -2133,6 +2563,7 @@ class QuestionGenerationService:
         revised_item["notes"] = revised_item.get("notes", []) + [
             f"distractor_patch:{normalized_target_option}:{normalized_distractor_strategy or 'manual'}:{normalized_distractor_intensity or 'default'}:{operator or 'system'}"
         ]
+        self._apply_manual_override_review_surface(revised_item)
 
         template_record = self._resolve_template(
             question_type=revised_item["question_type"],
@@ -2264,6 +2695,11 @@ class QuestionGenerationService:
         refinement_mode = str((material.source or {}).get("material_refinement_mode") or "").strip()
         if refinement_mode:
             built_item["notes"] = built_item.get("notes", []) + [f"material_refinement_mode:{refinement_mode}"]
+        self._apply_distill_runtime_overlay(
+            build_request=build_request,
+            built_item=built_item,
+            material=material,
+        )
         template_record = self._resolve_template(
             question_type=build_request.question_type,
             business_subtype=build_request.business_subtype,
@@ -2276,6 +2712,7 @@ class QuestionGenerationService:
         built_item["current_version_no"] = version_no
         built_item["latest_action"] = source_action
         built_item["latest_action_at"] = self.repository._utc_now()
+        built_item["manual_override_active"] = bool((previous_item or {}).get("manual_override_active"))
 
         raw_model_output: dict | None = None
         parsed_structured_output: dict | None = None
@@ -2316,7 +2753,10 @@ class QuestionGenerationService:
             difficulty_fit=built_item.get("difficulty_fit"),
             source_question=request_source_question,
             source_question_analysis=request_source_analysis,
+            resolved_slots=built_item.get("resolved_slots"),
+            control_logic=built_item.get("control_logic"),
         )
+        self._apply_consistency_hard_fail_gate(validation_result=validation_result)
 
         alignment_retry_count = 0
         while generated_question and self._should_retry_alignment(validation_result, request_source_analysis):
@@ -2378,7 +2818,10 @@ class QuestionGenerationService:
                         difficulty_fit=built_item.get("difficulty_fit"),
                         source_question=request_source_question,
                         source_question_analysis=request_source_analysis,
+                        resolved_slots=built_item.get("resolved_slots"),
+                        control_logic=built_item.get("control_logic"),
                     )
+                self._apply_consistency_hard_fail_gate(validation_result=retry_validation_result)
                 alignment_retry_count += 1
                 if retry_validation_result.passed or retry_validation_result.score > validation_result.score:
                     generated_question = regenerated_question
@@ -2482,6 +2925,8 @@ class QuestionGenerationService:
                         difficulty_fit=built_item.get("difficulty_fit"),
                         source_question=request_source_question,
                         source_question_analysis=request_source_analysis,
+                        resolved_slots=built_item.get("resolved_slots"),
+                        control_logic=built_item.get("control_logic"),
                     )
                     repaired_evaluation_result = self.evaluator.evaluate(
                         question_type=built_item["question_type"],
@@ -2496,6 +2941,7 @@ class QuestionGenerationService:
                         evaluation_result=repaired_evaluation_result,
                         difficulty_target=str(built_item.get("difficulty_target") or ""),
                     )
+                self._apply_consistency_hard_fail_gate(validation_result=repaired_validation_result)
                 quality_retry_count += 1
                 if self._should_accept_targeted_repair(
                     repair_plan=repair_plan,
@@ -2522,8 +2968,9 @@ class QuestionGenerationService:
 
         built_item["validation_result"] = validation_result.model_dump()
         built_item["statuses"]["validation_status"] = validation_result.validation_status
-        built_item["current_status"] = "pending_review" if validation_result.passed else "auto_failed"
+        built_item["current_status"] = "generated" if validation_result.passed else "auto_failed"
         built_item["statuses"]["review_status"] = "waiting_review" if validation_result.passed else "needs_revision"
+        self._apply_manual_override_review_surface(built_item)
 
         if review_note:
             built_item["notes"] = built_item.get("notes", []) + [review_note]
@@ -2599,7 +3046,15 @@ class QuestionGenerationService:
                     "accepted": False,
                     "summary": rejected_summary,
                     "candidate": {
-                        "item": {"current_status": "auto_failed", "validation_result": {"errors": ["sentence_order_material_unit_count_mismatch"]}},
+                        "item": {
+                            "item_id": f"fallback::{uuid4().hex}",
+                            "batch_id": batch_id,
+                            "question_type": standard_request["question_type"],
+                            "business_subtype": standard_request.get("business_subtype"),
+                            "pattern_id": standard_request.get("pattern_id"),
+                            "current_status": "auto_failed",
+                            "validation_result": {"errors": ["sentence_order_material_unit_count_mismatch"]},
+                        },
                         "material": material,
                         "summary": rejected_summary,
                         "rank_score": -999.0,
@@ -2608,6 +3063,11 @@ class QuestionGenerationService:
             material = adapted_material
 
         material = self._refine_material_if_needed(material, request_snapshot=request_snapshot)
+        material = self._prepare_question_service_material(
+            material=material,
+            question_type=standard_request["question_type"],
+            request_snapshot=request_snapshot,
+        )
         built_item = self._build_generated_item(
             build_request=self._build_prompt_request_from_snapshot(request_snapshot),
             material=material,
@@ -2661,6 +3121,59 @@ class QuestionGenerationService:
                 "material": material,
                 "rank_score": self._accepted_attempt_rank_score(built_item),
             },
+        }
+
+    def _run_primary_candidate_with_retries(
+        self,
+        *,
+        material: MaterialSelectionResult,
+        material_index: int,
+        retry_limit: int,
+        standard_request: dict,
+        source_question_analysis: dict | None,
+        request_snapshot: dict,
+        batch_id: str,
+        request_id: str,
+    ) -> dict[str, Any]:
+        rejected_attempts: list[dict] = []
+        best_rejected_candidate: dict[str, Any] | None = None
+        for attempt_index in range(max(1, retry_limit)):
+            result = self._run_race_candidate(
+                material=material,
+                index=attempt_index,
+                standard_request=standard_request,
+                source_question_analysis=source_question_analysis,
+                request_snapshot=request_snapshot,
+                batch_id=batch_id,
+                request_id=request_id,
+            )
+            if result["accepted"]:
+                candidate = result["candidate"]
+                candidate["retry_count"] = attempt_index
+                return {
+                    "accepted": True,
+                    "item": candidate["item"],
+                    "material": candidate["material"],
+                    "rejected_attempts": rejected_attempts,
+                    "best_rejected_candidate": best_rejected_candidate,
+                }
+            summary = dict(result["summary"] or {})
+            summary["material_retry_round"] = attempt_index + 1
+            summary["material_index"] = material_index
+            rejected_attempts.append(summary)
+            candidate = result.get("candidate")
+            if isinstance(candidate, dict) and (
+                best_rejected_candidate is None
+                or float(candidate.get("rank_score") or 0.0) > float(best_rejected_candidate.get("rank_score") or 0.0)
+            ):
+                best_rejected_candidate = candidate
+
+        return {
+            "accepted": False,
+            "item": None,
+            "material": material,
+            "rejected_attempts": rejected_attempts,
+            "best_rejected_candidate": best_rejected_candidate,
         }
 
     def _build_request_snapshot(
@@ -2720,14 +3233,784 @@ class QuestionGenerationService:
                 "question_card_id": request.question_card_id,
                 "generation_mode": request.generation_mode,
                 "question_focus": request.question_focus,
+                "business_subtype": request.business_subtype,
                 "difficulty_level": request.difficulty_level,
                 "effective_difficulty_target": standard_request["difficulty_target"],
-                "text_direction": request.text_direction,
                 "special_question_types": deepcopy(request.special_question_types),
                 "mapping_source": decoded.get("mapping_source"),
                 "selected_special_type": decoded.get("selected_special_type"),
             },
         }
+
+    def _prepare_question_service_material(
+        self,
+        *,
+        material: MaterialSelectionResult,
+        question_type: str,
+        request_snapshot: dict[str, Any],
+    ) -> MaterialSelectionResult:
+        cleaned_text = self._clean_material_text(material.text or material.original_text or "")
+        cleaned_original_text = self._clean_material_text(material.original_text or material.text or "")
+        base_material = material.model_copy(
+            update={
+                "text": cleaned_text,
+                "original_text": cleaned_original_text or cleaned_text,
+                "source": deepcopy(material.source or {}),
+            }
+        )
+
+        if question_type == "sentence_fill":
+            return self._derive_sentence_fill_ready_material(
+                material=base_material,
+                request_snapshot=request_snapshot,
+            )
+
+        if question_type == "sentence_order":
+            return self._derive_sentence_order_ready_material(
+                material=base_material,
+                request_snapshot=request_snapshot,
+            )
+
+        return base_material
+
+    def _derive_sentence_fill_ready_material(
+        self,
+        *,
+        material: MaterialSelectionResult,
+        request_snapshot: dict[str, Any],
+    ) -> MaterialSelectionResult:
+        source_question_analysis = request_snapshot.get("source_question_analysis") or {}
+        structure_constraints = normalize_sentence_fill_constraints(
+            source_question_analysis.get("structure_constraints")
+            or source_question_analysis.get("retrieval_structure_constraints")
+            or {}
+        )
+        type_slots = normalize_sentence_fill_constraints(request_snapshot.get("type_slots") or {})
+        if type_slots:
+            merged_constraints = dict(structure_constraints)
+            merged_constraints.update({key: value for key, value in type_slots.items() if value})
+            structure_constraints = normalize_sentence_fill_constraints(merged_constraints)
+
+        blank_position = str(structure_constraints.get("blank_position") or "middle").strip() or "middle"
+        function_type = normalize_sentence_fill_function_type(structure_constraints.get("function_type")) or ""
+        logic_relation = str(structure_constraints.get("logic_relation") or "").strip()
+        material_source = material.source if isinstance(material.source, dict) else {}
+        existing_prompt_extras = (
+            deepcopy(material_source.get("prompt_extras") or {})
+            if isinstance(material_source.get("prompt_extras"), dict)
+            else {}
+        )
+        compliance_report = (
+            deepcopy(material_source.get("material_compliance_report") or {})
+            if isinstance(material_source.get("material_compliance_report"), dict)
+            else {}
+        )
+        if self._sentence_fill_source_prompt_extras_polluted(
+            prompt_extras=existing_prompt_extras,
+            compliance_report=compliance_report,
+        ):
+            existing_prompt_extras = {}
+        existing_anchor_text = str(existing_prompt_extras.get("answer_anchor_text") or "").strip()
+        if self._sentence_fill_anchor_text_invalid(existing_anchor_text):
+            existing_anchor_text = ""
+        working_source_text = self._sentence_fill_working_source_text(material)
+
+        if (
+            not existing_anchor_text
+            and self._sentence_fill_material_already_blank(working_source_text)
+        ):
+            raise DomainError(
+                "sentence_fill requires original unblanked material so the removed source sentence can remain the only legal answer.",
+                status_code=422,
+                details={
+                    "question_type": "sentence_fill",
+                    "reason": "missing_original_answer_anchor",
+                },
+            )
+
+        paragraphs = self._split_sentence_fill_paragraphs(working_source_text)
+        paragraph_units = [self._split_sentence_fill_units(paragraph) for paragraph in paragraphs]
+        blank_target = self._select_sentence_fill_blank_target(
+            paragraph_units=paragraph_units,
+            blank_position=blank_position,
+        )
+
+        if blank_target is None:
+            updated_source = deepcopy(material.source or {})
+            prompt_extras = deepcopy((updated_source.get("prompt_extras") or {}))
+            prompt_extras.update(
+                {
+                    "blank_position": blank_position,
+                    "function_type": function_type,
+                    "logic_relation": logic_relation,
+                }
+            )
+            updated_source["prompt_extras"] = prompt_extras
+            return material.model_copy(update={"source": updated_source})
+
+        rendered_paragraphs = [list(units) for units in paragraph_units]
+        answer_anchor_text = self._normalize_sentence_fill_anchor_text(
+            str(rendered_paragraphs[blank_target[0]][blank_target[1]] or "").strip()
+        )
+        if self._sentence_fill_anchor_text_invalid(answer_anchor_text):
+            raise DomainError(
+                "sentence_fill could not recover an original source sentence for the blank position.",
+                status_code=422,
+                details={
+                    "question_type": "sentence_fill",
+                    "reason": "invalid_answer_anchor_text",
+                },
+            )
+        rendered_paragraphs[blank_target[0]][blank_target[1]] = "____"
+        rendered_paragraphs = [self._dedupe_sentence_fill_units(units) for units in rendered_paragraphs]
+        fill_ready_material = self._normalize_sentence_fill_display_text(
+            self._render_sentence_fill_paragraphs(rendered_paragraphs)
+        )
+        fill_ready_local_material = self._normalize_sentence_fill_display_text(
+            self._build_sentence_fill_local_window(
+            original_units=paragraph_units[blank_target[0]],
+            blank_index=blank_target[1],
+            )
+        )
+        existing_blanked_display = self._normalize_sentence_fill_display_text(
+            str(existing_prompt_extras.get("blanked_text") or "").replace("[BLANK]", "____")
+        )
+        fallback_fill_display = self._normalize_sentence_fill_display_text(
+            self._replace_sentence_fill_anchor_once(working_source_text, answer_anchor_text)
+        )
+        if self._sentence_fill_display_collapsed(fallback_fill_display) and not self._sentence_fill_display_collapsed(existing_blanked_display):
+            fallback_fill_display = existing_blanked_display
+        if self._sentence_fill_display_collapsed(fill_ready_material):
+            fill_ready_material = fallback_fill_display or fill_ready_material
+        if self._sentence_fill_display_collapsed(fill_ready_local_material):
+            fill_ready_local_material = fallback_fill_display or fill_ready_local_material
+        if self._sentence_fill_display_not_exam_like(
+            fill_ready_material=fill_ready_material,
+            fill_ready_local_material=fill_ready_local_material,
+            answer_anchor_text=answer_anchor_text,
+        ):
+            raise DomainError(
+                "sentence_fill material window is too thin or the removed sentence dominates the display, which is not exam-like enough.",
+                status_code=422,
+                details={
+                    "question_type": "sentence_fill",
+                    "reason": "sentence_fill_display_not_exam_like",
+                },
+            )
+        preferred_answer_shape, forbidden_answer_styles = self._sentence_fill_answer_shape_hints(
+            blank_position=blank_position,
+            function_type=function_type,
+            logic_relation=logic_relation,
+        )
+        leaf_key, hard_logic_tags, hard_logic_rules = self._derive_sentence_fill_hard_logic_profile(
+            blank_position=blank_position,
+            function_type=function_type,
+            logic_relation=logic_relation,
+        )
+
+        updated_source = deepcopy(material.source or {})
+        prompt_extras = deepcopy((updated_source.get("prompt_extras") or {}))
+        prompt_extras.update(
+            {
+                "blank_position": blank_position,
+                "function_type": function_type,
+                "logic_relation": logic_relation,
+                "fill_ready_material": fill_ready_material,
+                "fill_ready_local_material": fill_ready_local_material,
+                "answer_anchor_text": answer_anchor_text,
+                "require_original_answer_sentence": True,
+                "preferred_answer_shape": preferred_answer_shape,
+                "forbidden_answer_styles": forbidden_answer_styles,
+                "hard_logic_leaf_key": leaf_key,
+                "hard_logic_tags": hard_logic_tags,
+                "hard_logic_rules": hard_logic_rules,
+            }
+        )
+        updated_source["prompt_extras"] = prompt_extras
+
+        return material.model_copy(
+            update={
+                "text": fill_ready_material,
+                "original_text": working_source_text,
+                "source": updated_source,
+                "text_refined": True,
+                "refinement_reason": f"sentence_fill_ready::{blank_position or 'middle'}::{function_type or 'unspecified'}",
+            }
+        )
+
+    def _enforce_sentence_fill_original_answer(
+        self,
+        *,
+        generated_question: GeneratedQuestion,
+        material: MaterialSelectionResult,
+    ) -> GeneratedQuestion:
+        if generated_question.question_type != "sentence_fill":
+            return generated_question
+        material_source = material.source if isinstance(material.source, dict) else {}
+        prompt_extras = material_source.get("prompt_extras") if isinstance(material_source.get("prompt_extras"), dict) else {}
+        if not bool(prompt_extras.get("require_original_answer_sentence")):
+            return generated_question
+        answer_anchor_text = str(prompt_extras.get("answer_anchor_text") or "").strip()
+        answer_key = str(generated_question.answer or "").strip().upper()
+        if not answer_anchor_text or not answer_key:
+            return generated_question
+        options = dict(generated_question.options or {})
+        if options.get(answer_key, "").strip() == answer_anchor_text:
+            return generated_question
+        options[answer_key] = answer_anchor_text
+        metadata = dict(generated_question.metadata or {})
+        metadata["sentence_fill_original_answer_enforced"] = True
+        return generated_question.model_copy(update={"options": options, "metadata": metadata})
+
+    @staticmethod
+    def _sentence_fill_material_already_blank(text: str) -> bool:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return False
+        if "[BLANK]" in normalized:
+            return True
+        if re.search(r"_{2,}|﹍+|（\s*）|\(\s*\)|“\s*”", normalized):
+            return True
+        if re.search(r"[，,：:；;]\s*[。！？!?]", normalized):
+            return True
+        if any(token in normalized for token in ("填入", "横线部分", "划横线部分", "画横线部分", "最恰当的一项", "最恰当的一句")):
+            return True
+        return False
+
+    @staticmethod
+    def _sentence_fill_anchor_text_invalid(text: str) -> bool:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return True
+        if QuestionGenerationService._is_sentence_fill_structural_heading_unit(normalized):
+            return True
+        if QuestionGenerationService._sentence_fill_material_already_blank(normalized):
+            return True
+        semantic = re.sub(r"[\W_]+", "", normalized, flags=re.UNICODE)
+        if not semantic:
+            return True
+        return False
+
+    def _sentence_fill_working_source_text(self, material: MaterialSelectionResult) -> str:
+        material_source = material.source if isinstance(material.source, dict) else {}
+        prompt_extras = (
+            deepcopy(material_source.get("prompt_extras") or {})
+            if isinstance(material_source.get("prompt_extras"), dict)
+            else {}
+        )
+        current_text = self._clean_material_text(material.text or "")
+        if bool(material.text_refined) and current_text and not self._sentence_fill_material_already_blank(current_text):
+            return self._normalize_sentence_fill_display_text(current_text)
+        original_text = self._clean_material_text(material.original_text or "")
+        if original_text and not self._sentence_fill_material_already_blank(original_text):
+            return self._normalize_sentence_fill_display_text(original_text)
+        if current_text and not self._sentence_fill_material_already_blank(current_text):
+            return self._normalize_sentence_fill_display_text(current_text)
+        context_window = self._clean_material_text(str(prompt_extras.get("context_window") or ""))
+        if context_window and not self._sentence_fill_material_already_blank(context_window):
+            return self._normalize_sentence_fill_display_text(context_window)
+        return self._normalize_sentence_fill_display_text(original_text or current_text)
+
+    @staticmethod
+    def _normalize_sentence_fill_display_text(text: str) -> str:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return ""
+        normalized = QuestionGenerationService._strip_sentence_fill_leading_fragment(normalized)
+        normalized = re.sub(r"\.{3,}", "……", normalized)
+        normalized = re.sub(r"…{3,}", "……", normalized)
+        first_ellipsis_seen = False
+
+        def _replace_extra_ellipsis(match: re.Match[str]) -> str:
+            nonlocal first_ellipsis_seen
+            if not first_ellipsis_seen:
+                first_ellipsis_seen = True
+                return "……"
+            return "，"
+
+        normalized = re.sub(r"……", _replace_extra_ellipsis, normalized)
+        normalized = re.sub(r"[，,]\s*[，,]", "，", normalized)
+        normalized = re.sub(r"……(?=[，。；;！？!?])", "", normalized)
+        normalized = re.sub(r"\s+", "", normalized)
+        return normalized.strip()
+
+    @staticmethod
+    def _strip_sentence_fill_leading_fragment(text: str) -> str:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return ""
+        candidate = re.sub(r"^[\.\,，;；:：、]+", "", candidate).strip()
+        candidate = re.sub(r"^(?:[(（]?\d+[)）]?|[一二三四五六七八九十百千万]+[、.．])\s*", "", candidate).strip()
+        fragment_match = re.match(
+            r"^([^\s，。！？；;：:]{4,16})(在|从|当|若|如|为|把|将|对)([^。！？!?]{8,})$",
+            candidate,
+        )
+        if fragment_match:
+            fragment = fragment_match.group(1)
+            if len(re.findall(r"[的了和与及并或]", fragment)) <= 1:
+                candidate = f"{fragment_match.group(2)}{fragment_match.group(3)}".strip()
+        return candidate
+
+    @staticmethod
+    def _normalize_sentence_fill_anchor_text(text: str) -> str:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return ""
+        normalized = re.sub(r'^[”’」』】）)\]\s]+', "", normalized)
+        normalized = re.sub(r"\s+", "", normalized)
+        return normalized.strip()
+
+    @classmethod
+    def _sentence_fill_source_prompt_extras_polluted(
+        cls,
+        *,
+        prompt_extras: dict[str, Any] | None,
+        compliance_report: dict[str, Any] | None,
+    ) -> bool:
+        report = dict(compliance_report or {})
+        issues = {str(issue).strip() for issue in (report.get("issues") or []) if str(issue).strip()}
+        if report.get("passed") is False and "contains_blank_markers" in issues:
+            return True
+        extras = dict(prompt_extras or {})
+        answer_anchor_text = str(extras.get("answer_anchor_text") or "").strip()
+        return cls._sentence_fill_material_already_blank(answer_anchor_text)
+
+    @staticmethod
+    def _strip_sentence_fill_unit_prefix(text: str) -> str:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return ""
+        return re.sub(r"^\s*(?:[(（]?\d+[)）]?|[一二三四五六七八九十百千万]+[、.．])\s*", "", normalized).strip()
+
+    @staticmethod
+    def _is_sentence_fill_structural_heading_unit(text: str) -> bool:
+        raw = str(text or "").strip()
+        if not raw:
+            return True
+        if not re.match(r"^\s*(?:[(（]?\d+[)）]?|[一二三四五六七八九十百千万]+[、.．])\s*", raw):
+            return False
+        stripped = QuestionGenerationService._strip_sentence_fill_unit_prefix(raw)
+        compact = re.sub(r"[\s。！？!?；;：:，,、]", "", stripped)
+        if not compact:
+            return True
+        if len(compact) <= 12 and not re.search(r"[，,；;：:]", stripped):
+            return True
+        return False
+
+    def _split_sentence_fill_paragraphs(self, text: str) -> list[str]:
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text or "") if part.strip()]
+        return paragraphs or ([text.strip()] if str(text or "").strip() else [])
+
+    def _split_sentence_fill_units(self, paragraph: str) -> list[str]:
+        raw_units = [
+            item.strip()
+            for item in re.split(r"(?<=[。！？!?])\s*", str(paragraph or "").strip())
+            if item.strip()
+        ]
+        units: list[str] = []
+        for item in raw_units:
+            if self._is_sentence_fill_structural_heading_unit(item):
+                continue
+            normalized = self._strip_sentence_fill_unit_prefix(item)
+            units.extend(self._split_sentence_fill_long_unit(normalized or item.strip()))
+        return units or ([str(paragraph or "").strip()] if str(paragraph or "").strip() else [])
+
+    @staticmethod
+    def _split_sentence_fill_long_unit(unit: str) -> list[str]:
+        normalized = str(unit or "").strip()
+        if not normalized:
+            return []
+        if len(normalized) < 34:
+            return [normalized]
+        if sum(normalized.count(token) for token in ("，", "；", ":", "：")) < 2:
+            return [normalized]
+        raw_parts = [
+            part.strip()
+            for part in re.split(r"(?<=[，；;：:])", normalized)
+            if part and part.strip()
+        ]
+        if len(raw_parts) < 2:
+            return [normalized]
+        merged: list[str] = []
+        buffer = ""
+        for part in raw_parts:
+            piece = str(part).strip()
+            compact = re.sub(r"[，；;：:\s]", "", piece)
+            if len(compact) < 8:
+                buffer += piece
+                continue
+            if buffer:
+                piece = f"{buffer}{piece}"
+                buffer = ""
+            merged.append(piece)
+        if buffer:
+            if merged:
+                merged[-1] = f"{merged[-1]}{buffer}"
+            else:
+                merged.append(buffer)
+        cleaned = [item.strip("，；;：: ").strip() for item in merged if item.strip("，；;：: ").strip()]
+        return cleaned or [normalized]
+
+    def _dedupe_sentence_fill_units(self, units: list[str]) -> list[str]:
+        deduped: list[str] = []
+        signatures: list[str] = []
+        for unit in units:
+            normalized = re.sub(r"\s+", "", str(unit or ""))
+            if not normalized:
+                continue
+            if any(
+                normalized == existing
+                or normalized in existing
+                or existing in normalized
+                or SequenceMatcher(None, normalized, existing).ratio() >= 0.96
+                for existing in signatures
+            ):
+                continue
+            signatures.append(normalized)
+            deduped.append(str(unit).strip())
+        return deduped
+
+    def _render_sentence_fill_paragraphs(self, paragraph_units: list[list[str]]) -> str:
+        paragraphs = ["".join(unit for unit in units if str(unit or "").strip()).strip() for units in paragraph_units]
+        paragraphs = [paragraph for paragraph in paragraphs if paragraph]
+        return "\n\n".join(paragraphs).strip()
+
+    def _select_sentence_fill_blank_target(
+        self,
+        *,
+        paragraph_units: list[list[str]],
+        blank_position: str,
+    ) -> tuple[int, int] | None:
+        flat_indices = [
+            (paragraph_index, unit_index)
+            for paragraph_index, units in enumerate(paragraph_units)
+            for unit_index, unit in enumerate(units)
+            if str(unit or "").strip() and not self._sentence_fill_anchor_text_invalid(unit)
+        ]
+        if not flat_indices:
+            return None
+        if blank_position == "opening":
+            return flat_indices[0]
+        if blank_position == "ending":
+            return flat_indices[-1]
+        middle = max(0, len(flat_indices) // 2)
+        return flat_indices[min(len(flat_indices) - 1, middle)]
+
+    def _build_sentence_fill_local_window(
+        self,
+        *,
+        original_units: list[str],
+        blank_index: int,
+    ) -> str:
+        if not original_units:
+            return ""
+        start = max(0, blank_index - 1)
+        end = min(len(original_units), blank_index + 2)
+        window_units: list[str] = []
+        for index in range(start, end):
+            unit = str(original_units[index] or "").strip()
+            if index != blank_index and self._is_sentence_fill_structural_heading_unit(unit):
+                continue
+            if index == blank_index:
+                window_units.append("____")
+            else:
+                window_units.append(self._strip_sentence_fill_unit_prefix(unit) or unit)
+        return "".join(unit for unit in window_units if str(unit or "").strip()).strip()
+
+    @staticmethod
+    def _sentence_fill_display_collapsed(text: str) -> bool:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return True
+        visible = re.sub(r"[_\s，,。；;：:！!？?……]+", "", normalized)
+        return len(visible) < 8
+
+    def _replace_sentence_fill_anchor_once(self, text: str, answer_anchor_text: str) -> str:
+        base_text = self._normalize_sentence_fill_display_text(text)
+        anchor = self._normalize_sentence_fill_anchor_text(answer_anchor_text)
+        if not base_text:
+            return ""
+        if not anchor:
+            return base_text
+        anchor_index = base_text.find(anchor)
+        if anchor_index < 0:
+            return base_text
+        return (base_text[:anchor_index] + "____" + base_text[anchor_index + len(anchor):]).strip()
+
+    @staticmethod
+    def _sentence_fill_display_not_exam_like(
+        *,
+        fill_ready_material: str,
+        fill_ready_local_material: str,
+        answer_anchor_text: str,
+    ) -> bool:
+        display = str(fill_ready_material or fill_ready_local_material or "").strip()
+        if not display:
+            return True
+        normalized = display.replace("____", "[BLANK]")
+        visible = re.sub(r"\[BLANK\]", "", normalized)
+        visible = re.sub(r"[\W_]+", "", visible, flags=re.UNICODE)
+        sentence_count = len([part for part in re.split(r"(?<=[。！？!?])\s*", normalized) if part.strip()])
+        if len(visible) < 18 or sentence_count < 1:
+            return True
+        anchor = re.sub(r"[\W_]+", "", str(answer_anchor_text or ""), flags=re.UNICODE)
+        if not anchor:
+            return True
+        if len(anchor) / max(1, len(visible) + len(anchor)) >= 0.88:
+            return True
+        return False
+
+    def _sentence_fill_answer_shape_hints(
+        self,
+        *,
+        blank_position: str,
+        function_type: str,
+        logic_relation: str,
+    ) -> tuple[str, list[str]]:
+        if blank_position == "opening":
+            return "natural_lead", ["motto_like", "quote_like", "editorial_slogan"]
+        if blank_position == "ending" and function_type in {"countermeasure", "conclusion"}:
+            return "problem_response", ["policy_slogan", "macro_call", "future_vision"]
+        if function_type == "summary" or logic_relation == "summary":
+            return "closing_summary", ["policy_slogan", "editorial_commentary"]
+        if function_type in {"bridge", "carry_previous", "lead_next"}:
+            return "local_bridge", ["macro_call", "detached_commentary"]
+        return "local_explanation", ["policy_slogan", "detached_commentary"]
+
+    def _derive_sentence_fill_hard_logic_profile(
+        self,
+        *,
+        blank_position: str,
+        function_type: str,
+        logic_relation: str,
+    ) -> tuple[str, list[str], list[str]]:
+        normalized_position = str(blank_position or "middle").strip() or "middle"
+        normalized_function = str(function_type or "bridge").strip() or "bridge"
+        normalized_relation = str(logic_relation or "continuation").strip() or "continuation"
+        leaf_key = f"sentence_fill.{normalized_position}.{normalized_function}.{normalized_relation}"
+        tags = [
+            "sentence_fill.source_truth.original_removed_sentence",
+            "sentence_fill.source_truth.full_passage_before_blank",
+            "sentence_fill.uniqueness.local_slot_only",
+            f"sentence_fill.leaf.{normalized_position}.{normalized_function}",
+        ]
+        rules = [
+            "生成时就把原文被挖掉的句子当作唯一合法正确项，不要先自由生成再交给校验器兜底。",
+            "空位必须在原文合法槽位内工作，正确项只允许回填该槽位，不允许借题发挥成更宏观的新句子。",
+        ]
+        if normalized_position == "opening":
+            rules.append("opening 空位必须像自然起句，先承担领起作用，不要提前写成正文摘要或评论结论。")
+        if normalized_position == "middle":
+            rules.append("middle 空位必须留在段内局部逻辑链上，不要把局部承接句改写成段落级总评。")
+        if normalized_position == "ending":
+            rules.append("ending 空位必须完成收束，不要重新开启新任务、新口号或更远一层的宏观扩展。")
+        if normalized_function == "bridge":
+            rules.append("bridge 叶必须同时咬住左侧锚点和右侧落点，不能只顺一边。")
+        elif normalized_function == "carry_previous":
+            rules.append("carry_previous 叶必须先回扣前文刚建立的对象和判断，再考虑后续顺滑。")
+        elif normalized_function == "lead_next":
+            rules.append("lead_next 叶必须点亮后文马上展开的具体概念，不要只写泛泛的重要性。")
+        elif normalized_function == "topic_intro":
+            rules.append("topic_intro 叶优先保留题眼、引语、警句式起势，不要抹成现代说明句。")
+        elif normalized_function in {"conclusion", "summary"}:
+            rules.append("summary/conclusion 叶要落在本文当前对象的收束判断上，不要变成外加评论。")
+        elif normalized_function == "countermeasure":
+            rules.append("countermeasure 叶必须给出同尺度的原则或对策，不要把危害续写当成对策。")
+        if normalized_relation == "explanation":
+            rules.append("logic_relation=explanation 时，正确项应补足当前解释链，而不是另起评价。")
+        elif normalized_relation == "focus_shift":
+            rules.append("logic_relation=focus_shift 时，正确项要把重心准确转给后文对象，不要悬在中间。")
+        elif normalized_relation == "summary":
+            rules.append("logic_relation=summary 时，正确项应压缩已有信息并完成收口，不要新增论点。")
+        return leaf_key, list(dict.fromkeys(tags)), list(dict.fromkeys(rules))
+
+    def _derive_sentence_order_hard_logic_profile(
+        self,
+        *,
+        request_snapshot: dict[str, Any],
+        sortable_units: list[str],
+        binding_pairs: list[tuple[int, int]],
+        sentence_roles: dict[str, str],
+    ) -> tuple[str, list[str], list[str]]:
+        type_slots = deepcopy(request_snapshot.get("type_slots") or {})
+        opening_anchor_type = str(type_slots.get("opening_anchor_type") or "explicit_topic").strip() or "explicit_topic"
+        middle_structure_type = str(type_slots.get("middle_structure_type") or "local_binding").strip() or "local_binding"
+        closing_anchor_type = str(type_slots.get("closing_anchor_type") or "conclusion").strip() or "conclusion"
+        leaf_key = f"sentence_order.{opening_anchor_type}.{middle_structure_type}.{closing_anchor_type}"
+        tags = [
+            "sentence_order.source_truth.material_original_order",
+            "sentence_order.source_truth.display_units_from_material_only",
+            "sentence_order.uniqueness.single_defensible_sequence",
+            f"sentence_order.leaf.{opening_anchor_type}.{middle_structure_type}.{closing_anchor_type}",
+        ]
+        rules = [
+            "生成时就把原材料原始顺序当作唯一真值；模型只能决定展示怎么打乱，不能改写真正正确顺序。",
+            "展示单元必须全部来自原材料，不允许重写、拆换或另造新句来让排序更好做。",
+            "排序唯一性优先来自合法首句、局部捆绑和自然收束三者的共同支持，不要依赖讲解腔提示词强拉答案。",
+        ]
+        if sortable_units:
+            rules.append(f"当前展示单元数固定为 {len(sortable_units)}，所有选项都必须是该长度的纯数字顺序。")
+        if binding_pairs:
+            rules.append("存在局部硬捆绑对时，正确顺序必须保住这些相邻约束，不要为了表面顺滑拆开。")
+        if sentence_roles:
+            rules.append("句群角色链应沿着材料原始推进顺序展开，不要让例子、转折或结论越位到更前面。")
+        if opening_anchor_type in {"background_intro", "explicit_topic", "viewpoint_opening", "problem_opening"}:
+            rules.append(f"opening_anchor_type={opening_anchor_type} 时，首句优先承担开题合法性，不要让局部细节句抢首位。")
+        if middle_structure_type in {"local_binding", "parallel_expansion", "cause_effect_chain", "problem_solution_blocks"}:
+            rules.append(f"middle_structure_type={middle_structure_type} 时，中段顺序要服从该推进骨架，不要只看表面通顺。")
+        if closing_anchor_type in {"conclusion", "summary", "call_to_action", "case_support"}:
+            rules.append(f"closing_anchor_type={closing_anchor_type} 时，尾句必须承担对应收束角色，不要提前泄露到前位。")
+        return leaf_key, list(dict.fromkeys(tags)), list(dict.fromkeys(rules))
+
+    def _derive_sentence_order_ready_material(
+        self,
+        *,
+        material: MaterialSelectionResult,
+        request_snapshot: dict[str, Any],
+    ) -> MaterialSelectionResult:
+        source = deepcopy(material.source or {})
+        prompt_extras = deepcopy((source.get("prompt_extras") or {}))
+        raw_text = self._clean_material_text(material.text or material.original_text or "")
+        if not raw_text:
+            return material
+
+        source_question_analysis = request_snapshot.get("source_question_analysis") or {}
+        coerced = self._coerce_sentence_order_material(
+            material=material.model_copy(update={"text": raw_text, "original_text": material.original_text or raw_text}),
+            source_question_analysis=source_question_analysis,
+        )
+        prepared_material = coerced or material.model_copy(
+            update={"text": raw_text, "original_text": material.original_text or raw_text}
+        )
+        units = self._extract_sortable_units_from_text(prepared_material.text or "")
+        target_unit_count = self._sentence_order_target_unit_count(source_question_analysis) or (
+            len(units) if len(units) in {4, 5, 6} else 6
+        )
+        normalized_units = (
+            self._normalize_sentence_order_units_to_six(units, target_count=target_unit_count)
+            or self._normalize_sentence_order_units_to_six(units)
+            or units
+        )
+        sortable_units = [
+            self._clean_sentence_order_sortable_unit(unit)
+            for unit in normalized_units[:target_unit_count]
+            if self._clean_sentence_order_sortable_unit(unit)
+        ]
+        if target_unit_count not in {4, 5, 6} or len(sortable_units) < target_unit_count:
+            return prepared_material
+
+        sortable_material_text = self._format_sortable_units(sortable_units)
+        natural_material_text = self._format_sentence_order_natural_material(
+            raw_text=raw_text,
+            sortable_units=sortable_units,
+        )
+        natural_material_text, presentation_meta = self._refine_sentence_order_presentation_material(
+            raw_text=raw_text,
+            current_text=natural_material_text,
+            sortable_units=sortable_units,
+            source=source,
+        )
+        binding_pairs = self._derive_sentence_order_binding_pairs(sortable_units)
+        sentence_roles = self._derive_sentence_order_roles(sortable_units)
+        leaf_key, hard_logic_tags, hard_logic_rules = self._derive_sentence_order_hard_logic_profile(
+            request_snapshot=request_snapshot,
+            sortable_units=sortable_units,
+            binding_pairs=binding_pairs,
+            sentence_roles=sentence_roles,
+        )
+        prompt_extras.update(
+            {
+                "sortable_units": sortable_units,
+                "sortable_material_text": sortable_material_text,
+                "sortable_unit_count": len(sortable_units),
+                "head_anchor_text": sortable_units[0],
+                "tail_anchor_text": sortable_units[-1],
+                "binding_pairs": [list(pair) for pair in binding_pairs],
+                "sentence_roles": sentence_roles,
+                "hard_logic_leaf_key": leaf_key,
+                "hard_logic_tags": hard_logic_tags,
+                "hard_logic_rules": hard_logic_rules,
+                "natural_material_text": natural_material_text,
+                "generation_mode": "question_service_sentence_order_consumption",
+            }
+        )
+        if presentation_meta:
+            prompt_extras.update(presentation_meta)
+        source["prompt_extras"] = prompt_extras
+        source["sentence_order_material_applied"] = True
+
+        validator_contract = deepcopy(prepared_material.validator_contract or {})
+        if not isinstance(validator_contract, dict):
+            validator_contract = {}
+        sentence_order_contract = dict(validator_contract.get("sentence_order") or {})
+        structure_contract = dict(validator_contract.get("structure_constraints") or {})
+        sentence_order_contract["sortable_unit_count"] = len(sortable_units)
+        structure_contract["sortable_unit_count"] = len(sortable_units)
+        if binding_pairs:
+            sentence_order_contract["binding_pairs"] = [list(pair) for pair in binding_pairs]
+        if sentence_roles:
+            sentence_order_contract["sentence_roles"] = sentence_roles
+        validator_contract["sentence_order"] = sentence_order_contract
+        validator_contract["structure_constraints"] = structure_contract
+
+        return prepared_material.model_copy(
+            update={
+                "text": natural_material_text,
+                "source": source,
+                "validator_contract": validator_contract,
+                "text_refined": True,
+                "refinement_reason": "sentence_order_consumption_ready",
+            }
+        )
+
+    def _derive_sentence_order_binding_pairs(self, units: list[str]) -> list[tuple[int, int]]:
+        pairs: list[tuple[int, int]] = []
+        pronoun_starts = ("这", "这类", "这种", "这一", "其", "其中", "同时", "此外", "因此", "所以", "随后", "然后", "接着")
+        current_problem_markers = ("问题在于", "难点在于", "关键在于", "困境在于", "为何")
+        next_solution_markers = ("因此", "所以", "由此", "应该", "应当", "需要", "必须")
+        for index in range(len(units) - 1):
+            current = str(units[index] or "").strip()
+            nxt = str(units[index + 1] or "").strip()
+            if not current or not nxt:
+                continue
+            if nxt.startswith(pronoun_starts):
+                pairs.append((index + 1, index + 2))
+                continue
+            if any(token in current for token in current_problem_markers) and any(token in nxt for token in next_solution_markers):
+                pairs.append((index + 1, index + 2))
+                continue
+            if ("只有" in current and "才" in nxt) or ("如果" in current and any(token in nxt for token in ("那么", "就", "还要", "因此"))):
+                pairs.append((index + 1, index + 2))
+        deduped: list[tuple[int, int]] = []
+        for pair in pairs:
+            if pair not in deduped:
+                deduped.append(pair)
+        return deduped[:3]
+
+    def _derive_sentence_order_roles(self, units: list[str]) -> dict[str, str]:
+        roles: dict[str, str] = {}
+        for index, unit in enumerate(units, start=1):
+            role = self._infer_sentence_order_role_hint(unit, is_last=index == len(units))
+            if role:
+                roles[str(index)] = role
+        return roles
+
+    def _infer_sentence_order_role_hint(self, text: str, *, is_last: bool = False) -> str:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return ""
+        conclusion_markers = ("因此", "所以", "由此", "可见", "总之", "综上")
+        transition_markers = ("接着", "随后", "然后", "进一步", "在此基础上", "与此同时", "另一方面", "同时", "此外", "但是", "然而", "不过", "进而")
+        thesis_markers = ("首先", "起初", "一开始", "第一", "问题在于", "关键在于", "要想", "对于", "面对")
+        if any(candidate.startswith(marker) for marker in thesis_markers):
+            return "thesis"
+        if any(candidate.startswith(marker) for marker in conclusion_markers):
+            return "conclusion" if is_last else "transition"
+        if any(candidate.startswith(marker) for marker in transition_markers):
+            return "transition"
+        if is_last:
+            return "conclusion"
+        return ""
 
     def _build_forced_user_material_candidates(
         self,
@@ -2893,7 +4176,137 @@ class QuestionGenerationService:
         updated_request = dict(standard_request)
         updated_request["question_type"] = bound_question_type
         updated_request["business_subtype"] = runtime_binding.get("business_subtype")
+        question_card = question_card_binding.get("question_card") or {}
+        card_base_slots = deepcopy(question_card.get("base_slots") or {}) if isinstance(question_card, dict) else {}
+        current_type_slots = deepcopy(updated_request.get("type_slots") or {})
+        if isinstance(card_base_slots, dict):
+            # candidate_type is a hydrated runtime hint for sentence_order, not a public type_slot.
+            card_base_slots.pop("candidate_type", None)
+            merged_type_slots = dict(card_base_slots)
+            merged_type_slots.update(current_type_slots)
+        else:
+            merged_type_slots = current_type_slots
+
+        if isinstance(question_card, dict):
+            formal_runtime_spec = question_card.get("formal_runtime_spec") or {}
+            if isinstance(formal_runtime_spec, dict):
+                candidate_type = formal_runtime_spec.get("candidate_type")
+                if candidate_type:
+                    extra_constraints = deepcopy(updated_request.get("extra_constraints") or {})
+                    extra_constraints.setdefault("runtime_candidate_type_hint", candidate_type)
+                    updated_request["extra_constraints"] = extra_constraints
+
+        updated_request["type_slots"] = merged_type_slots
         return updated_request
+
+    def _apply_distill_runtime_overlay(
+        self,
+        *,
+        build_request: PromptBuildRequest,
+        built_item: dict[str, Any],
+        material: MaterialSelectionResult,
+    ) -> None:
+        request_snapshot = built_item.get("request_snapshot") or {}
+        question_card_binding = request_snapshot.get("question_card_binding") or {}
+        question_card = question_card_binding.get("question_card") if isinstance(question_card_binding, dict) else {}
+        overlay = self.distill_runtime_overlay.resolve(
+            question_type=built_item.get("question_type"),
+            business_subtype=built_item.get("business_subtype"),
+            question_card=question_card if isinstance(question_card, dict) else {},
+            material_source=material.source if isinstance(material.source, dict) else {},
+            resolved_slots=built_item.get("resolved_slots"),
+        )
+        if not overlay:
+            return
+
+        current_resolved_slots = deepcopy(built_item.get("resolved_slots") or {})
+        overlay_slot_defaults = dict(overlay.get("resolved_slot_defaults") or {})
+        if overlay_slot_defaults:
+            merged_resolved_slots = dict(overlay_slot_defaults)
+            merged_resolved_slots.update(current_resolved_slots)
+            built_item["resolved_slots"] = merged_resolved_slots
+
+        control_logic = deepcopy(built_item.get("control_logic") or {})
+        overlay_special_fields = dict(overlay.get("control_logic_special_fields") or {})
+        current_special_fields = dict(control_logic.get("special_fields") or {})
+        if overlay_special_fields:
+            merged_special_fields = dict(overlay_special_fields)
+            merged_special_fields.update(current_special_fields)
+            control_logic["special_fields"] = merged_special_fields
+            built_item["control_logic"] = control_logic
+
+        if not isinstance(material.source, dict):
+            material.source = {}
+        prompt_extras = deepcopy(material.source.get("prompt_extras") or {}) if isinstance(material.source.get("prompt_extras"), dict) else {}
+        prompt_extras.update(
+            {
+                "distill_runtime_overlay_mode": overlay.get("overlay_mode"),
+                "distill_mother_family_id": overlay.get("mother_family_id"),
+                "distill_child_family_id": overlay.get("child_family_id"),
+                "distill_leaf_key": overlay.get("leaf_key"),
+                "distill_prompt_guard_lines": list(overlay.get("prompt_guard_lines") or []),
+            }
+        )
+        material.source["prompt_extras"] = prompt_extras
+        material.source["distill_runtime_overlay"] = {
+            "mother_family_id": overlay.get("mother_family_id"),
+            "child_family_id": overlay.get("child_family_id"),
+            "leaf_key": overlay.get("leaf_key"),
+            "overlay_mode": overlay.get("overlay_mode"),
+        }
+
+        built_item["material_source"] = material.source
+        built_item["material_selection"] = material.model_dump()
+        built_item["distill_runtime_overlay"] = {
+            "mother_family_id": overlay.get("mother_family_id"),
+            "child_family_id": overlay.get("child_family_id"),
+            "leaf_key": overlay.get("leaf_key"),
+            "overlay_mode": overlay.get("overlay_mode"),
+        }
+        built_item["notes"] = built_item.get("notes", []) + [
+            "distill_runtime_overlay_applied",
+            f"distill_taxonomy::{overlay.get('mother_family_id') or 'unknown'}::{overlay.get('child_family_id') or 'unknown'}::{overlay.get('leaf_key') or 'unknown'}",
+        ]
+
+        request_snapshot = deepcopy(request_snapshot)
+        request_snapshot["distill_runtime_overlay"] = built_item["distill_runtime_overlay"]
+        built_item["request_snapshot"] = request_snapshot
+        built_item["prompt_package"] = self._rebuild_prompt_package(
+            build_request=build_request,
+            built_item=built_item,
+        )
+
+    def _rebuild_prompt_package(
+        self,
+        *,
+        build_request: PromptBuildRequest,
+        built_item: dict[str, Any],
+    ) -> dict[str, Any]:
+        type_config = self.orchestrator.registry.get_type(built_item["question_type"])
+        subtype_config = None
+        business_subtype = built_item.get("business_subtype")
+        if business_subtype:
+            for candidate in type_config.business_subtypes:
+                if candidate.subtype_id == business_subtype:
+                    subtype_config = candidate
+                    break
+        pattern = self.orchestrator._get_pattern(type_config, built_item["selected_pattern"])
+        return self.orchestrator.prompt_builder.build(
+            question_type_config=type_config,
+            business_subtype_config=subtype_config,
+            pattern=pattern,
+            difficulty_target=build_request.difficulty_target,
+            resolved_slots=deepcopy(built_item.get("resolved_slots") or {}),
+            skeleton=deepcopy(built_item.get("skeleton") or {}),
+            control_logic=deepcopy(built_item.get("control_logic") or {}),
+            generation_logic=deepcopy(built_item.get("generation_logic") or {}),
+            topic=build_request.topic,
+            count=build_request.count,
+            passage_style=build_request.passage_style,
+            use_fewshot=build_request.use_fewshot,
+            fewshot_mode=build_request.fewshot_mode,
+            extra_constraints=deepcopy(build_request.extra_constraints or {}),
+        )
 
     @staticmethod
     def _summarize_rejected_attempt(built_item: dict, material: MaterialSelectionResult) -> dict:
@@ -2945,6 +4358,9 @@ class QuestionGenerationService:
                 break
             fallback_item = rejected["item"]
             fallback_item_id = str(fallback_item.get("item_id") or "")
+            if not fallback_item_id:
+                fallback_item_id = f"fallback::{uuid4().hex}"
+                fallback_item["item_id"] = fallback_item_id
             if fallback_item_id and fallback_item_id in selected_item_ids:
                 continue
             fallback_notes = list(fallback_item.get("notes") or [])
@@ -2957,7 +4373,9 @@ class QuestionGenerationService:
             if failure_record_path:
                 fallback_notes.append(f"failure_record_md={failure_record_path}")
             fallback_item["notes"] = fallback_notes
-            self.repository.save_version(fallback_item.pop("_version_record"))
+            version_record = fallback_item.pop("_version_record", None)
+            if version_record is not None:
+                self.repository.save_version(version_record)
             self.repository.save_item(fallback_item)
             items.append(fallback_item)
             if fallback_item_id:
@@ -3086,7 +4504,9 @@ class QuestionGenerationService:
                     status_code=422,
                     details={"field": "type_slots"},
                 )
+            question_type = str(snapshot.get("question_type") or "").strip()
             allowed_type_slot_keys = {str(key) for key in snapshot["type_slots"].keys()}
+            allowed_type_slot_keys.update(MetaService.review_control_keys(question_type))
             unknown_type_slot_keys = sorted(set(control_overrides["type_slots"].keys()) - allowed_type_slot_keys)
             if unknown_type_slot_keys:
                 raise DomainError(
@@ -3164,6 +4584,7 @@ class QuestionGenerationService:
 
         ordered_options = {letter: remapped_options[letter] for letter in letters if letter in remapped_options}
         remapped_analysis = self._remap_option_references(question.analysis, mapping)
+        remapped_analysis = self._synchronize_sentence_order_analysis_answer(remapped_analysis, target_answer)
         metadata = dict(question.metadata or {})
         metadata["answer_position_before_shuffle"] = answer
         metadata["answer_position"] = target_answer
@@ -3196,19 +4617,191 @@ class QuestionGenerationService:
         circled = [circled_map[ch] for ch in raw if ch in circled_map]
         if circled:
             return circled
-        return [int(match) for match in re.findall(r"\d+", raw)]
+        digit_groups = re.findall(r"\d+", raw)
+        if not digit_groups:
+            return []
+        if len(digit_groups) == 1 and len(digit_groups[0]) > 1:
+            return [int(ch) for ch in digit_groups[0]]
+        return [int(match) for match in digit_groups]
 
     def _format_order_sequence(self, order: list[int]) -> str:
-        circled = {1: "①", 2: "②", 3: "③", 4: "④", 5: "⑤", 6: "⑥", 7: "⑦", 8: "⑧", 9: "⑨", 10: "⑩"}
-        return "".join(circled.get(value, str(value)) for value in order)
+        circled_markers = {
+            1: "①",
+            2: "②",
+            3: "③",
+            4: "④",
+            5: "⑤",
+            6: "⑥",
+            7: "⑦",
+            8: "⑧",
+            9: "⑨",
+            10: "⑩",
+        }
+        if order and all(value in circled_markers for value in order):
+            return "".join(circled_markers[value] for value in order)
+        return "".join(str(value) for value in order)
+
+    def _is_valid_sentence_order_sequence(self, sequence: list[int], unit_count: int) -> bool:
+        return len(sequence) == unit_count and sorted(sequence) == list(range(1, unit_count + 1))
+
+    def _extract_sequence_from_analysis(self, text: str, unit_count: int) -> list[int]:
+        analysis = str(text or "").strip()
+        if not analysis or unit_count not in {4, 5, 6}:
+            return []
+        circled_matches = re.findall(rf"[①②③④⑤⑥⑦⑧⑨⑩]{{{unit_count}}}", analysis)
+        for match in reversed(circled_matches):
+            sequence = self._extract_order_sequence(match)
+            if self._is_valid_sentence_order_sequence(sequence, unit_count):
+                return sequence
+        anchored_patterns = [
+            rf"正确顺序(?:应为|为|是)[:：]?\s*([1-{unit_count}]{{{unit_count}}})",
+            rf"综合排序(?:应为|为|是)[:：]?\s*([1-{unit_count}]{{{unit_count}}})",
+            rf"最优顺序(?:应为|为|是)[:：]?\s*([1-{unit_count}]{{{unit_count}}})",
+            rf"排序(?:应为|为|是)[:：]?\s*([1-{unit_count}]{{{unit_count}}})",
+        ]
+        for pattern in anchored_patterns:
+            match = re.search(pattern, analysis)
+            if not match:
+                continue
+            sequence = [int(ch) for ch in match.group(1)]
+            if self._is_valid_sentence_order_sequence(sequence, unit_count):
+                return sequence
+        candidates = re.findall(rf"(?<!\d)([1-{unit_count}]{{{unit_count}}})(?!\d)", analysis)
+        for candidate in reversed(candidates):
+            sequence = [int(ch) for ch in candidate]
+            if self._is_valid_sentence_order_sequence(sequence, unit_count):
+                return sequence
+        return []
+
+    def _default_sentence_order_answer(self, unit_count: int) -> list[int]:
+        sequence = list(range(1, unit_count + 1))
+        if unit_count >= 5:
+            sequence[0], sequence[1] = sequence[1], sequence[0]
+            sequence[-1], sequence[-2] = sequence[-2], sequence[-1]
+        return sequence
+
+    @staticmethod
+    def _is_identity_sentence_order_sequence(sequence: list[int], unit_count: int) -> bool:
+        return sequence == list(range(1, unit_count + 1))
+
+    def _invert_sentence_order_display_sequence(self, display_sequence: list[int]) -> list[int]:
+        if not display_sequence:
+            return []
+        position_map = {material_index: display_index for display_index, material_index in enumerate(display_sequence, start=1)}
+        return [position_map[index] for index in range(1, len(display_sequence) + 1) if index in position_map]
+
+    def _choose_sentence_order_display_sequence(
+        self,
+        *,
+        unit_count: int,
+        material_units: list[str],
+        model_original_sentences: list[str],
+        answer_sequence: list[int],
+        analysis_sequence: list[int],
+        existing_correct_order: list[int],
+    ) -> tuple[list[int], str]:
+        model_to_material_index_map = self._sentence_order_model_to_material_index_map(
+            model_units=model_original_sentences,
+            material_units=material_units,
+        )
+        if model_to_material_index_map:
+            model_display_sequence = [model_to_material_index_map[index] for index in range(1, unit_count + 1)]
+            if (
+                self._is_valid_sentence_order_sequence(model_display_sequence, unit_count)
+                and not self._is_identity_sentence_order_sequence(model_display_sequence, unit_count)
+            ):
+                return model_display_sequence, "model_original_sentences"
+
+        for sequence, source_name in (
+            (answer_sequence, "answer_option"),
+            (analysis_sequence, "analysis_text"),
+            (existing_correct_order, "existing_correct_order"),
+        ):
+            if (
+                self._is_valid_sentence_order_sequence(sequence, unit_count)
+                and not self._is_identity_sentence_order_sequence(sequence, unit_count)
+            ):
+                return list(sequence), source_name
+
+        fallback_sequence = self._default_sentence_order_answer(unit_count)
+        if self._is_valid_sentence_order_sequence(fallback_sequence, unit_count):
+            return fallback_sequence, "default_display_shuffle"
+        return list(range(1, unit_count + 1)), "identity_fallback"
+
+    def _normalize_sentence_order_unit_text(self, text: str) -> str:
+        raw = str(text or "").strip()
+        raw = re.sub(r"^[①②③④⑤⑥⑦⑧⑨⑩\d]+\s*[.、．]?\s*", "", raw)
+        raw = raw.strip("。．；;，,：:!！?？ ")
+        return raw
+
+    def _sentence_order_model_to_material_index_map(
+        self,
+        *,
+        model_units: list[str],
+        material_units: list[str],
+    ) -> dict[int, int] | None:
+        if len(model_units) != len(material_units):
+            return None
+        normalized_material_positions: dict[str, list[int]] = {}
+        for index, sentence in enumerate(material_units, start=1):
+            normalized = self._normalize_sentence_order_unit_text(sentence)
+            if not normalized:
+                return None
+            normalized_material_positions.setdefault(normalized, []).append(index)
+
+        mapping: dict[int, int] = {}
+        for model_index, sentence in enumerate(model_units, start=1):
+            normalized = self._normalize_sentence_order_unit_text(sentence)
+            candidates = normalized_material_positions.get(normalized) or []
+            if not candidates:
+                return None
+            mapping[model_index] = candidates.pop(0)
+        return mapping if len(mapping) == len(model_units) else None
+
+    def _remap_sentence_order_sequence(
+        self,
+        sequence: list[int],
+        *,
+        index_map: dict[int, int] | None,
+        unit_count: int,
+    ) -> tuple[list[int], bool]:
+        if not self._is_valid_sentence_order_sequence(sequence, unit_count):
+            return sequence, False
+        if not index_map:
+            return sequence, False
+        remapped = [index_map.get(value, value) for value in sequence]
+        if not self._is_valid_sentence_order_sequence(remapped, unit_count):
+            return sequence, False
+        return remapped, remapped != sequence
+
+    @staticmethod
+    def _sentence_order_index_map_is_identity(index_map: dict[int, int] | None) -> bool:
+        if not index_map:
+            return True
+        return all(int(source) == int(target) for source, target in index_map.items())
+
+    def _sentence_order_stem(self, unit_count: int) -> str:
+        resolved_count = unit_count if unit_count in {4, 5, 6} else 6
+        return f"将以下{resolved_count}个句子重新排列，语序正确的一项是："
+
+    @staticmethod
+    def _sentence_order_analysis_hint(text: str, *, limit: int = 20) -> str:
+        clean = normalize_prompt_text(text or "").strip()
+        clean = re.sub(r"[。！？!?；;]+$", "", clean)
+        if len(clean) <= limit:
+            return clean
+        short = clean[:limit].rstrip("，、：:；; ")
+        return f"{short}……"
 
     def _derive_sentence_order_options(self, correct_order: list[int], existing_options: dict[str, str]) -> dict[str, str]:
         sequences: list[list[int]] = []
         seen: set[tuple[int, ...]] = set()
+        unit_count = len(correct_order)
+        valid_sequence = list(range(1, unit_count + 1))
 
         def add_sequence(sequence: list[int]) -> None:
             key = tuple(sequence)
-            if len(sequence) != 6 or sorted(sequence) != [1, 2, 3, 4, 5, 6] or key in seen:
+            if len(sequence) != unit_count or sorted(sequence) != valid_sequence or key in seen:
                 return
             seen.add(key)
             sequences.append(sequence)
@@ -3217,13 +4810,14 @@ class QuestionGenerationService:
         for value in existing_options.values():
             add_sequence(self._extract_order_sequence(value))
 
-        fallback_variants = [
-            correct_order[:1] + correct_order[2:3] + correct_order[1:2] + correct_order[3:],
-            correct_order[:2] + correct_order[3:4] + correct_order[2:3] + correct_order[4:],
-            correct_order[:3] + correct_order[4:5] + correct_order[3:4] + correct_order[5:],
-            correct_order[1:2] + correct_order[:1] + correct_order[2:],
-            correct_order[:4] + correct_order[5:6] + correct_order[4:5],
-        ]
+        fallback_variants: list[list[int]] = []
+        for index in range(max(0, unit_count - 1)):
+            variant = correct_order[:]
+            variant[index], variant[index + 1] = variant[index + 1], variant[index]
+            fallback_variants.append(variant)
+        if unit_count >= 4:
+            fallback_variants.append(correct_order[1:3] + correct_order[:1] + correct_order[3:])
+            fallback_variants.append(correct_order[:-3] + correct_order[-2:] + correct_order[-3:-2])
         for variant in fallback_variants:
             add_sequence(variant)
             if len(sequences) >= 4:
@@ -3232,7 +4826,7 @@ class QuestionGenerationService:
         while len(sequences) < 4:
             pivot = len(sequences)
             variant = correct_order[:]
-            left = pivot % 5
+            left = pivot % max(1, unit_count - 1)
             right = left + 1
             variant[left], variant[right] = variant[right], variant[left]
             add_sequence(variant)
@@ -3257,87 +4851,112 @@ class QuestionGenerationService:
         ]
         first_sentence = ordered_sentences[0] if ordered_sentences else ""
         last_sentence = ordered_sentences[-1] if ordered_sentences else ""
-        first_hint = re.split(r"[，。；：]", first_sentence)[0].strip("“”\" ") if first_sentence else ""
-        last_hint = re.split(r"[，。；：]", last_sentence)[0].strip("“”\" ") if last_sentence else ""
+        first_hint = self._sentence_order_analysis_hint(first_sentence)
+        last_hint = self._sentence_order_analysis_hint(last_sentence)
+        first_role = self._infer_sentence_order_role_hint(first_sentence)
+        last_role = self._infer_sentence_order_role_hint(last_sentence, is_last=True)
         first_mismatch_letters = []
         tail_mismatch_letters = []
         for letter, value in (options or {}).items():
             seq = self._extract_order_sequence(value)
-            if len(seq) != 6 or seq == correct_order:
+            if len(seq) != len(correct_order) or seq == correct_order:
                 continue
             if seq and seq[0] != correct_order[0]:
                 first_mismatch_letters.append(letter)
             if seq and seq[-1] != correct_order[-1]:
                 tail_mismatch_letters.append(letter)
         pieces = []
+        pieces.append(f"正确顺序为{order_text}。")
         if first_hint:
-            pieces.append(f"先看首句，{self._format_order_sequence([correct_order[0]])}句以“{first_hint}”起笔，更适合作为全段起点。")
+            first_hint_display = first_hint if any(mark in first_hint for mark in ("“", "”", "\"")) else f"“{first_hint}”"
+            if first_role == "thesis":
+                pieces.append(
+                    f"先看首句，{self._format_order_sequence([correct_order[0]])}句先提出{first_hint_display}这一总领性判断，更适合作为全段起点。"
+                )
+            else:
+                pieces.append(
+                    f"先看首句，{self._format_order_sequence([correct_order[0]])}句以{first_hint_display}起笔，更适合作为全段起点。"
+                )
             if first_mismatch_letters:
                 pieces.append(f"据此可先排除{ '、'.join(first_mismatch_letters) }项中首句放置不当的组合。")
         if len(correct_order) >= 4:
             middle_text = self._format_order_sequence(correct_order[1:-1])
-            pieces.append(f"中间部分按 {middle_text} 依次展开，重点核对承接、递进和局部捆绑是否顺畅。")
+            pieces.append(f"中间部分按{middle_text}依次展开，前后承接、语意推进和局部照应都更顺。")
         if last_hint:
-            pieces.append(f"再看尾句，{self._format_order_sequence([correct_order[-1]])}句以“{last_hint}”形成收束，更符合完整行文。")
+            last_hint_display = last_hint if any(mark in last_hint for mark in ("“", "”", "\"")) else f"“{last_hint}”"
+            if last_role == "conclusion" and last_sentence.endswith(("?", "？")):
+                pieces.append(
+                    f"再看尾句，{self._format_order_sequence([correct_order[-1]])}句以{last_hint_display}设问收束，把前文讨论自然引向结尾。"
+                )
+            elif last_role == "conclusion":
+                pieces.append(
+                    f"再看尾句，{self._format_order_sequence([correct_order[-1]])}句以{last_hint_display}形成收束，更符合完整行文。"
+                )
+            else:
+                pieces.append(
+                    f"再看尾句，{self._format_order_sequence([correct_order[-1]])}句落在{last_hint_display}，能和前文形成自然照应。"
+                )
             if tail_mismatch_letters:
                 pieces.append(f"由此还能进一步排除{ '、'.join(tail_mismatch_letters) }项中尾句收束不当的排序。")
         pieces.append(f"综合来看，只有{answer}项与正确顺序 {order_text} 完全一致，因此答案为{answer}。")
         return "".join(pieces)
 
+    def _synchronize_sentence_order_analysis_answer(self, analysis: str, answer: str) -> str:
+        cleaned = str(analysis or "").strip()
+        resolved_answer = str(answer or "").strip().upper()
+        if not cleaned or resolved_answer not in {"A", "B", "C", "D"}:
+            return cleaned
+        cleaned = re.sub(r"故正确答案为\s*[A-D]\s*[。.]?$", f"故正确答案为{resolved_answer}。", cleaned)
+        cleaned = re.sub(r"因此答案为\s*[A-D]\s*[。.]?$", f"因此答案为{resolved_answer}。", cleaned)
+        return cleaned
+
     def build_sentence_order_question(self, question: GeneratedQuestion, *, material_text: str) -> GeneratedQuestion:
         extracted_units = self._extract_sortable_units_from_text(material_text)
         normalized_units = self._normalize_sentence_order_units_to_six(extracted_units) or extracted_units
-        original_sentences = normalized_units[:6]
-        if len(original_sentences) < 6:
+        material_units = normalized_units[:]
+        unit_count = len(material_units)
+        if unit_count not in {4, 5, 6}:
             return question
 
+        model_original_sentences = list(question.original_sentences or [])
         existing_correct_order = list(question.correct_order or [])
         answer = str(question.answer or "").strip().upper()
         answer_sequence = self._extract_order_sequence((question.options or {}).get(answer, ""))
-        if len(answer_sequence) == 6 and sorted(answer_sequence) == [1, 2, 3, 4, 5, 6]:
-            correct_order = answer_sequence
-        elif len(existing_correct_order) == 6 and sorted(existing_correct_order) == [1, 2, 3, 4, 5, 6]:
-            correct_order = existing_correct_order
-        else:
-            fallback_sequences = [
-                self._extract_order_sequence(value)
-                for value in (question.options or {}).values()
-            ]
-            fallback_sequences = [
-                sequence for sequence in fallback_sequences if len(sequence) == 6 and sorted(sequence) == [1, 2, 3, 4, 5, 6]
-            ]
-            correct_order = fallback_sequences[0] if fallback_sequences else [1, 2, 3, 4, 5, 6]
-        if correct_order == [1, 2, 3, 4, 5, 6]:
-            fallback_sequences = [
-                self._extract_order_sequence(value)
-                for value in (question.options or {}).values()
-            ]
-            non_trivial = [
-                sequence
-                for sequence in fallback_sequences
-                if len(sequence) == 6 and sorted(sequence) == [1, 2, 3, 4, 5, 6] and sequence != [1, 2, 3, 4, 5, 6]
-            ]
-            if non_trivial:
-                correct_order = non_trivial[0]
-            else:
-                correct_order = [2, 1, 3, 4, 6, 5]
-
+        analysis_sequence = self._extract_sequence_from_analysis(question.analysis or "", unit_count)
+        display_sequence, display_sequence_source = self._choose_sentence_order_display_sequence(
+            unit_count=unit_count,
+            material_units=material_units,
+            model_original_sentences=model_original_sentences,
+            answer_sequence=answer_sequence,
+            analysis_sequence=analysis_sequence,
+            existing_correct_order=existing_correct_order,
+        )
+        original_sentences = [material_units[index - 1] for index in display_sequence]
+        correct_order = self._invert_sentence_order_display_sequence(display_sequence)
         rebuilt_options = self._derive_sentence_order_options(correct_order, question.options or {})
         rebuilt_answer = next(
             (letter for letter, value in rebuilt_options.items() if self._extract_order_sequence(value) == correct_order),
             "A",
         )
+        rebuilt_analysis = self._build_sentence_order_analysis(correct_order, original_sentences, rebuilt_options, rebuilt_answer)
+        rebuilt_analysis = self._synchronize_sentence_order_analysis_answer(rebuilt_analysis, rebuilt_answer)
         metadata = dict(question.metadata or {})
         metadata["sentence_order_recomputed"] = True
-        metadata["sentence_order_truth_source"] = "correct_order"
+        metadata["sentence_order_truth_source"] = "material_original_order"
+        metadata["sentence_order_display_sequence_source"] = display_sequence_source
+        metadata["sentence_order_display_sequence"] = display_sequence
+        metadata["sentence_order_analysis_source"] = "rebuilt"
+        metadata["sentence_order_model_answer_sequence"] = answer_sequence
+        metadata["sentence_order_model_analysis_sequence"] = analysis_sequence
+        metadata["sentence_order_model_existing_correct_order"] = existing_correct_order
         return question.model_copy(
             update={
-                "stem": "将以下6个部分重新排列，语序正确的一项是：",
+                "stem": self._sentence_order_stem(unit_count),
                 "original_sentences": original_sentences,
                 "correct_order": correct_order,
                 "options": rebuilt_options,
                 "answer": rebuilt_answer,
-                "analysis": self._build_sentence_order_analysis(correct_order, original_sentences, rebuilt_options, rebuilt_answer),
+                "analysis": rebuilt_analysis,
                 "metadata": metadata,
             }
         )
@@ -3450,11 +5069,46 @@ class QuestionGenerationService:
         if bool((material.source or {}).get("forced_user_material")):
             return material
 
+        snapshot = request_snapshot or {}
+        compliance_profile = self._material_compliance_profile(
+            question_type=str(snapshot.get("question_type") or "").strip(),
+            business_subtype=str(snapshot.get("business_subtype") or "").strip(),
+        )
+        question_type = str(snapshot.get("question_type") or "").strip()
+        working_material_text = (
+            self._sentence_fill_working_source_text(material)
+            if question_type == "sentence_fill"
+            else (material.text or "")
+        )
+        cleaned_seed = self._clean_material_text(working_material_text)
+        initial_compliance = self._assess_material_compliance(cleaned_seed, compliance_profile)
+        if question_type == "sentence_fill":
+            prompt_extras = (
+                deepcopy((material.source or {}).get("prompt_extras") or {})
+                if isinstance((material.source or {}).get("prompt_extras"), dict)
+                else {}
+            )
+            raw_context = self._clean_material_text(str(prompt_extras.get("context_window") or "") or cleaned_seed)
+            raw_anchor = str(prompt_extras.get("answer_anchor_text") or "").strip()
+            if raw_context and raw_anchor and self._sentence_fill_display_not_exam_like(
+                fill_ready_material=raw_context,
+                fill_ready_local_material=raw_context,
+                answer_anchor_text=raw_anchor,
+            ):
+                issues = [str(item) for item in (initial_compliance.get("issues") or []) if str(item).strip()]
+                if "exam_like_rewrite_required" not in issues:
+                    issues.append("exam_like_rewrite_required")
+                initial_compliance = {
+                    **initial_compliance,
+                    "passed": False,
+                    "needs_llm_repair": True,
+                    "score": max(0.0, float(initial_compliance.get("score") or 0.0) - 18.0),
+                    "issues": issues,
+                }
         refinement_mode = self._resolve_material_refinement_mode(
             request_snapshot=request_snapshot,
-            material=material,
+            material=material.model_copy(update={"text": cleaned_seed}),
         )
-        cleaned_seed = self._clean_material_text(material.text)
         refined_material = material
         if cleaned_seed and cleaned_seed != material.text:
             refined_material = material.model_copy(
@@ -3465,6 +5119,8 @@ class QuestionGenerationService:
                     "source": {
                         **(material.source or {}),
                         "material_refinement_mode": refinement_mode,
+                        "material_compliance_profile": compliance_profile,
+                        "material_compliance_report": initial_compliance,
                     },
                 }
             )
@@ -3474,19 +5130,29 @@ class QuestionGenerationService:
                     "source": {
                         **(material.source or {}),
                         "material_refinement_mode": refinement_mode,
+                        "material_compliance_profile": compliance_profile,
+                        "material_compliance_report": initial_compliance,
                     },
                 }
             )
 
         base_text = refined_material.text
-        if not self._needs_material_refinement(base_text):
+        if not base_text:
             return refined_material
+        original_prompt_seed = (
+            self._clean_material_text(material.original_text or "")
+            or self._clean_material_text(material.text or "")
+            or base_text
+        )
 
         try:
             system_prompt, user_prompt = self._build_material_refinement_prompts(
                 refinement_mode=refinement_mode,
                 cleaned_seed=base_text,
-                original_text=material.text,
+                original_text=original_prompt_seed,
+                request_snapshot=request_snapshot,
+                compliance_profile=compliance_profile,
+                compliance_report=initial_compliance,
             )
             response = self.llm_gateway.generate_json(
                 route=self._material_refinement_route(),
@@ -3497,11 +5163,14 @@ class QuestionGenerationService:
             )
             refined = self.material_refinement_adapter.validate_python(response)
             refined_text = self._clean_material_text(refined.refined_text)
+            refined_compliance = self._assess_material_compliance(refined_text, compliance_profile)
             if refined_text and self._is_safe_material_refinement(
                 original_text=base_text,
                 refined_text=refined_text,
                 refinement_mode=refinement_mode,
             ) and (refined.changed or refined_text != base_text):
+                if refined_compliance["score"] + 5 < initial_compliance["score"] and not refined_compliance["passed"]:
+                    return refined_material
                 return refined_material.model_copy(
                     update={
                         "text": refined_text,
@@ -3510,12 +5179,320 @@ class QuestionGenerationService:
                         "source": {
                             **(refined_material.source or {}),
                             "material_refinement_mode": refinement_mode,
+                            "material_compliance_profile": compliance_profile,
+                            "material_compliance_report": refined_compliance,
                         },
                     }
                 )
         except Exception:  # noqa: BLE001
             return refined_material
         return refined_material
+
+    @classmethod
+    def _material_compliance_profile(
+        cls,
+        *,
+        question_type: str,
+        business_subtype: str | None = None,
+    ) -> dict[str, Any]:
+        subtype = str(business_subtype or "").strip()
+        if question_type == "sentence_fill":
+            return {
+                "family_label": "sentence_fill",
+                "min_chars": 120,
+                "max_chars": 520,
+                "max_paragraphs": 3,
+                "forbid_blank_markers": True,
+                "forbid_outline_style": True,
+                "forbid_list_heavy": True,
+                "requirements": [
+                    "连续自然段，不要条目体、目录体、知识点提纲体",
+                    "空位前后要像同一语义链中的正文句",
+                    "不要把小标题短语或编号项当成可挖空句",
+                    "材料至少应提供自然前后文，不要只剩一个硬桥接句槽位",
+                    "正确项展示应像自然填入的一句或分句，不应把整段题面主干原样搬进选项",
+                ],
+                "leaf_structure_policy": "如果空位的叶族功能不够明显，可以主动补足必要上下文、重写局部表达、把硬槽位修成自然挖口，让材料和空位都更像真题。",
+                "repair_permissions": [
+                    "允许把资讯摘录、手册条目、碎标题、评论切片重写成连续正文",
+                    "允许补足必要上下文，让空位前后角色更清楚、更像真题段落",
+                    "允许把过短、过硬、像机械槽位的局部改写成自然挖口，但必须保持原句合法性",
+                    "允许把不自然的整句挖空改写成更像真题的合法分句挖空展示",
+                ],
+                "hard_guards": [
+                    "不得新增或保留任何空位标记",
+                    "不得改变 answer_anchor 对应原句的事实、对象和判断方向",
+                    "不得把旧 blanked_text 或旧展示态材料当成新的原始材料继续加工",
+                ],
+            }
+        if question_type == "sentence_order":
+            return {
+                "family_label": "sentence_order",
+                "min_chars": 120,
+                "max_chars": 560,
+                "max_paragraphs": 3,
+                "forbid_blank_markers": True,
+                "forbid_outline_style": True,
+                "forbid_list_heavy": True,
+                "requirements": [
+                    "句群都应来自正文，不是标题项、目录项、提示项",
+                    "句子数量适中，能自然拆成排序展示单元",
+                    "保留首尾锚点，不要是堆砌式清单",
+                ],
+                "leaf_structure_policy": "如果排序叶族结构不够明显，可以增强句群自足性、削弱列表感、补足最小承接，但必须保持顺序真值不变。",
+                "repair_permissions": [
+                    "允许去掉列表感、碎标题感和资讯摘录腔",
+                    "允许增强句内自足性和局部承接，让句群更像正文",
+                    "允许轻微规范标点和表达，使首尾锚点更清楚",
+                ],
+                "hard_guards": [
+                    "不得增删句子，不得合并或拆分 sortable units",
+                    "不得改动原始句序真值，不得重排内容",
+                    "不得把句群改写成新的论证结构或新的中心结论",
+                ],
+            }
+        if question_type == "main_idea" and subtype == "center_understanding":
+            return {
+                "family_label": "center_understanding",
+                "min_chars": 180,
+                "max_chars": 900,
+                "max_paragraphs": 4,
+                "forbid_blank_markers": True,
+                "forbid_outline_style": True,
+                "forbid_list_heavy": True,
+                "requirements": [
+                    "像独立可读的自然议论或说明文段",
+                    "不要是关键词清单、政策标题串、会议模板稿",
+                    "主旨链完整，能支撑概括而非只剩局部条目",
+                ],
+                "leaf_structure_policy": "如果中心链不够显、段内像新闻通稿或碎信息堆叠，可以主动整理成更像自然议论/说明文段的主旨链。",
+                "repair_permissions": [
+                    "允许压掉通稿壳、标题壳、会议模板壳",
+                    "允许重写局部句子衔接，让中心论证链更清楚",
+                    "允许把碎信息整理成自然正文，但不得改主旨",
+                ],
+                "hard_guards": [
+                    "不得新增新的立场、结论和论证终点",
+                    "不得把局部事实改造成新的中心判断",
+                    "不得凭空补背景或引入材料中没有的政策任务",
+                ],
+            }
+        return {
+            "family_label": question_type or "general",
+            "min_chars": 120,
+            "max_chars": 720,
+            "max_paragraphs": 4,
+            "forbid_blank_markers": True,
+            "forbid_outline_style": True,
+            "forbid_list_heavy": True,
+            "requirements": [
+                "尽量整理成自然段材料，不要保留条目体和模板体",
+            ],
+            "leaf_structure_policy": "如果材料局部角色和结构不够明显，可以适度增强自然衔接与自足性，但不得改变证据基础。",
+            "repair_permissions": [
+                "允许删除模板标签、标题和编号",
+                "允许补足最小必要衔接并整理成自然正文",
+            ],
+            "hard_guards": [
+                "不得新增事实、立场和论证终点",
+                "不得把材料改写成另一篇文章",
+            ],
+        }
+
+    def _normalize_material_for_family_shape(self, text: str, profile: dict[str, Any]) -> str:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return ""
+        lines = [line.strip() for line in normalized.split("\n")]
+        cleaned_lines: list[str] = []
+        for line in lines:
+            if not line:
+                cleaned_lines.append("")
+                continue
+            stripped_line = self._strip_sentence_fill_unit_prefix(line)
+            if profile.get("forbid_outline_style") and self._is_sentence_fill_structural_heading_unit(line):
+                continue
+            cleaned_lines.append(stripped_line or line)
+        normalized = "\n".join(cleaned_lines)
+        normalized = re.sub(r"(?:\n\s*){3,}", "\n\n", normalized).strip()
+        return normalized
+
+    @classmethod
+    def _assess_material_compliance(cls, text: str, profile: dict[str, Any]) -> dict[str, Any]:
+        clean = str(text or "").strip()
+        issues: list[str] = []
+        if not clean:
+            return {
+                "passed": False,
+                "score": 0.0,
+                "issues": ["empty_material"],
+                "needs_llm_repair": False,
+            }
+        visible = re.sub(r"\s+", "", clean)
+        visible_length = len(visible)
+        min_chars = int(profile.get("min_chars") or 0)
+        max_chars = int(profile.get("max_chars") or 0)
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", clean) if part.strip()]
+        lines = [line.strip() for line in clean.splitlines() if line.strip()]
+        sentence_units = [part.strip() for part in re.split(r"(?<=[。！？!?；;])\s*", clean) if part.strip()]
+        family_label = str(profile.get("family_label") or "").strip()
+        heading_like_lines = sum(1 for line in lines if cls._is_sentence_fill_structural_heading_unit(line))
+        list_like_lines = sum(
+            1
+            for line in lines
+            if re.match(r"^\s*(?:[-•·*]|[(（]?\d+[)）]?|[一二三四五六七八九十百千万]+[、.．])", line)
+        )
+        duplicate_sentence_count = 0
+        seen_sentence_signatures: list[str] = []
+        for unit in sentence_units:
+            signature = re.sub(r"\s+", "", unit)
+            if len(signature) < 8:
+                continue
+            if any(
+                signature == existing
+                or signature in existing
+                or existing in signature
+                or SequenceMatcher(None, signature, existing).ratio() >= 0.95
+                for existing in seen_sentence_signatures
+            ):
+                duplicate_sentence_count += 1
+                continue
+            seen_sentence_signatures.append(signature)
+        blank_markers = any(token in clean for token in ("[BLANK]", "____", "___"))
+        if min_chars and visible_length < min_chars:
+            issues.append(f"too_short:{visible_length}")
+        if max_chars and visible_length > max_chars:
+            issues.append(f"too_long:{visible_length}")
+        if profile.get("forbid_blank_markers") and blank_markers:
+            issues.append("contains_blank_markers")
+        if profile.get("forbid_outline_style") and heading_like_lines:
+            issues.append(f"outline_heading_lines:{heading_like_lines}")
+        if profile.get("forbid_list_heavy") and list_like_lines >= max(2, len(lines) // 2 if lines else 2):
+            issues.append(f"list_heavy:{list_like_lines}")
+        if duplicate_sentence_count:
+            issues.append(f"duplicate_sentences:{duplicate_sentence_count}")
+        max_paragraphs = int(profile.get("max_paragraphs") or 0)
+        if max_paragraphs and len(paragraphs) > max_paragraphs:
+            issues.append(f"too_many_paragraphs:{len(paragraphs)}")
+        if cls._looks_like_fragmentary_material_opening(clean, sentence_units):
+            issues.append("fragmentary_opening")
+        if family_label == "sentence_fill" and len(sentence_units) < 2:
+            issues.append(f"weak_local_chain:{len(sentence_units)}")
+        if family_label == "sentence_order" and len(sentence_units) < 4:
+            issues.append(f"weak_sortable_chain:{len(sentence_units)}")
+        if family_label == "center_understanding" and len(sentence_units) < 3:
+            issues.append(f"thin_argument_chain:{len(sentence_units)}")
+
+        score = 100.0
+        score -= 35.0 if any(issue.startswith("too_short") for issue in issues) else 0.0
+        score -= 20.0 if any(issue.startswith("too_long") for issue in issues) else 0.0
+        score -= 25.0 if any(issue.startswith("outline_heading_lines") for issue in issues) else 0.0
+        score -= 15.0 if any(issue.startswith("list_heavy") for issue in issues) else 0.0
+        score -= 15.0 if any(issue.startswith("duplicate_sentences") for issue in issues) else 0.0
+        score -= 20.0 if "contains_blank_markers" in issues else 0.0
+        score -= 10.0 if any(issue.startswith("too_many_paragraphs") for issue in issues) else 0.0
+        score -= 15.0 if "fragmentary_opening" in issues else 0.0
+        score -= 10.0 if any(issue.startswith("weak_local_chain") for issue in issues) else 0.0
+        score -= 10.0 if any(issue.startswith("weak_sortable_chain") for issue in issues) else 0.0
+        score -= 8.0 if any(issue.startswith("thin_argument_chain") for issue in issues) else 0.0
+        needs_llm_repair = any(
+            issue.startswith(prefix)
+            for issue in issues
+            for prefix in (
+                "too_short",
+                "too_long",
+                "outline_heading_lines",
+                "list_heavy",
+                "duplicate_sentences",
+                "too_many_paragraphs",
+                "fragmentary_opening",
+                "weak_local_chain",
+                "weak_sortable_chain",
+                "thin_argument_chain",
+            )
+        )
+        return {
+            "passed": not issues,
+            "score": max(0.0, score),
+            "issues": issues,
+            "needs_llm_repair": needs_llm_repair,
+            "visible_length": visible_length,
+            "paragraph_count": len(paragraphs),
+            "line_count": len(lines),
+            "sentence_count": len(sentence_units),
+        }
+
+    @staticmethod
+    def _looks_like_fragmentary_material_opening(text: str, sentence_units: list[str]) -> bool:
+        clean = str(text or "").strip()
+        if not clean:
+            return False
+        first_sentence = str((sentence_units or [clean])[0] or "").strip()
+        compact = re.sub(r"\s+", "", first_sentence)
+        if not compact:
+            return False
+        fragment_tokens = (
+            "年",
+            "月",
+            "同比",
+            "环比",
+            "其中",
+            "因此",
+            "所以",
+            "同时",
+            "另外",
+            "此外",
+            "不过",
+            "然而",
+            "一方面",
+            "另一方面",
+            "并且",
+            "而",
+            "但",
+        )
+        if compact[:1] in {"年", "月"} and len(compact) <= 24:
+            return True
+        if any(compact.startswith(token) for token in fragment_tokens) and len(compact) <= 28:
+            return True
+        return False
+
+    @staticmethod
+    def _is_safe_material_refinement(
+        *,
+        original_text: str,
+        refined_text: str,
+        refinement_mode: str,
+    ) -> bool:
+        original_clean = str(original_text or "").strip()
+        refined_clean = str(refined_text or "").strip()
+        if not original_clean or not refined_clean:
+            return False
+        if any(token in refined_clean for token in ("[BLANK]", "____", "___")):
+            return False
+
+        original_visible = re.sub(r"\s+", "", original_clean)
+        refined_visible = re.sub(r"\s+", "", refined_clean)
+        if not original_visible or not refined_visible:
+            return False
+
+        length_ratio = len(refined_visible) / max(1, len(original_visible))
+        if length_ratio < 0.35 or length_ratio > 4.0:
+            return False
+
+        similarity = SequenceMatcher(None, original_visible[:4000], refined_visible[:4000]).ratio()
+        if refinement_mode == QuestionGenerationService.MATERIAL_REFINEMENT_FAMILY_COMPLIANCE:
+            if similarity < 0.08:
+                return False
+        elif similarity < 0.26:
+            return False
+
+        original_numbers = {item for item in re.findall(r"\d+(?:\.\d+)?%?", original_clean) if item}
+        if 0 < len(original_numbers) <= 4:
+            matched_count = sum(1 for item in original_numbers if item in refined_clean)
+            if matched_count == 0:
+                return False
+
+        return True
 
     def _clean_material_text(self, text: str) -> str:
         normalized = normalize_readable_text(text or "")
@@ -3524,6 +5501,7 @@ class QuestionGenerationService:
         if not normalized:
             return ""
 
+        normalized = self._strip_material_caption_noise(normalized)
         normalized = self._strip_material_template_labels(normalized)
         normalized = self._strip_outline_section_headings(normalized)
         normalized = re.sub(r"\n{3,}", "\n\n", normalized).strip()
@@ -3567,6 +5545,15 @@ class QuestionGenerationService:
 
         cleaned = "\n\n".join(deduped).strip()
         return cleaned or normalized
+
+    def _strip_material_caption_noise(self, text: str) -> str:
+        cleaned = str(text or "")
+        cleaned = re.sub(r"[（(]\s*审核[^)）\n]*[)）]\s*", "", cleaned)
+        cleaned = re.sub(r"[（(]\s*审校[^)）\n]*[)）]\s*", "", cleaned)
+        cleaned = re.sub(r"(?:新华社|记者)[^。\n]{0,24}[摄图]", "", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned)
+        cleaned = re.sub(r"(?:\n\s*){3,}", "\n\n", cleaned)
+        return cleaned.strip()
 
     def _strip_outline_section_headings(self, text: str) -> str:
         paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text or "") if part.strip()]
@@ -3877,6 +5864,11 @@ class QuestionGenerationService:
         source_question_analysis = request_snapshot.get("source_question_analysis") or {}
         bridge_hints = self._merge_material_bridge_hints(
             self._material_bridge_hints(source_question_analysis),
+            self._requested_taxonomy_bridge_hints(
+                question_type=item["question_type"],
+                type_slots=request_snapshot.get("type_slots"),
+                extra_constraints=request_snapshot.get("extra_constraints"),
+            ),
             self._requested_pattern_bridge_hints(
                 question_type=item["question_type"],
                 pattern_id=request_snapshot.get("pattern_id") or item.get("pattern_id"),
@@ -4029,7 +6021,111 @@ class QuestionGenerationService:
         ]
 
     def _material_prompt_extra_lines(self, material_prompt_extras: dict[str, object]) -> list[str]:
+        distill_lines = self._distill_overlay_prompt_lines(material_prompt_extras)
+        if "sortable_units" in material_prompt_extras:
+            units = [str(unit or "").strip() for unit in (material_prompt_extras.get("sortable_units") or []) if str(unit or "").strip()]
+            binding_pairs = material_prompt_extras.get("binding_pairs") or []
+            sentence_roles = material_prompt_extras.get("sentence_roles") or {}
+            hard_logic_leaf_key = str(material_prompt_extras.get("hard_logic_leaf_key") or "").strip()
+            hard_logic_tags = [str(tag).strip() for tag in (material_prompt_extras.get("hard_logic_tags") or []) if str(tag).strip()]
+            hard_logic_rules = [str(rule).strip() for rule in (material_prompt_extras.get("hard_logic_rules") or []) if str(rule).strip()]
+            unit_count = int(material_prompt_extras.get("sortable_unit_count") or len(units) or 0)
+            lines = [
+                f"以下 {unit_count or len(units) or 0} 个展示单元就是最终给考生看的排序材料，不要另造新句，也不要脱离这些展示单元重写链条。",
+            ]
+            if hard_logic_leaf_key:
+                lines.append(f"当前叶子硬逻辑标签：{hard_logic_leaf_key}")
+            if hard_logic_tags:
+                lines.append(f"硬逻辑标记：{self._json_dump_prompt_value(hard_logic_tags)}")
+            if units:
+                lines.append("固定展示单元：")
+                lines.extend([f"{index}. {unit}" for index, unit in enumerate(units, start=1)])
+            head_anchor = str(material_prompt_extras.get("head_anchor_text") or "").strip()
+            tail_anchor = str(material_prompt_extras.get("tail_anchor_text") or "").strip()
+            if head_anchor:
+                lines.append(f"优先核查首句是否能由以下开头锚点承担：{head_anchor}")
+            if tail_anchor:
+                lines.append(f"优先核查尾句是否能由以下收束锚点承担：{tail_anchor}")
+            if binding_pairs:
+                lines.append(f"重点观察的局部捆绑对：{self._json_dump_prompt_value(binding_pairs)}")
+            if sentence_roles:
+                lines.append(f"展示单元角色提示：{self._json_dump_prompt_value(sentence_roles)}")
+            if hard_logic_rules:
+                lines.append("生成时必须同时遵守以下叶子硬逻辑：")
+                lines.extend([f"- {rule}" for rule in hard_logic_rules])
+            lines.append("错项优先做近邻错序、局部捆绑拆错、首尾误配，不要随机乱排。")
+            lines.extend(distill_lines)
+            return [normalize_prompt_text(line) for line in lines if str(line or "").strip()]
+
+        if "fill_ready_material" in material_prompt_extras:
+            lines = []
+            fill_ready_material = str(material_prompt_extras.get("fill_ready_material") or "").strip()
+            fill_ready_local_material = str(material_prompt_extras.get("fill_ready_local_material") or "").strip()
+            answer_anchor_text = str(material_prompt_extras.get("answer_anchor_text") or "").strip()
+            hard_logic_leaf_key = str(material_prompt_extras.get("hard_logic_leaf_key") or "").strip()
+            hard_logic_tags = [str(tag).strip() for tag in (material_prompt_extras.get("hard_logic_tags") or []) if str(tag).strip()]
+            hard_logic_rules = [str(rule).strip() for rule in (material_prompt_extras.get("hard_logic_rules") or []) if str(rule).strip()]
+            if fill_ready_material:
+                lines.append(f"最终呈现材料：{fill_ready_material}")
+            if fill_ready_local_material:
+                lines.append(f"局部空位窗口：{fill_ready_local_material}")
+            if answer_anchor_text:
+                lines.append(f"被挖原句（正确答案必须回填此句）：{answer_anchor_text}")
+            if hard_logic_leaf_key:
+                lines.append(f"当前叶子硬逻辑标签：{hard_logic_leaf_key}")
+            if hard_logic_tags:
+                lines.append(f"硬逻辑标记：{self._json_dump_prompt_value(hard_logic_tags)}")
+            if bool(material_prompt_extras.get("require_original_answer_sentence")):
+                lines.append("硬约束：sentence_fill 正确答案必须是原文被挖掉的句子，不允许另写替代句。")
+            blank_position = str(material_prompt_extras.get("blank_position") or "").strip()
+            function_type = str(material_prompt_extras.get("function_type") or "").strip()
+            logic_relation = str(material_prompt_extras.get("logic_relation") or "").strip()
+            if blank_position or function_type or logic_relation:
+                lines.append(
+                    f"空位约束：blank_position={blank_position or 'unknown'}; "
+                    f"function_type={function_type or 'unknown'}; logic_relation={logic_relation or 'unknown'}"
+                )
+            preferred_answer_shape = str(material_prompt_extras.get("preferred_answer_shape") or "").strip()
+            forbidden_answer_styles = material_prompt_extras.get("forbidden_answer_styles") or []
+            if preferred_answer_shape:
+                lines.append(f"正确项形态优先：{preferred_answer_shape}")
+            if forbidden_answer_styles:
+                lines.append(f"禁止正确项风格：{self._json_dump_prompt_value(forbidden_answer_styles)}")
+            if hard_logic_rules:
+                lines.append("生成时必须同时遵守以下叶子硬逻辑：")
+                lines.extend([f"- {rule}" for rule in hard_logic_rules])
+            lines.extend(distill_lines)
+            return [normalize_prompt_text(line) for line in lines if str(line or "").strip()]
+
+        if distill_lines:
+            return [normalize_prompt_text(line) for line in [*distill_lines, self._json_dump_prompt_value(material_prompt_extras)] if str(line or "").strip()]
         return [normalize_prompt_text(self._json_dump_prompt_value(material_prompt_extras))]
+
+    def _distill_overlay_prompt_lines(self, material_prompt_extras: dict[str, object]) -> list[str]:
+        mother_family_id = str(material_prompt_extras.get("distill_mother_family_id") or "").strip()
+        child_family_id = str(material_prompt_extras.get("distill_child_family_id") or "").strip()
+        leaf_key = str(material_prompt_extras.get("distill_leaf_key") or "").strip()
+        overlay_mode = str(material_prompt_extras.get("distill_runtime_overlay_mode") or "").strip()
+        prompt_guard_lines = [
+            str(line).strip()
+            for line in (material_prompt_extras.get("distill_prompt_guard_lines") or [])
+            if str(line).strip()
+        ]
+        if not any([mother_family_id, child_family_id, leaf_key, overlay_mode, prompt_guard_lines]):
+            return []
+        lines: list[str] = []
+        if overlay_mode:
+            lines.append(f"蒸馏控制模式：{overlay_mode}")
+        lines.append(
+            "当前蒸馏归属："
+            f"mother={mother_family_id or 'unknown'}; "
+            f"child={child_family_id or 'unknown'}; "
+            f"leaf={leaf_key or 'unknown'}"
+        )
+        if prompt_guard_lines:
+            lines.append("除叶子硬逻辑外，还需补足以下母/子族共性：")
+            lines.extend([f"- {line}" for line in prompt_guard_lines])
+        return lines
 
     def _build_reference_generation_sections(
         self,
@@ -4511,6 +6607,45 @@ class QuestionGenerationService:
     ) -> list[str]:
         return []
 
+    def _apply_consistency_hard_fail_gate(self, *, validation_result) -> list[str]:
+        if validation_result is None:
+            return []
+        checks = getattr(validation_result, "checks", None) or {}
+        existing_errors = self._normalize_error_list(getattr(validation_result, "errors", None))
+        triggered: list[str] = []
+        for check_name in self.CONSISTENCY_HARD_FAIL_CHECKS:
+            payload = checks.get(check_name) or {}
+            if isinstance(payload, dict) and payload.get("passed") is False:
+                error_code = f"consistency_hard_fail::{check_name}"
+                if error_code not in existing_errors:
+                    existing_errors.append(error_code)
+                triggered.append(error_code)
+        if not triggered:
+            return []
+        validation_result.errors = existing_errors
+        validation_result.passed = False
+        validation_result.validation_status = "failed"
+        validation_result.next_review_status = "needs_revision"
+        validation_result.score = min(int(validation_result.score or 100), 60)
+        return triggered
+
+    @staticmethod
+    def _normalize_error_list(value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value if str(item).strip()]
+        if isinstance(value, (tuple, set)):
+            return [str(item) for item in value if str(item).strip()]
+        if isinstance(value, str):
+            text = value.strip()
+            return [text] if text else []
+        try:
+            return [str(item) for item in list(value) if str(item).strip()]  # type: ignore[arg-type]
+        except TypeError:
+            text = str(value).strip()
+            return [text] if text and text != "None" else []
+
     def _apply_evaluation_gate(
         self,
         *,
@@ -4519,6 +6654,8 @@ class QuestionGenerationService:
         difficulty_target: str,
     ) -> list[str]:
         if not evaluation_result:
+            return []
+        if str(evaluation_result.get("status") or "").strip().lower() == "skipped":
             return []
 
         overall_score = self._normalize_judge_score(evaluation_result.get("overall_score"))
@@ -4539,15 +6676,12 @@ class QuestionGenerationService:
         if not errors:
             return []
 
-        existing_errors = list(validation_result.errors or [])
+        existing_warnings = list(getattr(validation_result, "warnings", None) or [])
         for error in errors:
-            if error not in existing_errors:
-                existing_errors.append(error)
-        validation_result.errors = existing_errors
-        validation_result.passed = False
-        validation_result.validation_status = "failed"
-        validation_result.next_review_status = "needs_revision"
-        validation_result.score = max(0, min(int(validation_result.score or 100), int(overall_score) if overall_score else 60))
+            advisory = f"judge_signal::{error}"
+            if advisory not in existing_warnings:
+                existing_warnings.append(advisory)
+        validation_result.warnings = existing_warnings
         return errors
 
     def _normalize_judge_score(self, value: object) -> float:
@@ -4570,8 +6704,6 @@ class QuestionGenerationService:
 
 
     def _should_retry_alignment(self, validation_result, source_question_analysis: dict | None) -> bool:
-        if not source_question_analysis:
-            return False
         if self._should_use_compact_main_idea_path(source_question_analysis) and not self._has_targeted_repair_candidate(
             question_type=str((source_question_analysis.get("style_summary") or {}).get("question_type") or ""),
             business_subtype="center_understanding",
@@ -4587,10 +6719,8 @@ class QuestionGenerationService:
             return True
         for check_name in (
             "sentence_order_reference_unit_alignment",
-            "sentence_fill_blank_position_alignment",
             "analysis_answer_consistency",
-            "reference_answer_grounding",
-            "analysis_material_grounding",
+            "sentence_fill_anchor_grounding",
         ):
             check = checks.get(check_name) or {}
             if check and not check.get("passed", True):
@@ -4620,10 +6750,18 @@ class QuestionGenerationService:
         evaluation_result: dict | None,
         source_question_analysis: dict | None,
     ) -> bool:
-        if not source_question_analysis:
+        if not bool(self.runtime_config.evaluation.judge.enabled):
             return False
+        question_type = str((source_question_analysis.get("style_summary") or {}).get("question_type") or "")
+        targeted_candidate = self._has_targeted_repair_candidate(
+            question_type=question_type,
+            business_subtype="center_understanding",
+            validation_result=validation_result,
+            quality_gate_errors=quality_gate_errors,
+            source_question_analysis=source_question_analysis,
+        )
         if self._should_use_compact_main_idea_path(source_question_analysis) and not self._has_targeted_repair_candidate(
-            question_type=str((source_question_analysis.get("style_summary") or {}).get("question_type") or ""),
+            question_type=question_type,
             business_subtype="center_understanding",
             validation_result=validation_result,
             quality_gate_errors=quality_gate_errors,
@@ -4631,9 +6769,9 @@ class QuestionGenerationService:
         ):
             return False
         if quality_gate_errors:
-            return True
+            return False
         if validation_result is not None and not validation_result.passed:
-            return True
+            return targeted_candidate
         overall_score = self._normalize_judge_score((evaluation_result or {}).get("overall_score"))
         return bool(overall_score and overall_score < self.QUALITY_REPAIR_RETRY_THRESHOLD)
 
@@ -4705,8 +6843,72 @@ class QuestionGenerationService:
             "structure_constraints": dict(hint.get("structure_constraints") or {}),
         }
 
+    @classmethod
+    def _requested_taxonomy_bridge_hints(
+        cls,
+        *,
+        question_type: str,
+        type_slots: dict[str, Any] | None,
+        extra_constraints: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        normalized_question_type = str(question_type or "").strip()
+        normalized_type_slots = dict(type_slots or {})
+        normalized_extra_constraints = dict(extra_constraints or {})
+        requested_cards = [
+            str(card_id).strip()
+            for card_id in (normalized_extra_constraints.get("reference_business_cards") or [])
+            if str(card_id).strip()
+        ]
+        requested_terms = [
+            str(term).strip()
+            for term in (normalized_extra_constraints.get("reference_query_terms") or [])
+            if str(term).strip()
+        ]
+        structure_constraints: dict[str, Any] = {}
+        if normalized_question_type == "sentence_fill":
+            for key in (
+                "blank_position",
+                "function_type",
+                "logic_relation",
+                "context_dependency",
+                "bidirectional_validation",
+                "reference_dependency",
+            ):
+                value = normalized_type_slots.get(key)
+                if value is not None and value != "" and value != []:
+                    structure_constraints[key] = value
+        elif normalized_question_type == "sentence_order":
+            for key in (
+                "opening_anchor_type",
+                "middle_structure_type",
+                "closing_anchor_type",
+                "block_order_complexity",
+                "distractor_modes",
+                "distractor_strength",
+            ):
+                value = normalized_type_slots.get(key)
+                if value is not None and value != "" and value != []:
+                    structure_constraints[key] = value
+        elif normalized_question_type == "main_idea":
+            for key in (
+                "structure_type",
+                "main_point_source",
+                "abstraction_level",
+                "statement_visibility",
+                "main_axis_source",
+            ):
+                value = normalized_type_slots.get(key)
+                if value is not None and value != "" and value != []:
+                    structure_constraints[key] = value
+        return {
+            "business_card_ids": list(requested_cards),
+            "preferred_business_card_ids": list(requested_cards),
+            "query_terms": requested_terms,
+            "structure_constraints": structure_constraints,
+        }
+
     @staticmethod
-    def _merge_material_bridge_hints(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    def _merge_material_bridge_hints(base: dict[str, Any], *overrides: dict[str, Any]) -> dict[str, Any]:
         def _merge_list(*values: list[str]) -> list[str]:
             merged: list[str] = []
             seen: set[str] = set()
@@ -4719,20 +6921,31 @@ class QuestionGenerationService:
                     merged.append(text)
             return merged
 
-        base = base or {}
-        override = override or {}
-        return {
-            "business_card_ids": _merge_list(base.get("business_card_ids") or [], override.get("business_card_ids") or []),
-            "preferred_business_card_ids": _merge_list(
-                override.get("preferred_business_card_ids") or [],
-                base.get("preferred_business_card_ids") or [],
-            ),
-            "query_terms": _merge_list(base.get("query_terms") or [], override.get("query_terms") or []),
-            "structure_constraints": {
-                **dict(base.get("structure_constraints") or {}),
-                **dict(override.get("structure_constraints") or {}),
-            },
+        merged = {
+            "business_card_ids": list((base or {}).get("business_card_ids") or []),
+            "preferred_business_card_ids": list((base or {}).get("preferred_business_card_ids") or []),
+            "query_terms": list((base or {}).get("query_terms") or []),
+            "structure_constraints": dict((base or {}).get("structure_constraints") or {}),
         }
+        for override in overrides:
+            current = override or {}
+            merged["business_card_ids"] = _merge_list(
+                merged["business_card_ids"],
+                current.get("business_card_ids") or [],
+            )
+            merged["preferred_business_card_ids"] = _merge_list(
+                current.get("preferred_business_card_ids") or [],
+                merged["preferred_business_card_ids"],
+            )
+            merged["query_terms"] = _merge_list(
+                merged["query_terms"],
+                current.get("query_terms") or [],
+            )
+            merged["structure_constraints"] = {
+                **dict(merged["structure_constraints"] or {}),
+                **dict(current.get("structure_constraints") or {}),
+            }
+        return merged
 
     @staticmethod
     def _is_weak_main_idea_reference_signal(source_question_analysis: dict | None) -> bool:
@@ -4927,41 +7140,105 @@ class QuestionGenerationService:
                 near_matches.append(material)
             else:
                 others.append(material)
+        exact_matches = sorted(exact_matches, key=self._sentence_order_candidate_priority_key, reverse=True)
+        sufficient_matches = sorted(sufficient_matches, key=self._sentence_order_candidate_priority_key, reverse=True)
+        near_matches = sorted(near_matches, key=self._sentence_order_candidate_priority_key, reverse=True)
         if exact_matches:
             return exact_matches + sufficient_matches + near_matches + others
         if sufficient_matches:
             return sufficient_matches + near_matches + others
         return near_matches + others
 
-    def _sentence_order_target_unit_count(self, source_question_analysis: dict | None) -> int:
-        return 6
+    def _sentence_order_candidate_priority_key(self, material: MaterialSelectionResult) -> tuple[float, ...]:
+        source_text = material.original_text or material.text or ""
+        units = self._extract_sortable_units_from_text(source_text)
+        normalized_units = self._normalize_sentence_order_units_to_six(units) or units
+        if len(normalized_units) not in {4, 5, 6}:
+            normalized_units = units
+        cleaned_units = [self._clean_sentence_order_sortable_unit(unit) for unit in normalized_units if self._clean_sentence_order_sortable_unit(unit)]
+        binding_pair_count = len(self._derive_sentence_order_binding_pairs(cleaned_units))
+        head_role = self._infer_sentence_order_role_hint(cleaned_units[0]) if cleaned_units else ""
+        tail_role = self._infer_sentence_order_role_hint(cleaned_units[-1], is_last=True) if cleaned_units else ""
+        dependent_opening_penalty = 1.0 if cleaned_units and self._sentence_order_unit_has_dependent_opening(cleaned_units[0]) else 0.0
+        prompt_extras = ((material.source or {}).get("prompt_extras") or {}) if isinstance(material.source, dict) else {}
+        scoring = ((material.source or {}).get("scoring") or {}) if isinstance(material.source, dict) else {}
+        readability = 1.0 - float((material.local_profile or {}).get("context_dependency") or 0.0)
+        readiness = float(scoring.get("readiness_score") or 0.0)
+        quality = float(material.quality_score or 0.0)
+        has_refined_units = 1.0 if prompt_extras.get("sortable_units") else 0.0
+        question_tail = 1.0 if cleaned_units and cleaned_units[-1].endswith(("?", "？")) else 0.0
+        return (
+            float(binding_pair_count),
+            1.0 if head_role == "thesis" else 0.0,
+            1.0 if tail_role == "conclusion" else 0.0,
+            question_tail,
+            has_refined_units,
+            readability,
+            readiness,
+            quality,
+            -dependent_opening_penalty,
+        )
+
+    def _sentence_order_target_unit_count(self, source_question_analysis: dict | None) -> int | None:
+        structure_constraints = (source_question_analysis or {}).get("structure_constraints") or {}
+        candidate_values = [
+            structure_constraints.get("sortable_unit_count"),
+            (source_question_analysis or {}).get("sortable_unit_count"),
+        ]
+        for raw_value in candidate_values:
+            try:
+                parsed_value = int(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if parsed_value in {4, 5, 6}:
+                return parsed_value
+        return None
 
     def _extract_sortable_units_from_text(self, text: str) -> list[str]:
         raw = (text or "").strip()
         if not raw:
             return []
         normalized = raw.replace("\r\n", "\n").strip()
+        newline_units = [self._clean_sentence_order_sortable_unit(item) for item in normalized.split("\n") if self._clean_sentence_order_sortable_unit(item)]
+        if len(newline_units) in {4, 5, 6}:
+            return newline_units
+        normalized_newline_units = self._normalize_sentence_order_units_to_six(newline_units)
+        if normalized_newline_units:
+            return normalized_newline_units
         enumerated = re.split(r"(?=[①②③④⑤⑥⑦⑧⑨⑩])", normalized)
         enumerated = [part.strip() for part in enumerated if part.strip()]
         if len(enumerated) >= 2:
             cleaned: list[str] = []
             for part in enumerated:
-                cleaned.append(re.sub(r"^[①②③④⑤⑥⑦⑧⑨⑩]\s*", "", part).strip())
+                cleaned.append(self._clean_sentence_order_sortable_unit(part))
             units = [part for part in cleaned if part]
             normalized_units = self._normalize_sentence_order_units_to_six(units)
             return normalized_units or units
-        units = [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*|\n+", normalized) if item.strip()]
+        space_units = [self._clean_sentence_order_sortable_unit(item) for item in re.split(r"\s+", normalized) if self._clean_sentence_order_sortable_unit(item)]
+        if len(space_units) in {4, 5, 6}:
+            return space_units
+        units = [
+            self._clean_sentence_order_sortable_unit(item)
+            for item in re.split(r"(?<=[。！？!?；;])\s*|\n+", normalized)
+            if self._clean_sentence_order_sortable_unit(item)
+        ]
         normalized_units = self._normalize_sentence_order_units_to_six(units)
         return normalized_units or units
         return [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*|\n+", normalized) if item.strip()]
 
-    def _normalize_sentence_order_units_to_six(self, units: list[str]) -> list[str] | None:
+    def _normalize_sentence_order_units_to_six(self, units: list[str], target_count: int | None = None) -> list[str] | None:
         cleaned = [unit.strip() for unit in units if unit and unit.strip()]
-        if len(cleaned) < 6 or len(cleaned) > 12:
+        if target_count is None:
+            if len(cleaned) in {4, 5, 6}:
+                return cleaned
+            target_count = 6
+        if target_count not in {4, 5, 6}:
             return None
-        if len(cleaned) == 6:
+        if len(cleaned) < target_count or len(cleaned) > 12:
+            return None
+        if len(cleaned) == target_count:
             return cleaned
-        merge_need = len(cleaned) - 6
+        merge_need = len(cleaned) - target_count
         if merge_need > len(cleaned) // 2:
             return None
         pair_scores: list[tuple[float, int]] = []
@@ -4999,7 +7276,7 @@ class QuestionGenerationService:
                 continue
             normalized.append(cleaned[index])
             index += 1
-        if len(normalized) != 6:
+        if len(normalized) != target_count:
             return None
         return normalized
 
@@ -5017,12 +7294,221 @@ class QuestionGenerationService:
         circled = "①②③④⑤⑥⑦⑧⑨⑩"
         return "\n".join(f"{circled[index] if index < len(circled) else f'{index + 1}.'} {unit}" for index, unit in enumerate(units))
 
+    @staticmethod
+    def _clean_sentence_order_sortable_unit(text: str) -> str:
+        clean = normalize_prompt_text(text or "")
+        if not clean:
+            return ""
+        clean = re.sub(r"^[①②③④⑤⑥⑦⑧⑨⑩]\s*", "", clean)
+        clean = re.sub(r"^\s*(?:\(?\d+\)?(?:[\.、．]|\s+))\s*", "", clean)
+        clean = re.sub(r"^[①②③④⑤⑥⑦⑧⑨⑩]\s*", "", clean)
+        clean = re.sub(r"^\s*(?:\(?\d+\)?(?:[\.、．]|\s+))\s*", "", clean)
+        return clean.strip()
+
+    def _format_sentence_order_natural_material(
+        self,
+        *,
+        raw_text: str,
+        sortable_units: list[str],
+    ) -> str:
+        clean_raw = normalize_prompt_text(raw_text or "")
+        if clean_raw and not self._looks_like_sentence_order_list_material(clean_raw):
+            return clean_raw
+
+        joined_units = "".join(str(unit or "").strip() for unit in sortable_units if str(unit or "").strip())
+        joined_units = normalize_prompt_text(joined_units)
+        if joined_units:
+            return joined_units
+        return clean_raw
+
+    @staticmethod
+    def _sentence_order_unit_signature(text: str) -> str:
+        normalized = normalize_prompt_text(text or "")
+        return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff]", "", normalized)
+
+    @classmethod
+    def _sentence_order_refinement_preserves_units(
+        cls,
+        original_units: list[str],
+        refined_units: list[str],
+    ) -> bool:
+        if len(original_units) != len(refined_units):
+            return False
+        for original, refined in zip(original_units, refined_units):
+            original_sig = cls._sentence_order_unit_signature(cls._clean_sentence_order_sortable_unit(original))
+            refined_sig = cls._sentence_order_unit_signature(cls._clean_sentence_order_sortable_unit(refined))
+            if not original_sig or not refined_sig:
+                return False
+            if original_sig == refined_sig:
+                continue
+            if original_sig in refined_sig or refined_sig in original_sig:
+                continue
+            if SequenceMatcher(None, original_sig, refined_sig).ratio() < 0.66:
+                return False
+        return True
+
+    @staticmethod
+    def _sentence_order_unit_has_dependent_opening(text: str) -> bool:
+        clean = str(text or "").strip()
+        if not clean:
+            return False
+        dependent_openers = (
+            "这",
+            "其",
+            "其中",
+            "因此",
+            "所以",
+            "同时",
+            "另外",
+            "此外",
+            "例如",
+            "比如",
+            "随后",
+            "然后",
+            "接着",
+            "但是",
+            "但",
+            "然而",
+            "可见",
+            "由此",
+        )
+        return any(clean.startswith(token) for token in dependent_openers)
+
+    def _needs_sentence_order_presentation_refinement(
+        self,
+        *,
+        raw_text: str,
+        current_text: str,
+        sortable_units: list[str],
+    ) -> bool:
+        clean_current = normalize_prompt_text(current_text or "")
+        joined_units = normalize_prompt_text("".join(str(unit or "").strip() for unit in sortable_units if str(unit or "").strip()))
+        if self._looks_like_sentence_order_list_material(raw_text):
+            return True
+        if clean_current and joined_units and clean_current == joined_units:
+            return True
+        if sortable_units and self._sentence_order_unit_has_dependent_opening(sortable_units[0]):
+            return True
+        return False
+
+    def _refine_sentence_order_presentation_material(
+        self,
+        *,
+        raw_text: str,
+        current_text: str,
+        sortable_units: list[str],
+        source: dict[str, Any] | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+        normalized_current = normalize_prompt_text(current_text or "")
+        material_source = source or {}
+        if (
+            not sortable_units
+            or bool(material_source.get("forced_user_material"))
+            or not self._needs_sentence_order_presentation_refinement(
+                raw_text=raw_text,
+                current_text=normalized_current,
+                sortable_units=sortable_units,
+            )
+        ):
+            return normalized_current, {}
+
+        issue_labels: list[str] = []
+        if self._looks_like_sentence_order_list_material(raw_text):
+            issue_labels.append("list_like_source")
+        if normalized_current == normalize_prompt_text("".join(sortable_units)):
+            issue_labels.append("joined_units_presentation")
+        if sortable_units and self._sentence_order_unit_has_dependent_opening(sortable_units[0]):
+            issue_labels.append("dependent_opener")
+
+        system_prompt = (
+            "你是一名语句排序材料轻修助手。请把输入的排序展示句群整理成更像真题材料的自然短文。"
+            "必须严格保持句子数量不变、句子顺序不变、句子核心语义不变；不得合并句子，不得拆分句子，不得删除或新增句子。"
+            "你只能做最小必要的展示增强：去掉列表/条目痕迹，补足最少量的代词悬空或局部衔接，使整段更像正式公考材料。"
+            "禁止把句群改写成教学口吻，禁止硬贴“首先、其次、最后”等教程式连接词，禁止改动原有的顺序真值。"
+        )
+        user_prompt = "\n\n".join(
+            [
+                "请把下面的语句排序展示句群整理成更自然的真题材料外观。",
+                f"当前问题：{'; '.join(issue_labels) if issue_labels else '句群仍偏列表化，需要轻微自足化。'}",
+                "硬约束：句子数量必须与原句群完全一致；顺序必须完全一致；每一句都必须仍能和对应原句一一对照。",
+                "允许：删条目味、补最小衔接、把明显悬空的指代稍微补足到可读。",
+                "禁止：合并句子、拆分句子、增删句子、改变句子先后、额外补背景、教程式显性提示。",
+                "[当前展示句群]",
+                "\n".join(f"{index}. {unit}" for index, unit in enumerate(sortable_units, start=1)),
+                "[当前展示材料]",
+                normalized_current or "(empty)",
+                "[原始材料]",
+                normalize_prompt_text(raw_text or ""),
+            ]
+        )
+        try:
+            response = self.llm_gateway.generate_json(
+                route=self._material_refinement_route(),
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                schema_name="material_refinement",
+                schema=MaterialRefinementDraft.model_json_schema(),
+            )
+            refined = self.material_refinement_adapter.validate_python(response)
+            refined_text = normalize_prompt_text(refined.refined_text or "")
+            if not refined_text:
+                return normalized_current, {}
+            refined_units = self._extract_sortable_units_from_text(refined_text)
+            refined_units = (
+                self._normalize_sentence_order_units_to_six(refined_units, target_count=len(sortable_units))
+                or refined_units
+            )
+            refined_units = [
+                str(unit or "").strip()
+                for unit in refined_units[: len(sortable_units)]
+                if str(unit or "").strip()
+            ]
+            if len(refined_units) != len(sortable_units):
+                return normalized_current, {}
+            if not self._sentence_order_refinement_preserves_units(sortable_units, refined_units):
+                return normalized_current, {}
+            polished_text = normalize_prompt_text("".join(refined_units))
+            if not polished_text:
+                return normalized_current, {}
+            return polished_text, {
+                "sentence_order_presentation_refined": True,
+                "sentence_order_presentation_refinement_reason": refined.reason or "sentence_order_presentation_polish",
+                "sentence_order_presentation_refinement_issues": issue_labels,
+            }
+        except Exception:
+            return normalized_current, {}
+
+    @staticmethod
+    def _looks_like_sentence_order_list_material(text: str) -> bool:
+        clean = str(text or "").strip()
+        if not clean:
+            return False
+        if len(re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]", clean)) >= 2:
+            return True
+        if len(re.findall(r"(?:^|\n)\s*(?:\(?\d+\)?[\.、]?)\s*", clean)) >= 2:
+            return True
+        lines = [line.strip() for line in clean.splitlines() if line.strip()]
+        if len(lines) >= 4 and len(lines) <= 8:
+            punctuated = sum(1 for line in lines if line.endswith(("。", "！", "？", "；", ".", "!", "?", ";")))
+            if punctuated >= max(3, len(lines) - 1):
+                return True
+        return False
+
     def _best_sortable_unit_count(self, material: MaterialSelectionResult) -> int:
         counts = [
             self._count_sortable_units_from_material(material.text),
             self._count_sortable_units_from_material(material.original_text or ""),
         ]
-        return max(counts)
+        best_count = max(counts)
+        if best_count in {4, 5, 6}:
+            return best_count
+        if 6 in counts:
+            return 6
+        if 5 in counts:
+            return 5
+        if 4 in counts:
+            return 4
+        return best_count
 
     def _coerce_sentence_order_material(
         self,
@@ -5035,13 +7521,28 @@ class QuestionGenerationService:
         best_units: list[str] = []
         for source_text in candidate_sources:
             units = self._extract_sortable_units_from_text(source_text)
-            normalized_units = self._normalize_sentence_order_units_to_six(units) or units
-            if len(normalized_units) >= target_count:
-                best_units = normalized_units[:target_count]
+            if target_count in {4, 5, 6}:
+                normalized_units = self._normalize_sentence_order_units_to_six(units, target_count=target_count) or units
+            else:
+                normalized_units = self._normalize_sentence_order_units_to_six(units) or units
+                if len(normalized_units) not in {4, 5, 6}:
+                    normalized_units = (
+                        self._normalize_sentence_order_units_to_six(units, target_count=6)
+                        or self._normalize_sentence_order_units_to_six(units, target_count=5)
+                        or self._normalize_sentence_order_units_to_six(units, target_count=4)
+                        or units
+                    )
+                if len(normalized_units) in {4, 5, 6}:
+                    target_count = len(normalized_units)
+            candidate_count = target_count if target_count in {4, 5, 6} else len(normalized_units)
+            if candidate_count in {4, 5, 6} and len(normalized_units) >= candidate_count:
+                best_units = normalized_units[:candidate_count]
                 break
             if len(normalized_units) > len(best_units):
                 best_units = normalized_units
-        if len(best_units) < target_count:
+        if target_count not in {4, 5, 6}:
+            target_count = len(best_units)
+        if target_count not in {4, 5, 6} or len(best_units) < target_count:
             return None
         coerced_text = self._format_sortable_units(best_units)
         if coerced_text == material.text:
@@ -5055,30 +7556,54 @@ class QuestionGenerationService:
         )
 
     def _enforce_sentence_order_six_unit_output(self, generated_question: GeneratedQuestion) -> GeneratedQuestion:
-        expected_markers = ["①", "②", "③", "④", "⑤", "⑥"]
+        unit_count = len(generated_question.correct_order or [])
+        if unit_count not in {4, 5, 6}:
+            option_lengths = [
+                len(sequence)
+                for sequence in (
+                    self._extract_order_sequence(value)
+                    for value in (generated_question.options or {}).values()
+                )
+                if sequence
+            ]
+            unit_count = next((count for count in option_lengths if count in {4, 5, 6}), 0)
+        if unit_count not in {4, 5, 6}:
+            unit_count = len(generated_question.original_sentences or [])
+        if unit_count not in {4, 5, 6}:
+            unit_count = 6
+
+        expected_markers = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"][:unit_count]
         stem = (generated_question.stem or "").strip()
         if stem:
-            stem = re.sub(r"将[以上下列些]*\d+个(?:句子|部分)重新排列[，,]?\s*语序正确的一项是[:：]?", "将以下6个部分重新排列，语序正确的一项是：", stem)
-            stem = re.sub(r"将[以上下列些]*[一二三四五六七八九十]+个(?:句子|部分)重新排列[，,]?\s*语序正确的一项是[:：]?", "将以下6个部分重新排列，语序正确的一项是：", stem)
-            if "重新排列" in stem and "6个部分" not in stem:
-                stem = "将以下6个部分重新排列，语序正确的一项是："
+            stem = re.sub(
+                r"将[以上下列些]*\d+个(?:句子|部分)重新排列[，,]?\s*语序正确的一项是[:：]?",
+                self._sentence_order_stem(unit_count),
+                stem,
+            )
+            stem = re.sub(
+                r"将[以上下列些]*[一二三四五六七八九十]+个(?:句子|部分)重新排列[，,]?\s*语序正确的一项是[:：]?",
+                self._sentence_order_stem(unit_count),
+                stem,
+            )
+            if "重新排列" in stem and f"{unit_count}个句子" not in stem:
+                stem = self._sentence_order_stem(unit_count)
 
         normalized_options: dict[str, str] = {}
         for key, value in (generated_question.options or {}).items():
             text = str(value or "").strip()
-            circled = re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]", text)
-            if circled:
-                cleaned: list[str] = []
-                for marker in circled:
-                    if marker in expected_markers and marker not in cleaned:
-                        cleaned.append(marker)
-                normalized_options[key] = "".join(cleaned[:6]) if cleaned else text
-            else:
-                normalized_options[key] = text
+            sequence = self._extract_order_sequence(text)
+            if self._is_valid_sentence_order_sequence(sequence, unit_count):
+                normalized_options[key] = self._format_order_sequence(sequence)
+                continue
+            circled = [marker for marker in re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]", text) if marker in expected_markers]
+            if len(circled) >= unit_count:
+                normalized_options[key] = "".join(circled[:unit_count])
+                continue
+            normalized_options[key] = text
 
         analysis = str(generated_question.analysis or "")
-        analysis = re.sub(r"(\d+)个(?:句子|部分)", lambda m: "6个部分" if m.group(1) != "6" else "6个部分", analysis)
-        analysis = re.sub(r"([七八九十7-9])(?:句|个句子|个部分)", "6个部分", analysis)
+        analysis = re.sub(r"(\d+)个(?:句子|部分)", f"{unit_count}个句子", analysis)
+        analysis = re.sub(r"([七八九十7-9])(?:句|个句子|个部分)", f"{unit_count}个句子", analysis)
         analysis = re.sub(r"[⑦⑧⑨⑩]", "", analysis)
 
         return generated_question.model_copy(

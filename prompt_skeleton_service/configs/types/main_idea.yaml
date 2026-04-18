@@ -350,6 +350,8 @@ patterns:
       main_point_source:
         - conclusion_sentence
         - tail_sentence
+      main_axis_source:
+        - final_summary
       abstraction_level:
         - medium
       structure_type:
@@ -413,6 +415,9 @@ patterns:
     match_rules:
       main_point_source:
         - whole_passage
+      main_axis_source:
+        - transition_after
+        - global_abstraction
       coverage_requirement:
         - integrated
       structure_type:
@@ -549,7 +554,7 @@ business_subtypes:
 
   - subtype_id: center_understanding
     display_name: 中心理解
-    description: 抓文章围绕的中心对象及其表达任务，答案常体现“对象 + 文章在说明/解释/论证什么”。
+    description: 抓文章围绕的中心对象及其核心判断，必要时兼顾文章在说明/解释什么；不要把答案硬写成任务标签、评价框架或政策口号。
     preferred_patterns:
       - single_claim_capture
       - whole_passage_integration
@@ -558,8 +563,8 @@ business_subtypes:
       main_point_source: whole_passage
       coverage_requirement: integrated
       abstraction_level: medium
-      target_form: article_task
-      statement_visibility: high
+      target_form: central_meaning
+      statement_visibility: medium
       distractor_modes:
         - function_misread
         - topic_shift

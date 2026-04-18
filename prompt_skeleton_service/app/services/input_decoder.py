@@ -11,139 +11,45 @@ MAX_COUNT: Final[int] = 5
 
 QUESTION_FOCUS_MAPPING: Final[dict[str, MappingTarget]] = {
     "\u4e3b\u65e8\u4e2d\u5fc3\u7c7b": MappingTarget(question_type="main_idea", business_subtype="center_understanding"),
-    "\u6807\u9898\u586b\u5165\u9898": MappingTarget(question_type="main_idea", business_subtype="title_selection"),
-    "title_selection": MappingTarget(question_type="main_idea", business_subtype="title_selection"),
-    "\u63a5\u8bed\u9009\u62e9\u9898": MappingTarget(question_type="continuation", business_subtype=None),
-    "continuation": MappingTarget(question_type="continuation", business_subtype=None),
     "\u8bed\u53e5\u6392\u5e8f\u9898": MappingTarget(question_type="sentence_order", business_subtype=None),
     "sentence_order": MappingTarget(question_type="sentence_order", business_subtype=None),
     "\u8bed\u53e5\u586b\u7a7a\u9898": MappingTarget(question_type="sentence_fill", business_subtype=None),
     "sentence_fill": MappingTarget(question_type="sentence_fill", business_subtype=None),
     "\u4e2d\u5fc3\u7406\u89e3\u9898": MappingTarget(question_type="main_idea", business_subtype="center_understanding"),
     "center_understanding": MappingTarget(question_type="main_idea", business_subtype="center_understanding"),
+    "title_selection": MappingTarget(question_type="main_idea", business_subtype="title_selection"),
+}
+
+BUSINESS_SUBTYPE_MAPPING: Final[dict[str, MappingTarget]] = {
+    "sentence_order_selection": MappingTarget(question_type="sentence_order", business_subtype=None),
+    "sentence_fill_selection": MappingTarget(question_type="sentence_fill", business_subtype=None),
+    "center_understanding": MappingTarget(question_type="main_idea", business_subtype="center_understanding"),
+    "title_selection": MappingTarget(question_type="main_idea", business_subtype="title_selection"),
 }
 
 QUESTION_FOCUS_ALIASES: Final[dict[str, str]] = {
     "\u4e3b\u65e8\u4e2d\u5fc3\u7c7b": "\u4e2d\u5fc3\u7406\u89e3\u9898",
     "main_idea": "\u4e2d\u5fc3\u7406\u89e3\u9898",
-    "title": "\u6807\u9898\u586b\u5165\u9898",
+    "title": "\u4e2d\u5fc3\u7406\u89e3\u9898",
     "\u6392\u5e8f": "\u8bed\u53e5\u6392\u5e8f\u9898",
     "\u586b\u7a7a": "\u8bed\u53e5\u586b\u7a7a\u9898",
+}
+
+BUSINESS_SUBTYPE_ALIASES: Final[dict[str, str]] = {
+    "\u8bed\u53e5\u6392\u5e8f": "sentence_order_selection",
+    "\u8bed\u53e5\u586b\u7a7a": "sentence_fill_selection",
+    "\u4e2d\u5fc3\u7406\u89e3": "center_understanding",
+    "\u6807\u9898\u586b\u5165": "title_selection",
 }
 
 # Keep these mappings centralized so business can adjust them without touching router code.
 # Pattern-based special types intentionally use pattern_id instead of inventing fake subtypes.
 SPECIAL_TYPE_MAPPING: Final[dict[str, MappingTarget]] = {
-    "\u4e3b\u65e8\u6982\u62ec": MappingTarget(question_type="main_idea", business_subtype="main_idea_general"),
-    "main_idea_general": MappingTarget(question_type="main_idea", business_subtype="main_idea_general"),
-    "\u9009\u62e9\u6807\u9898": MappingTarget(question_type="main_idea", business_subtype="title_selection"),
-    "title_selection": MappingTarget(question_type="main_idea", business_subtype="title_selection"),
-    "\u7ed3\u6784\u6982\u62ec": MappingTarget(question_type="main_idea", business_subtype="structure_summary"),
-    "structure_summary": MappingTarget(question_type="main_idea", business_subtype="structure_summary"),
-    "\u5c40\u90e8\u6bb5\u610f\u6982\u62ec": MappingTarget(question_type="main_idea", business_subtype="local_paragraph_summary"),
-    "local_paragraph_summary": MappingTarget(question_type="main_idea", business_subtype="local_paragraph_summary"),
     "\u4e2d\u5fc3\u7406\u89e3\u9898": MappingTarget(question_type="main_idea", business_subtype="center_understanding"),
     "center_understanding": MappingTarget(question_type="main_idea", business_subtype="center_understanding"),
-    "\u5c3e\u53e5\u76f4\u63a5\u627f\u63a5": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="tail_anchor_direct_extend",
-    ),
-    "tail_anchor_direct_extend": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="tail_anchor_direct_extend",
-    ),
-    "\u603b\u7ed3\u540e\u5f00\u542f\u65b0\u652f\u70b9": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="summary_with_new_pivot",
-    ),
-    "summary_with_new_pivot": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="summary_with_new_pivot",
-    ),
-    "\u95ee\u9898\u540e\u63a5\u5bf9\u7b56": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="problem_solution_hook",
-    ),
-    "problem_solution_hook": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="problem_solution_hook",
-    ),
-    "\u673a\u5236\u5c55\u5f00": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="mechanism_unfolding",
-    ),
-    "mechanism_unfolding": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="mechanism_unfolding",
-    ),
-    "\u4e3b\u9898\u8f6c\u5206\u8bdd\u9898": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="raised_theme_to_subtopic",
-    ),
-    "raised_theme_to_subtopic": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="raised_theme_to_subtopic",
-    ),
-    "\u89c2\u70b9\u540e\u63a5\u539f\u56e0": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="judgement_to_reason",
-    ),
-    "judgement_to_reason": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="judgement_to_reason",
-    ),
-    "\u4e2a\u6848\u5230\u5b8f\u89c2\u5c55\u5f00": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="case_to_macro_unfold",
-    ),
-    "case_to_macro_unfold": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="case_to_macro_unfold",
-    ),
-    "\u591a\u5206\u652f\u805a\u7126": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="multi_branch_focus",
-    ),
-    "multi_branch_focus": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="multi_branch_focus",
-    ),
-    "\u5f20\u529b\u89e3\u91ca": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="tension_explained",
-    ),
-    "tension_explained": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="tension_explained",
-    ),
-    "\u65b9\u6cd5\u5ef6\u5c55": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="method_expansion",
-    ),
-    "method_expansion": MappingTarget(
-        question_type="continuation",
-        business_subtype=None,
-        pattern_id="method_expansion",
-    ),
+    "title_selection": MappingTarget(question_type="main_idea", business_subtype="title_selection"),
+    "sentence_order_selection": MappingTarget(question_type="sentence_order", business_subtype=None),
+    "sentence_fill_selection": MappingTarget(question_type="sentence_fill", business_subtype=None),
     "\u53cc\u951a\u70b9\u9501\u5b9a": MappingTarget(
         question_type="sentence_order",
         business_subtype=None,
@@ -275,26 +181,20 @@ SPECIAL_TYPE_ALIASES: Final[dict[str, str]] = {
     "\u4e0d\u6307\u5b9a": "",
     "\u4e0d\u6307\u5b9a\uff08\u81ea\u52a8\u5339\u914d\uff09": "",
     "\u8bf7\u9009\u62e9": "",
+    "\u8bed\u53e5\u6392\u5e8f": "sentence_order_selection",
+    "\u8bed\u53e5\u586b\u7a7a": "sentence_fill_selection",
+    "\u6807\u9898\u586b\u5165": "title_selection",
     # Backward compatibility for the current demo UI and older source-question labels.
     "turning_relation_focus": "center_understanding",
     "cause_effect__conclusion_focus": "center_understanding",
     "necessary_condition_countermeasure": "center_understanding",
     "theme_word_focus": "center_understanding",
-    "parallel_comprehensive_summary": "main_idea_general",
+    "parallel_comprehensive_summary": "center_understanding",
     "turning_relation_focus__main_idea": "center_understanding",
     "cause_effect__conclusion_focus__main_idea": "center_understanding",
     "necessary_condition_countermeasure__main_idea": "center_understanding",
     "theme_word_focus__main_idea": "center_understanding",
-    "parallel_comprehensive_summary__main_idea": "main_idea_general",
-    "plot_continuation": "tail_anchor_direct_extend",
-    "character_extension": "tail_anchor_direct_extend",
-    "theme_extension": "raised_theme_to_subtopic",
-    "foreshadow_recall": "summary_with_new_pivot",
-    "setting_alignment": "tail_anchor_direct_extend",
-    "emotion_progression": "tension_explained",
-    "conflict_resolution": "tension_explained",
-    "ending_resolution": "problem_solution_hook",
-    "value_expression": "judgement_to_reason",
+    "parallel_comprehensive_summary__main_idea": "center_understanding",
     "head_tail_logic": "dual_anchor_lock",
     "head_tail_lock": "dual_anchor_lock",
     "deterministic_binding": "carry_parallel_expand",
@@ -317,6 +217,13 @@ SPECIAL_TYPE_ALIASES: Final[dict[str, str]] = {
     "sentence_fill__ending_countermeasure__abstract": "ending_summary",
 }
 
+SUPPORTED_RUNTIME_TARGETS: Final[set[tuple[str, str | None]]] = {
+    ("main_idea", "center_understanding"),
+    ("main_idea", "title_selection"),
+    ("sentence_order", None),
+    ("sentence_fill", None),
+}
+
 DIFFICULTY_MAPPING: Final[dict[str, str]] = {
     "\u7b80\u5355": "easy",
     "\u4e2d\u7b49": "medium",
@@ -330,12 +237,22 @@ DIFFICULTY_MAPPING: Final[dict[str, str]] = {
 class InputDecoderService:
     def decode(self, request: DifyFormInput) -> dict:
         selected_special_type = self._select_special_type(request.special_question_types)
-        mapping_source = "special_question_type" if selected_special_type else "question_focus"
-        mapping_target = self._resolve_mapping(request.question_focus, selected_special_type)
+        normalized_business_subtype = self._normalize_business_subtype(request.business_subtype)
+        mapping_source = (
+            "special_question_type"
+            if selected_special_type
+            else "business_subtype"
+            if normalized_business_subtype
+            else "question_focus"
+        )
+        mapping_target = self._resolve_mapping(
+            request.question_focus,
+            normalized_business_subtype,
+            selected_special_type,
+        )
         difficulty_target = self._resolve_difficulty(request.difficulty_level)
         requested_count = request.count or 1
         effective_count, count_warnings = self._normalize_count(requested_count)
-        extra_constraints = self._build_extra_constraints(request.text_direction)
 
         standard_request = PromptBuildRequest(
             question_type=mapping_target.question_type,
@@ -348,7 +265,7 @@ class InputDecoderService:
             use_fewshot=True,
             fewshot_mode="structure_only",
             type_slots={},
-            extra_constraints=extra_constraints,
+            extra_constraints={},
         )
         batch_meta = BatchMeta(
             requested_count=requested_count,
@@ -386,7 +303,23 @@ class InputDecoderService:
         aliased = SPECIAL_TYPE_ALIASES.get(selected, selected)
         return aliased or None
 
-    def _resolve_mapping(self, question_focus: str, selected_special_type: str | None) -> MappingTarget:
+    def _normalize_business_subtype(self, business_subtype: str | None) -> str | None:
+        normalized = str(business_subtype or "").strip()
+        if normalized.lower() in {"select", "auto"} or normalized in {
+            "\u4e0d\u6307\u5b9a",
+            "\u4e0d\u6307\u5b9a\uff08\u81ea\u52a8\u5339\u914d\uff09",
+            "\u8bf7\u9009\u62e9",
+        }:
+            return None
+        normalized = BUSINESS_SUBTYPE_ALIASES.get(normalized, normalized)
+        return normalized or None
+
+    def _resolve_mapping(
+        self,
+        question_focus: str,
+        business_subtype: str | None,
+        selected_special_type: str | None,
+    ) -> MappingTarget:
         if selected_special_type:
             mapping = SPECIAL_TYPE_MAPPING.get(selected_special_type)
             if not mapping:
@@ -395,6 +328,18 @@ class InputDecoderService:
                     status_code=422,
                     details={"special_question_type": selected_special_type},
                 )
+            self._ensure_supported_target(mapping, source="special_question_type", raw_value=selected_special_type)
+            return mapping
+
+        if business_subtype:
+            mapping = BUSINESS_SUBTYPE_MAPPING.get(business_subtype)
+            if not mapping:
+                raise DomainError(
+                    "Selected business_subtype is not mapped yet.",
+                    status_code=422,
+                    details={"business_subtype": business_subtype},
+                )
+            self._ensure_supported_target(mapping, source="business_subtype", raw_value=business_subtype)
             return mapping
 
         normalized_focus = (question_focus or "").strip()
@@ -414,7 +359,28 @@ class InputDecoderService:
                 status_code=422,
                 details={"question_focus": question_focus, "normalized_question_focus": normalized_focus},
             )
+        self._ensure_supported_target(mapping, source="question_focus", raw_value=normalized_focus)
         return mapping
+
+    @staticmethod
+    def _ensure_supported_target(mapping: MappingTarget, *, source: str, raw_value: str) -> None:
+        runtime_key = (mapping.question_type, mapping.business_subtype)
+        if runtime_key in SUPPORTED_RUNTIME_TARGETS:
+            return
+        raise DomainError(
+            "Selected target is disabled in current three-card mode.",
+            status_code=422,
+            details={
+                "source": source,
+                "selected_value": raw_value,
+                "resolved_question_type": mapping.question_type,
+                "resolved_business_subtype": mapping.business_subtype,
+                "supported_targets": [
+                    {"question_type": qt, "business_subtype": subtype}
+                    for qt, subtype in sorted(SUPPORTED_RUNTIME_TARGETS)
+                ],
+            },
+        )
 
     def _resolve_difficulty(self, difficulty_level: str) -> str:
         difficulty_target = DIFFICULTY_MAPPING.get(difficulty_level)
@@ -439,9 +405,3 @@ class InputDecoderService:
             effective_count = MAX_COUNT
             warnings.append("count was above 5 and has been truncated to 5 for the current demo.")
         return effective_count, warnings
-
-    def _build_extra_constraints(self, text_direction: str | None) -> dict:
-        # The prompt engine does not consume text_direction yet; keep it in extra_constraints for future use.
-        if not text_direction:
-            return {}
-        return {"text_direction": text_direction}

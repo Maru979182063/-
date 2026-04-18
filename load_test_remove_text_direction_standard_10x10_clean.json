@@ -1,0 +1,794 @@
+{
+  "base_url": "http://127.0.0.1:8111",
+  "endpoint": "/api/v1/questions/generate",
+  "preset": "standard",
+  "requests": 10,
+  "concurrency": 10,
+  "timeout_seconds": 300.0,
+  "payload": {
+    "question_focus": "center_understanding",
+    "difficulty_level": "medium",
+    "count": 1,
+    "source_question": {
+      "passage": "人工智能正在进入城市治理、医疗协同和公共服务等领域。技术提升效率的同时，也要求制度设计、伦理审查和数据治理同步跟进。",
+      "stem": "根据材料，下列最适合作为标题的一项是？",
+      "options": {
+        "A": "智能技术应用需要与制度建设同步推进",
+        "B": "只要引入人工智能，治理问题就会自然消失",
+        "C": "技术企业应独自承担全部公共治理责任",
+        "D": "公共服务数字化意味着传统治理方式已经失效"
+      },
+      "answer": "A",
+      "analysis": "A项能够概括材料主旨，兼顾技术应用与制度建设两方面要求。"
+    }
+  },
+  "ready_probe": {
+    "status_code": 200,
+    "service_status": "ready",
+    "continued": true,
+    "payload": {
+      "service": "prompt_skeleton_service",
+      "status": "ready",
+      "checks": [
+        {
+          "name": "config_dir",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+            "exists": true,
+            "kind": "dir"
+          }
+        },
+        {
+          "name": "runtime_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.mvp.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "prompt_template_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "question_repository",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+            "exists": true,
+            "repository_initialized": true
+          }
+        },
+        {
+          "name": "config_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "loaded_types": 4,
+            "warnings": []
+          }
+        },
+        {
+          "name": "prompt_template_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "active_templates": 23
+          }
+        },
+        {
+          "name": "runtime_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "materials_base_url": "http://127.0.0.1:8001",
+            "materials_v2_search_path": "/materials/v2/search",
+            "llm_provider": "generation_llm"
+          }
+        },
+        {
+          "name": "passage_service",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "base_url": "http://127.0.0.1:8001",
+            "health_url": "http://127.0.0.1:8001/healthz",
+            "ready_url": "http://127.0.0.1:8001/readyz",
+            "status_code": 200,
+            "reachable": true,
+            "service_status": "ready",
+            "service_name": "passage_service",
+            "database_url": "sqlite:///./passage_service.db",
+            "resolved_database_url": "sqlite:///C:/Users/Maru/Documents/agent/passage_service/passage_service.db",
+            "resolved_database_path": "C:\\Users\\Maru\\Documents\\agent\\passage_service\\passage_service.db",
+            "database_mode": "primary",
+            "allow_non_primary_database": false,
+            "expected_primary_database_name": "passage_service.db",
+            "material_span_count": 7552,
+            "primary_material_count": 6509,
+            "v2_indexed_primary_count": 6251,
+            "database_exists": true,
+            "db_pool_size": 20,
+            "db_max_overflow": 40,
+            "db_pool_timeout_seconds": 60.0,
+            "db_pool_recycle_seconds": 1800
+          }
+        }
+      ],
+      "settings": {
+        "config_dir": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+        "runtime_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.mvp.yaml",
+        "prompt_template_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+        "question_db_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+        "generation_queue": {
+          "max_concurrent": 3,
+          "max_waiting": 12,
+          "acquire_timeout_seconds": 240
+        }
+      },
+      "runtime_state": {
+        "generation_queue": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "max_concurrent": 3,
+          "max_waiting": 12
+        }
+      }
+    }
+  },
+  "warmup": {
+    "count": 0,
+    "success": 0,
+    "failure": 0
+  },
+  "results": [
+    {
+      "request_index": 1,
+      "started_at": 1776340273.4995937,
+      "duration_ms": 41123.74,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "02f92ca6-309e-4477-b497-a40724866309",
+      "item_count": 1,
+      "request_id": "24532890-b944-45c8-960f-0d1481a4d0b5",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 1,
+      "waiting_requests": 0,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 2,
+      "started_at": 1776340273.500173,
+      "duration_ms": 114531.41,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "bfaf859b-7dcc-4eea-90d5-8ff6ef108b39",
+      "item_count": 1,
+      "request_id": "50c08868-dd5e-442d-984b-eff10f761685",
+      "queue_position": 1,
+      "queue_wait_seconds": 77.7531,
+      "active_requests": 3,
+      "waiting_requests": 2,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 3,
+      "started_at": 1776340273.5008388,
+      "duration_ms": 41268.96,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "c7be680d-3a12-4003-b5c4-dfdb6a344735",
+      "item_count": 1,
+      "request_id": "bcc24ed0-fe14-4a87-a98e-37d085058621",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 3,
+      "waiting_requests": 0,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 4,
+      "started_at": 1776340273.5014012,
+      "duration_ms": 38339.91,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "db5af54a-ac17-4b19-8faa-45d4e78452fd",
+      "item_count": 1,
+      "request_id": "2155badd-b967-492d-9dd7-2865b9468266",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 2,
+      "waiting_requests": 0,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 5,
+      "started_at": 1776340273.502203,
+      "duration_ms": 74652.49,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "8833fb15-4cae-4ec2-87f5-d947ca976165",
+      "item_count": 1,
+      "request_id": "090ecece-f04b-407b-8b67-e98e12a25253",
+      "queue_position": 2,
+      "queue_wait_seconds": 38.3038,
+      "active_requests": 3,
+      "waiting_requests": 6,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 6,
+      "started_at": 1776340273.5030196,
+      "duration_ms": 147526.12,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "0659ec86-7c66-44a4-99e4-c730d6dd0e9d",
+      "item_count": 1,
+      "request_id": "d8c6e10a-b712-4ce1-b8d5-50c566e18403",
+      "queue_position": 3,
+      "queue_wait_seconds": 111.23,
+      "active_requests": 3,
+      "waiting_requests": 0,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 7,
+      "started_at": 1776340273.5039632,
+      "duration_ms": 118972.71,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "3ed17ee1-b707-4030-947c-4202606bf635",
+      "item_count": 1,
+      "request_id": "54edddb2-52eb-48d9-aed4-2ba5ba60a93b",
+      "queue_position": 4,
+      "queue_wait_seconds": 79.1242,
+      "active_requests": 3,
+      "waiting_requests": 1,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 8,
+      "started_at": 1776340273.5052936,
+      "duration_ms": 79156.22,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "64688207-9a3c-4e31-ba56-2e83a7088129",
+      "item_count": 1,
+      "request_id": "883aa86d-a261-4aa9-b406-cc40cf3ce36f",
+      "queue_position": 6,
+      "queue_wait_seconds": 41.2326,
+      "active_requests": 3,
+      "waiting_requests": 4,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 9,
+      "started_at": 1776340273.5062313,
+      "duration_ms": 111260.29,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "859babd7-2925-46b0-8021-c30a6ddb4898",
+      "item_count": 1,
+      "request_id": "f75888a6-e89a-4daa-9d4e-4e2974e8332a",
+      "queue_position": 7,
+      "queue_wait_seconds": 74.614,
+      "active_requests": 3,
+      "waiting_requests": 3,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    },
+    {
+      "request_index": 10,
+      "started_at": 1776340273.5070026,
+      "duration_ms": 77783.18,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "5305f255-d457-41e4-8a2f-65ba46acc858",
+      "item_count": 1,
+      "request_id": "c501b517-e1f3-4ef9-9d5d-011e5be2347c",
+      "queue_position": 5,
+      "queue_wait_seconds": 41.085,
+      "active_requests": 3,
+      "waiting_requests": 5,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    }
+  ],
+  "summary": {
+    "success_count": 10,
+    "failure_count": 0,
+    "success_rate": 1.0,
+    "throughput_rps": 0.068,
+    "total_seconds": 147.531,
+    "latency_ms": {
+      "min": 38339.91,
+      "avg": 84461.5,
+      "p50": 78469.7,
+      "p90": 121828.05,
+      "p95": 134677.09,
+      "max": 147526.12
+    },
+    "queue": {
+      "queued_request_count": 7,
+      "max_queue_position_seen": 7,
+      "wait_seconds_avg": 46.3343,
+      "wait_seconds_p95": 96.7824,
+      "wait_seconds_max": 111.23
+    },
+    "status_codes": {
+      "200": 10
+    },
+    "error_reasons": {}
+  },
+  "diagnostics": {
+    "sample_count": 62,
+    "max_active_requests": 3,
+    "max_waiting_requests": 7,
+    "samples": [
+      {
+        "captured_at": 1776340273.4987252,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340275.8462622,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340277.8054614,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340279.8645885,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340282.2015765,
+        "status_code": 200,
+        "service_status": "not_ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340286.6740568,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340290.6858158,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340292.8659742,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340294.8213212,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340297.0538826,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340299.174377,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340301.2793574,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340303.43329,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340305.6871183,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340307.9209335,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 7
+      },
+      {
+        "captured_at": 1776340311.425988,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 6
+      },
+      {
+        "captured_at": 1776340313.5405204,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 5
+      },
+      {
+        "captured_at": 1776340315.6428022,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340317.7821238,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340320.1068156,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340323.4074802,
+        "status_code": 200,
+        "service_status": "not_ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340327.8919718,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340330.221474,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340332.4211998,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340334.6315455,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340336.7496378,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340338.8834765,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340341.0891502,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340343.1376216,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340345.0843236,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 4
+      },
+      {
+        "captured_at": 1776340347.192836,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 3
+      },
+      {
+        "captured_at": 1776340349.3145456,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 3
+      },
+      {
+        "captured_at": 1776340351.3275115,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 2
+      },
+      {
+        "captured_at": 1776340353.5401607,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340355.5850189,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340359.1411607,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340362.6835043,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340365.9782794,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340368.2003489,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340370.2228322,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340372.5857964,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340376.29773,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340378.5737505,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340380.5227518,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340382.5995467,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 1
+      },
+      {
+        "captured_at": 1776340384.6298048,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340386.811317,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 3,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340388.832199,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340390.9558938,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340392.9740462,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340396.368197,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340398.434316,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340400.4350662,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340402.6902747,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340404.718538,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340406.7271996,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340408.8454626,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340410.8530285,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340412.9262173,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340414.945879,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340417.034068,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776340419.0567493,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      }
+    ]
+  }
+}

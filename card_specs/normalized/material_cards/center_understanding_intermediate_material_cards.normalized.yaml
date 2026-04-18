@@ -1,0 +1,352 @@
+schema_version: material_card_registry.v1
+registry_id: center_understanding_intermediate_material_cards_v2
+business_family_id: center_understanding
+registry_role: intermediate_structure_cards
+notes:
+  - Minimal leaf-level material cards derived from center_understanding/relation_words and center_understanding/subsentence_features batches.
+  - These cards are directly consumable by material_pipeline_v2 and question card overrides.
+  - Leaf alignment:
+    - cu_relation_plain
+    - cu_relation_turning
+    - cu_relation_parallel
+    - cu_relation_countermeasure
+    - cu_relation_variant
+    - cu_subsentence_example
+    - cu_subsentence_data
+    - cu_subsentence_prelude
+    - cu_subsentence_multi_angle
+    - cu_subsentence_other
+cards:
+  - card_id: center_material.relation_plain
+    display_name: Center Relation Plain
+    selection_core: Stable single-axis center-understanding passage with explicit closure.
+    structures:
+      - total_sub
+      - sub_total
+      - phenomenon_analysis
+    required_signals:
+      single_center_strength: ">=0.68"
+      closure_score: ">=0.64"
+      titleability: ">=0.62"
+      context_dependency: "<=0.58"
+    preferred_signals:
+      - clear center sentence
+      - end-position summary or consolidation
+    avoid_signals:
+      - severe context dependence
+      - fragmented branch-first discourse
+    candidate_contract:
+      raw_policy: whole_passage preferred
+      allowed_candidate_types:
+        - whole_passage
+        - closed_span
+      preferred_candidate_types:
+        - whole_passage
+    card_bias: plain center-main-axis recovery
+    default_generation_archetype: main_recovery
+    distractor_bias:
+      - local-detail-as-main
+      - topic-shift
+      - over-generalization
+
+  - card_id: center_material.relation_turning
+    display_name: Center Relation Turning
+    selection_core: Passages where the main axis is clarified after a turning relation.
+    structures:
+      - sub_total
+      - problem_solution
+      - phenomenon_analysis
+    required_signals:
+      turning_focus_strength: ">=0.66"
+      single_center_strength: ">=0.60"
+      closure_score: ">=0.56"
+    preferred_signals:
+      - explicit turning markers
+      - post-turning center settlement
+    avoid_signals:
+      - purely parallel enumeration
+      - no center shift after turning marker
+    candidate_contract:
+      raw_policy: closed_span or multi_paragraph_unit
+      allowed_candidate_types:
+        - closed_span
+        - multi_paragraph_unit
+        - whole_passage
+      preferred_candidate_types:
+        - closed_span
+        - multi_paragraph_unit
+    card_bias: turning-then-axis-focus
+    default_generation_archetype: turning_focus
+    distractor_bias:
+      - pre-turning detail trap
+      - branch-focus misread
+      - unsupported extension
+
+  - card_id: center_material.relation_parallel
+    display_name: Center Relation Parallel
+    selection_core: Multi-dimension/parallel discourse that can be unified into one center claim.
+    structures:
+      - parallel
+      - total_sub_total
+      - total_sub
+    required_signals:
+      multi_dimension_cohesion: ">=0.60"
+      parallel_enumeration_strength: ">=0.50"
+      single_center_strength: ">=0.54"
+      titleability: ">=0.56"
+    preferred_signals:
+      - aspect-wise parallel expansion
+      - final unification sentence
+    avoid_signals:
+      - disconnected point listing
+      - no unification anchor
+    candidate_contract:
+      raw_policy: whole_passage or multi_paragraph_unit
+      allowed_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+        - closed_span
+      preferred_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+    card_bias: parallel-to-unified-main-axis
+    default_generation_archetype: multi_dimension
+    distractor_bias:
+      - one-dimension-only option
+      - local parallel point replacement
+      - macro-topic drift
+
+  - card_id: center_material.relation_countermeasure
+    display_name: Center Relation Countermeasure
+    selection_core: Problem-to-countermeasure passages where conclusion is solution-oriented.
+    structures:
+      - problem_solution
+      - phenomenon_analysis
+      - sub_total
+    required_signals:
+      problem_signal_strength: ">=0.56"
+      countermeasure_signal_strength: ">=0.50"
+      necessary_condition_strength: ">=0.48"
+      analysis_to_conclusion_strength: ">=0.50"
+    preferred_signals:
+      - explicit problem diagnosis
+      - action/measure closure
+    avoid_signals:
+      - pure phenomenon description
+      - measure statements without diagnosed problem
+    candidate_contract:
+      raw_policy: multi_paragraph_unit preferred
+      allowed_candidate_types:
+        - multi_paragraph_unit
+        - closed_span
+        - whole_passage
+      preferred_candidate_types:
+        - multi_paragraph_unit
+        - closed_span
+    card_bias: problem-analysis-to-solution-conclusion
+    default_generation_archetype: main_recovery
+    distractor_bias:
+      - problem-only summary
+      - method-only without axis
+      - scope shift
+
+  - card_id: center_material.relation_variant
+    display_name: Center Relation Variant
+    selection_core: Cause-effect/variant relation passages with explicit conclusion recovery.
+    structures:
+      - example_conclusion
+      - sub_total
+      - phenomenon_analysis
+    required_signals:
+      cause_effect_strength: ">=0.46"
+      analysis_to_conclusion_strength: ">=0.46"
+      summary_strength: ">=0.44"
+      single_center_strength: ">=0.50"
+    preferred_signals:
+      - explicit causality chain
+      - recovered center conclusion after relation unfolding
+    avoid_signals:
+      - weak causality with pure narrative
+      - multiple unrelated causal chains
+    candidate_contract:
+      raw_policy: closed_span or multi_paragraph_unit
+      allowed_candidate_types:
+        - closed_span
+        - multi_paragraph_unit
+        - whole_passage
+      preferred_candidate_types:
+        - closed_span
+        - multi_paragraph_unit
+    card_bias: relation-variant-to-center-recovery
+    default_generation_archetype: main_recovery
+    distractor_bias:
+      - local cause as whole-axis
+      - effect-only overfit
+      - unsupported causality extension
+
+  - card_id: center_material.subsentence_example
+    display_name: Center Subsentence Example
+    selection_core: Example-rich discourse where specific cases should be elevated back to one stable center claim.
+    structures:
+      - example_conclusion
+      - total_sub
+      - sub_total
+    required_signals:
+      single_center_strength: ">=0.50"
+      closure_score: ">=0.48"
+      example_to_theme_strength: ">=0.44"
+    preferred_signals:
+      - explicit example expression with recoverable theme
+      - center sentence before or after examples
+    avoid_signals:
+      - pure example listing without center recovery
+      - local case details replacing main axis
+    candidate_contract:
+      raw_policy: whole_passage or multi_paragraph_unit
+      allowed_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+        - closed_span
+      preferred_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+    card_bias: example-to-theme center recovery
+    default_generation_archetype: main_recovery
+    distractor_bias:
+      - example_as_conclusion
+      - local_detail_as_main
+      - unsupported_extension
+
+  - card_id: center_material.subsentence_data
+    display_name: Center Subsentence Data
+    selection_core: Data/evidence-heavy passages where statistics support a unified center judgment.
+    structures:
+      - phenomenon_analysis
+      - sub_total
+      - total_sub
+    required_signals:
+      single_center_strength: ">=0.54"
+      closure_score: ">=0.52"
+      titleability: ">=0.56"
+    preferred_signals:
+      - explicit statistics or survey evidence
+      - evidence chain converging to one center sentence
+    avoid_signals:
+      - data pile-up without axis conclusion
+      - isolated numeric detail as option anchor
+    candidate_contract:
+      raw_policy: whole_passage or multi_paragraph_unit
+      allowed_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+        - closed_span
+      preferred_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+    card_bias: evidence-to-center consolidation
+    default_generation_archetype: main_recovery
+    distractor_bias:
+      - statistic_detail_as_main
+      - scope_shift
+      - unsupported_extension
+
+  - card_id: center_material.subsentence_prelude
+    display_name: Center Subsentence Prelude
+    selection_core: Intro/paving passages where setup information should converge to a clear center conclusion.
+    structures:
+      - sub_total
+      - phenomenon_analysis
+      - total_sub
+    required_signals:
+      single_center_strength: ">=0.54"
+      closure_score: ">=0.52"
+      summary_strength: ">=0.50"
+    preferred_signals:
+      - opening setup followed by center settlement
+      - transition from background to explicit claim
+    avoid_signals:
+      - introduction-only narrative without center anchor
+      - excessive context dependence
+    candidate_contract:
+      raw_policy: whole_passage or multi_paragraph_unit
+      allowed_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+        - closed_span
+      preferred_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+    card_bias: setup-to-center settling
+    default_generation_archetype: main_recovery
+    distractor_bias:
+      - background_as_main
+      - early_sentence_overfit
+      - focus_shift
+
+  - card_id: center_material.subsentence_multi_angle
+    display_name: Center Subsentence Multi Angle
+    selection_core: Multi-angle discourse that still converges to one center understanding judgment.
+    structures:
+      - parallel
+      - total_sub_total
+      - total_sub
+    required_signals:
+      multi_dimension_cohesion: ">=0.56"
+      parallel_enumeration_strength: ">=0.48"
+      single_center_strength: ">=0.54"
+      closure_score: ">=0.52"
+    preferred_signals:
+      - aspect-wise branches with explicit final unification
+      - stable object scope across angles
+    avoid_signals:
+      - disconnected branch statements
+      - branch-first options replacing unified axis
+    candidate_contract:
+      raw_policy: whole_passage or multi_paragraph_unit
+      allowed_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+        - closed_span
+      preferred_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+    card_bias: multi-angle-to-one-axis unification
+    default_generation_archetype: multi_dimension
+    distractor_bias:
+      - one_dimension_as_whole
+      - branch_focus_misread
+      - macro_topic_drift
+
+  - card_id: center_material.subsentence_other
+    display_name: Center Subsentence Other
+    selection_core: Generic subsentence-feature passages with recoverable center axis but no strong single marker pattern.
+    structures:
+      - phenomenon_analysis
+      - sub_total
+      - total_sub
+    required_signals:
+      single_center_strength: ">=0.50"
+      closure_score: ">=0.48"
+      titleability: ">=0.50"
+    preferred_signals:
+      - center sentence recoverable from multiple support sentences
+      - moderate abstraction and stable scope
+    avoid_signals:
+      - purely local detail bundles
+      - weak closure and high context dependency
+    candidate_contract:
+      raw_policy: whole_passage preferred
+      allowed_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+        - closed_span
+      preferred_candidate_types:
+        - whole_passage
+        - multi_paragraph_unit
+    card_bias: generic-subsentence center recovery
+    default_generation_archetype: main_recovery
+    distractor_bias:
+      - local_detail_as_main
+      - partial_reading
+      - scope_shift
+normalized_from: center_understanding_intermediate_material_cards.yaml

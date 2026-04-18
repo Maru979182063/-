@@ -1,4 +1,4 @@
-llm:
+﻿llm:
   active_provider: generation_llm
 
   providers:
@@ -78,5 +78,6 @@ persistence:
 evaluation:
   judge:
     provider: generation_llm
-    enabled: true
+    enabled: false
     model_key: judge_review
+

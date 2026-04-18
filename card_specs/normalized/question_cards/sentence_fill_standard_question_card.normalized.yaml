@@ -1,4 +1,4 @@
-schema_version: question_card.v1
+﻿schema_version: question_card.v1
 card_id: question.sentence_fill.standard_v1
 card_type: question
 business_family_id: sentence_fill
@@ -6,8 +6,17 @@ business_subtype_id: sentence_fill_selection
 runtime_binding:
   question_type: sentence_fill
   business_subtype: null
-display_name: 语句填空标准题卡
-description: 基于空位位置与上下文逻辑，为文段选择最合适的填入句。该卡消费中间结构材料卡，而不直接绑定单一主族。
+
+distill_runtime_overlay:
+  overlay_mode: leaf_primary_parent_supplement
+  hierarchy_mapping_ref: card_specs/normalized/runtime_mappings/distill_family_hierarchy_mapping.yaml
+  mother_family_id: sentence_fill
+  child_family_ids:
+    - sentence_fill_head_start
+    - sentence_fill_middle
+    - sentence_fill_tail_end
+display_name: 璇彞濉┖鏍囧噯棰樺崱
+description: "语句填空标准题卡；基于空位位置与上下文逻辑选择最合适的填入句，消费中间结构材料卡，不直接绑定单一母族。"
 structure_schema:
   blank_position:
     type: enum
@@ -75,10 +84,15 @@ upstream_contract:
   - reference_dependency
   preferred_material_cards:
   - fill_material.opening_summary
+  - fill_material.opening_topic_intro
+  - fill_material.opening_clause_lead
   - fill_material.bridge_transition
   - fill_material.middle_focus_shift
   - fill_material.middle_explanation
+  - fill_material.middle_enumeration_completion
   - fill_material.ending_summary
+  - fill_material.ending_clause_summary
+  - fill_material.ending_countermeasure
   - fill_material.ending_elevation
   - fill_material.inserted_reference_match
   - fill_material.comprehensive_multi_match
@@ -121,6 +135,26 @@ material_card_overrides:
     uniqueness_source:
     - function_mismatch
     - scope_mismatch
+- material_card: fill_material.opening_topic_intro
+  slot_overrides:
+    blank_position: opening
+    function_type: topic_intro
+    logic_relation: continuation
+    reference_anchor: none
+    semantic_scope: sentence_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+- material_card: fill_material.opening_clause_lead
+  slot_overrides:
+    blank_position: opening
+    function_type: topic_intro
+    logic_relation: continuation
+    reference_anchor: optional
+    semantic_scope: local
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.bridge_transition
   slot_overrides:
     blank_position: middle
@@ -153,11 +187,41 @@ material_card_overrides:
     uniqueness_source:
     - function_mismatch
     - scope_mismatch
+- material_card: fill_material.middle_enumeration_completion
+  slot_overrides:
+    blank_position: middle
+    function_type: carry_previous
+    logic_relation: explanation
+    reference_anchor: optional
+    semantic_scope: local
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
 - material_card: fill_material.ending_summary
   slot_overrides:
     blank_position: ending
     function_type: conclusion
     logic_relation: summary
+    reference_anchor: none
+    semantic_scope: paragraph_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+- material_card: fill_material.ending_clause_summary
+  slot_overrides:
+    blank_position: ending
+    function_type: conclusion
+    logic_relation: summary
+    reference_anchor: optional
+    semantic_scope: sentence_level
+    uniqueness_source:
+    - function_mismatch
+    - scope_mismatch
+- material_card: fill_material.ending_countermeasure
+  slot_overrides:
+    blank_position: ending
+    function_type: countermeasure
+    logic_relation: continuation
     reference_anchor: none
     semantic_scope: paragraph_level
     uniqueness_source:
@@ -203,97 +267,93 @@ material_card_overrides:
     - scope_mismatch
 generation_archetypes:
   opening_summary:
-    source: 语句填空题配置文件 pattern opening_summary
-    processing_type: 后文信息整合→提炼总领句
-    correct_logic: 正确项必须统摄后文多个信息维度，而不是只抓一个局部点
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern opening_summary
+    processing_type: 鍚庢枃淇℃伅鏁村悎鈫掓彁鐐兼€婚鍙?
+    correct_logic: 姝ｇ‘椤瑰繀椤荤粺鎽勫悗鏂囧涓俊鎭淮搴︼紝鑰屼笉鏄彧鎶撲竴涓眬閮ㄧ偣
     analysis_framework:
-    - 提取后文主要信息维度
-    - 判断哪些表达能统领后文
-    - 控制总起句抽象层级
-    - 排除只覆盖单一维度的选项
+    - 鎻愬彇鍚庢枃涓昏淇℃伅缁村害
+    - 鍒ゆ柇鍝簺琛ㄨ揪鑳界粺棰嗗悗鏂?
+    - 鎺у埗鎬昏捣鍙ユ娊璞″眰绾?
+    - 鎺掗櫎鍙鐩栧崟涓€缁村害鐨勯€夐」
   bridge_transition:
-    source: 语句填空题配置文件 pattern bridge_transition
-    processing_type: 前文提出对象→空位承接→后文具体展开
-    correct_logic: 正确项必须同时满足承前与启后，不能只做到一边
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern bridge_transition
+    processing_type: 鍓嶆枃鎻愬嚭瀵硅薄鈫掔┖浣嶆壙鎺モ啋鍚庢枃鍏蜂綋灞曞紑
+    correct_logic: 姝ｇ‘椤瑰繀椤诲悓鏃舵弧瓒虫壙鍓嶄笌鍚悗锛屼笉鑳藉彧鍋氬埌涓€杈?
     analysis_framework:
-    - 确认前文已提出什么核心对象或话题
-    - 判断后文是解释作用、机制还是例证
-    - 让正确项完成“提出→展开”的过渡
-    - 检查是否既能接前文又能引后文
+    - 纭鍓嶆枃宸叉彁鍑轰粈涔堟牳蹇冨璞℃垨璇濋
+    - 鍒ゆ柇鍚庢枃鏄В閲婁綔鐢ㄣ€佹満鍒惰繕鏄緥璇?
+    - 璁╂纭」瀹屾垚鈥滄彁鍑衡啋灞曞紑鈥濈殑杩囨浮
+    - 妫€鏌ユ槸鍚︽棦鑳芥帴鍓嶆枃鍙堣兘寮曞悗鏂?
   middle_focus_shift:
-    source: 语句填空题配置文件 pattern middle_focus_shift
-    processing_type: 总论铺开→空位聚焦→后文集中解释
-    correct_logic: 正确项必须承担“收束前文 + 指向后文焦点”的双重任务
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern middle_focus_shift
+    processing_type: 鎬昏閾哄紑鈫掔┖浣嶈仛鐒︹啋鍚庢枃闆嗕腑瑙ｉ噴
+    correct_logic: 姝ｇ‘椤瑰繀椤绘壙鎷呪€滄敹鏉熷墠鏂?+ 鎸囧悜鍚庢枃鐒︾偣鈥濈殑鍙岄噸浠诲姟
     analysis_framework:
-    - 识别前文宽口径总论
-    - 找出后文具体展开的关键因素
-    - 用空位把总论压到焦点上
-    - 排除只看似全面但不能引后文的选项
+    - 璇嗗埆鍓嶆枃瀹藉彛寰勬€昏
+    - 鎵惧嚭鍚庢枃鍏蜂綋灞曞紑鐨勫叧閿洜绱?
+    - 鐢ㄧ┖浣嶆妸鎬昏鍘嬪埌鐒︾偣涓?
+    - 鎺掗櫎鍙湅浼煎叏闈絾涓嶈兘寮曞悗鏂囩殑閫夐」
   middle_explanation:
-    source: 语句填空题配置文件 pattern middle_explanation
-    processing_type: 抽象概念→解释句→具体展开
-    correct_logic: 正确项应把前文抽象表达具体化，为后文例证或说明搭桥
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern middle_explanation
+    processing_type: 鎶借薄姒傚康鈫掕В閲婂彞鈫掑叿浣撳睍寮€
+    correct_logic: 姝ｇ‘椤瑰簲鎶婂墠鏂囨娊璞¤〃杈惧叿浣撳寲锛屼负鍚庢枃渚嬭瘉鎴栬鏄庢惌妗?
     analysis_framework:
-    - 找出前文抛出的概念或判断
-    - 确认后文是在举例还是细化
-    - 判定空位应承担解释职责
-    - 排除总结项和案例项
+    - 鎵惧嚭鍓嶆枃鎶涘嚭鐨勬蹇垫垨鍒ゆ柇
+    - 纭鍚庢枃鏄湪涓句緥杩樻槸缁嗗寲
+    - 鍒ゅ畾绌轰綅搴旀壙鎷呰В閲婅亴璐?
+    - 鎺掗櫎鎬荤粨椤瑰拰妗堜緥椤?
   ending_summary:
-    source: 语句填空题配置文件 pattern ending_summary
-    processing_type: 全段主线提炼→段尾收束
-    correct_logic: 正确项必须压缩前文主线，但不能泛化到失去对象和任务指向
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern ending_summary
+    processing_type: 鍏ㄦ涓荤嚎鎻愮偧鈫掓灏炬敹鏉?
+    correct_logic: 姝ｇ‘椤瑰繀椤诲帇缂╁墠鏂囦富绾匡紝浣嗕笉鑳芥硾鍖栧埌澶卞幓瀵硅薄鍜屼换鍔℃寚鍚?
     analysis_framework:
-    - 找出全文在解决的核心任务
-    - 判断总结句必须保留的对象与动作
-    - 将主线压成一句结尾总结
-    - 排除看似高级但失焦的选项
+    - 鎵惧嚭鍏ㄦ枃鍦ㄨВ鍐崇殑鏍稿績浠诲姟
+    - 鍒ゆ柇鎬荤粨鍙ュ繀椤讳繚鐣欑殑瀵硅薄涓庡姩浣?
+    - 灏嗕富绾垮帇鎴愪竴鍙ョ粨灏炬€荤粨
+    - 鎺掗櫎鐪嬩技楂樼骇浣嗗け鐒︾殑閫夐」
   ending_elevation:
-    source: 语句填空题配置文件 pattern ending_elevation
-    processing_type: 案例/实验→抽象观点回收
-    correct_logic: 正确项要把前文案例抽象为更高层的中心判断，而不是停留在案例事实层
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern ending_elevation
+    processing_type: 妗堜緥/瀹為獙鈫掓娊璞¤鐐瑰洖鏀?
+    correct_logic: 姝ｇ‘椤硅鎶婂墠鏂囨渚嬫娊璞′负鏇撮珮灞傜殑涓績鍒ゆ柇锛岃€屼笉鏄仠鐣欏湪妗堜緥浜嬪疄灞?
     analysis_framework:
-    - 提炼案例真正证明的观点
-    - 将案例意义拉回到全文论点
-    - 升华但不脱题
-    - 排除只围绕案例表层信息的选项
+    - 鎻愮偧妗堜緥鐪熸璇佹槑鐨勮鐐?
+    - 灏嗘渚嬫剰涔夋媺鍥炲埌鍏ㄦ枃璁虹偣
+    - 鍗囧崕浣嗕笉鑴遍
+    - 鎺掗櫎鍙洿缁曟渚嬭〃灞備俊鎭殑閫夐」
   inserted_reference_match:
-    source: 语句填空题配置文件 pattern inserted_reference_match
-    processing_type: 找指代对象→匹配解释范围→验证后文
-    correct_logic: 正确项必须满足指代对象匹配、语义承接和后文引出三重条件
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern inserted_reference_match
+    processing_type: 鎵炬寚浠ｅ璞♀啋鍖归厤瑙ｉ噴鑼冨洿鈫掗獙璇佸悗鏂?
+    correct_logic: 姝ｇ‘椤瑰繀椤绘弧瓒虫寚浠ｅ璞″尮閰嶃€佽涔夋壙鎺ュ拰鍚庢枃寮曞嚭涓夐噸鏉′欢
     analysis_framework:
-    - 锁定代词、概念或主语所指
-    - 判断该句能否同时卡住前后文
-    - 验证语义承接是否精确
-    - 排除只能承前或只能启后的项
+    - 閿佸畾浠ｈ瘝銆佹蹇垫垨涓昏鎵€鎸?
+    - 鍒ゆ柇璇ュ彞鑳藉惁鍚屾椂鍗′綇鍓嶅悗鏂?
+    - 楠岃瘉璇箟鎵挎帴鏄惁绮剧‘
+    - 鎺掗櫎鍙兘鎵垮墠鎴栧彧鑳藉惎鍚庣殑椤?
   comprehensive_multi_match:
-    source: 语句填空题配置文件 pattern comprehensive_multi_match
-    processing_type: 同时匹配承接、指代、逻辑关系与空位功能
-    correct_logic: 正确项必须在多条约束下同时成立，不能只满足单一维度
+    source: 璇彞濉┖棰橀厤缃枃浠?pattern comprehensive_multi_match
+    processing_type: 鍚屾椂鍖归厤鎵挎帴銆佹寚浠ｃ€侀€昏緫鍏崇郴涓庣┖浣嶅姛鑳?
+    correct_logic: 姝ｇ‘椤瑰繀椤诲湪澶氭潯绾︽潫涓嬪悓鏃舵垚绔嬶紝涓嶈兘鍙弧瓒冲崟涓€缁村害
     analysis_framework:
-    - 看是否存在明确指代或主语限制
-    - 看是否承前启后或完成指定结构功能
-    - 看是否适合该空位位置
-    - 只有同时满足多维约束的选项才成立
+    - 鐪嬫槸鍚﹀瓨鍦ㄦ槑纭寚浠ｆ垨涓昏闄愬埗
+    - 鐪嬫槸鍚︽壙鍓嶅惎鍚庢垨瀹屾垚鎸囧畾缁撴瀯鍔熻兘
+    - 鐪嬫槸鍚﹂€傚悎璇ョ┖浣嶄綅缃?
+    - 鍙湁鍚屾椂婊¤冻澶氱淮绾︽潫鐨勯€夐」鎵嶆垚绔?
 validator_contract:
   sentence_fill:
-    min_final_candidate_score: 0.2
-    min_readiness_score: 0.35
-    max_total_penalty: 0.9
+    min_final_candidate_score: 0.3
+    min_readiness_score: 0.45
+    max_total_penalty: 0.72
     review_if_high_readiness_high_penalty: true
     min_reasoning_depth_score: 0.6
     min_constraint_intensity_score: 0.6
-    max_role_ambiguity_penalty: 0.62
-    max_standalone_penalty: 0.5
+    max_role_ambiguity_penalty: 0.5
+    max_standalone_penalty: 0.4
     difficulty_band_allowed:
     - medium
     - hard
   extension_rules:
-  - 正确项必须明确满足空位的段落功能，不得仅靠表面同话题通顺入选。
-  - 至少1个错误项与正确项共享对象域，但在位置、功能、承接方向或指代关系上失效。
-  - 若空位位于段中，解析必须显式做前后双向验证；若为空位插入型，必须显式说明指代对象。
-  - 材料不得含网页残留、半截枚举或强上下文依赖句；尾句类材料不得用未收束的半截句出题。
-  - 解析必须指出空位位置功能、前后逻辑关系、错项错因三层。
-answer_grounding:
+  - 姝ｇ‘椤瑰繀椤绘槑纭弧瓒崇┖浣嶇殑娈佃惤鍔熻兘锛屼笉寰椾粎闈犺〃闈㈠悓璇濋閫氶『鍏ラ€夈€?
+  - 鑷冲皯1涓敊璇」涓庢纭」鍏变韩瀵硅薄鍩燂紝浣嗗湪浣嶇疆銆佸姛鑳姐€佹壙鎺ユ柟鍚戞垨鎸囦唬鍏崇郴涓婂け鏁堛€?  - 鑻ョ┖浣嶄綅浜庢涓紝瑙ｆ瀽蹇呴』鏄惧紡鍋氬墠鍚庡弻鍚戦獙璇侊紱鑻ヤ负绌轰綅鎻掑叆鍨嬶紝蹇呴』鏄惧紡璇存槑鎸囦唬瀵硅薄銆?  - 鏉愭枡涓嶅緱鍚綉椤垫畫鐣欍€佸崐鎴灇涓炬垨寮轰笂涓嬫枃渚濊禆鍙ワ紱灏惧彞绫绘潗鏂欎笉寰楃敤鏈敹鏉熺殑鍗婃埅鍙ュ嚭棰樸€?  - 瑙ｆ瀽蹇呴』鎸囧嚭绌轰綅浣嶇疆鍔熻兘銆佸墠鍚庨€昏緫鍏崇郴銆侀敊椤归敊鍥犱笁灞傘€?  - 蹇呴』杩涜鏁撮涓€鑷存€ф牎楠岋細鏉愭枡銆侀骞层€佹纭」鍜岃В鏋愬繀椤诲洿缁曞悓涓€绌轰綅鍔熻兘锛屼笉寰楀嚭鐜扳€滄潗鏂欒A銆侀€夐」璁睟銆佽В鏋愯C鈥濈殑婕傜Щ銆?answer_grounding:
   require_material_traceability: true
   disallow_unsupported_extensions: true
   unsupported_extension_types:
@@ -316,3 +376,4 @@ normalization_notes:
 - required_profiles remain runtime-compatible; new structure fields are exposed as schema metadata instead of hard material requirements
 - generation_archetype duplication removed; question card now follows material_card.default_generation_archetype
 - canonical function_type now follows structure-driven schema; old opening_summary/middle_explanation/etc are kept only as legacy aliases
+

@@ -8,12 +8,12 @@ aliases:
   - 语段排序
 
 task_definition: >
-  基于给定句群，为语句排序题生成稳定的 prompt 骨架。
-  核心任务不是概括主旨，而是识别句群内部的先后接口：
-  包括首句合法性、中段承接与捆绑关系、尾句收束功能以及板块推进顺序。
-  正确项必须体现“首句可起、局部可接、整体可收”的顺序逻辑；
-  错误项应在局部仍显通顺的前提下，通过首句错置、尾句错置、捆绑断裂、
-  板块调换或层级错位制造干扰。
+  基于给定句群制作真题风格的语句排序题。核心不是把 6 句机械排列，而是先确认句群
+  是否具备唯一顺序依据：合法首句、自然尾句、局部绑定链、共同信息延续、指代回扣、
+  递进/转折/因果落点和板块推进关系。正确答案必须同时满足“首句可起、局部可接、整体可收”。
+  干扰项不能随意乱排，而应优先采用真题式误排：近邻错序、局部绑定拆错、首尾误配、
+  角色顺序冲突。如果要把题做得比同档真题略难，只能增加近邻项之间的迷惑性和局部竞争，
+  不能削弱唯一顺序链本身。
 
 default_pattern_id: dual_anchor_lock
 
@@ -21,13 +21,13 @@ formal_runtime_spec:
   primary_business_card_id: sentence_order__six_sentence_role_chain__abstract
   sortable_unit_count:
     mode: fixed
-    value: 6
+    value: null
   sortable_unit_sentence_span:
     min: 1
     max: 2
   sortable_unit_type: sentence_block
   candidate_type: sentence_block_group
-  reject_non_six_unit_sequences: true
+  reject_non_six_unit_sequences: false
   uniqueness_model: role_chain_only
 
 difficulty_target_profiles:
@@ -55,7 +55,7 @@ skeleton:
 structure_schema:
   sortable_unit_count:
     mode: fixed
-    value: 6
+    value: null
   sortable_unit_sentence_span:
     min: 1
     max: 2
@@ -111,10 +111,12 @@ slot_schema:
   sortable_unit_count:
     type: integer
     required: false
-    default: 6
+    default: null
     allowed:
+      - 4
+      - 5
       - 6
-    description: 排序题正式运行口径固定为6句
+    description: 排序题正式运行口径支持 4 / 5 / 6 句，以材料真实单元数为准
 
   sortable_unit_sentence_span:
     type: object
@@ -135,6 +137,7 @@ slot_schema:
     required: false
     default: explicit_topic
     allowed:
+      - background_intro
       - explicit_topic
       - upper_context_link
       - viewpoint_opening
@@ -279,12 +282,11 @@ slot_schema:
     description: 正确顺序唯一性的结构来源
 
 default_slots:
-  sortable_unit_count: 6
+  sortable_unit_count: null
   sortable_unit_sentence_span:
     min: 1
     max: 2
   sortable_unit_type: sentence_block
-  candidate_type: sentence_block_group
   opening_anchor_type: explicit_topic
   opening_signal_strength: medium
   middle_structure_type: local_binding
@@ -323,7 +325,7 @@ default_slots:
 
 validator_contract:
   sentence_order:
-    sortable_unit_count: 6
+    sortable_unit_count: null
     sortable_unit_sentence_span:
       min: 1
       max: 2
@@ -347,7 +349,7 @@ fewshot_policy:
 default_fewshot:
   title: 语句排序题结构示例
   content: >
-    示例只用于提示“正式排序题固定为6句，且要同时满足首句合法、中段可接、尾句可收”，
+    示例只用于提示“正式排序题按材料真实单元数制作，且要同时满足首句合法、中段可接、尾句可收”，
     不用于绑定具体难度。
 
 patterns:
@@ -443,6 +445,114 @@ patterns:
       rationale_brief: >
         这类题关键是先锁定能作首句的总领判断，再识别带“因此”的结论句作尾句，
         中间再按因果链和局部承接关系补足；错项常表现为首句错、尾句错或局部链条断裂。
+
+  - pattern_id: first_sentence_background_intro
+    pattern_name: 首句背景引入判定型
+    enabled: true
+    match_rules:
+      opening_anchor_type:
+        - background_intro
+      opening_signal_strength:
+        - high
+        - medium
+      middle_structure_type:
+        - local_binding
+        - mixed_layers
+      closing_signal_strength:
+        - low
+        - medium
+      block_order_complexity:
+        - medium
+        - high
+
+    control_logic:
+      difficulty_source: first-sentence legality first, tail only as weak support
+      option_confusion: medium_high
+      control_levers:
+        passage: 首句必须是能独立开启话题的背景引入或总起句，不能拿举例、细节、后果句硬做首句。
+        correct_option: 先锁合法开头，再依靠局部捆绑和视角推进完成中段排序，尾句只做弱收束校验。
+        wrong_options:
+          - 把细节句、例证句、结果句提前成首句
+          - 保留局部顺畅但破坏背景引入后的展开顺序
+          - 误把带承接/转折/并列痕迹的句子提前
+        special_fields:
+          reverse_inference_key: 先排除不能独立起笔的句子，再找背景句后的总述/展开/落点链
+
+    generation_logic:
+      generation_core: 背景引入型首句排序题制作
+      processing_type: 首句合法性优先 + 局部捆绑校验 + 弱尾句约束
+      correct_logic: 正确顺序必须先给出合法背景引入，再进入桥接句或核心判断/纠偏句，随后按局部捆绑推进细节与解释，最后落到自然场景、范围扩展、行动要求或结果位置。
+      high_freq_traps:
+        - 把“例如/特别是/因此/所以/然而/同时”等依赖前文的句子错作首句
+        - 把背景句后的总述和细节顺序颠倒
+        - 把承担尺度过渡的桥接句误压到窄化说明之后
+        - 把核心概念纠偏句误压到成本/技术/门槛说明之后
+        - 为了追求首尾双锚点而误判尾句
+      distractor_pattern: 错项优先伪装成局部顺畅但首句非法，或首句合法但中段捆绑拆错。
+      analysis_steps:
+        step1_first_sentence_gate: 先判断哪一句能独立作为背景引入或话题起笔
+        step2_non_head_elimination: 排除依赖前文、举例、补充说明、结果承接的句子
+        step3_mainline_clarification: 判断背景句后应先接桥接句、核心判断/纠偏句，还是更次一级的细化说明
+        step4_local_binding: 核查哪些句子必须贴在一起，哪些只是范围扩展或自然落点
+        step5_soft_tail_check: 最后再看哪一句更适合自然收束，不强求结论句收尾
+
+    difficulty_rules:
+      complexity:
+        base: 0.46
+      ambiguity:
+        by_slot:
+          opening_signal_strength:
+            high: 0.28
+            medium: 0.40
+          closing_signal_strength:
+            low: 0.42
+            medium: 0.34
+      reasoning_depth:
+        by_slot:
+          middle_structure_type:
+            local_binding: 0.40
+            mixed_layers: 0.58
+      distractor_similarity:
+        by_slot:
+          distractor_strength:
+            low: 0.30
+            medium: 0.48
+            high: 0.64
+
+    fewshot_example:
+      title: 排序题示例｜背景引入首句判定型
+      fit_slots:
+        opening_anchor_type: background_intro
+        opening_signal_strength: high
+        middle_structure_type: mixed_layers
+        closing_signal_strength: low
+      preferred_patterns:
+        - first_sentence_background_intro
+      input_brief: >
+        句群中通常有一句能独立开出“大背景/大话题/传统语境/现实语境”，
+        如“在……背景下”“如今”“长期以来”“近年来”“传统意义上”等；
+        其余句子可能是总体判断、概念定义/解释、问题举例、对策展开、场景化描写或结果落点，
+        其中至少有一两句虽然单看顺口，但并不具备合法首句资格。
+      question_brief: 将以下句子重新排列，语序正确的一项是( )。
+      options_brief:
+        - 一组先放合法背景/总起句，再按“话题范围→定义/总述→例证/补充→结果或行动收束”的层次完成展开的顺序
+        - 一组把细节、场景描写或局部动作句提前为首句的顺序
+        - 一组首句看似可读但实际上已经落入概念定义、局部场景或局部判断的顺序
+        - 一组把依赖句、同主体补充句、总结句或配对句拆开后造成链条失真的顺序
+      answer: 先锁合法起句，再保持话题总起先于定义/总述、依赖句贴锚点、同主体补充链不断裂、配对句不拆开，最后落到自然收束位置的顺序
+      rationale_brief: >
+        这类题先排非法首句，再锁合法首句。背景引入句、话题总起句通常比细节句、场景句、例证句、
+        结果句更适合作首句；当一组句子同时出现“传统意义上/在……背景下/如今”这类范围句和概念定义句时，
+        通常应先放范围句，再放定义句。像“特别是”“例如”“因此”“同时”以及“行至……”“映入眼帘……”
+        这类已经进入局部场景或依赖前文的句子，通常不能硬作首句。锁定首句后，再依据局部捆绑、
+        共同信息延续和功能层次推进完成中段排序；若一条句子承担的是从“大背景/大范围”过渡到“具体场域/具体对象”的桥接功能，
+        不要机械把它压到更窄的设施总述或场景细节之后；若出现“X不等于Y / 不是…… / 目标是……”这类概念纠偏句，
+        往往应先于成本、技术、门槛等次级说明出现。若出现“同时/但同时”这类同主体补充句，应尽量贴住
+        与其共享对象或动作的前句，不要被更宏观的战果句、总结句或结果句隔开；若出现“问题概述+例如举例+所以/因此对策”
+        这类链条，应先收完问题与例证，再进入对策。若“但同时……也……”补的是价格、成本、负担、门槛等现实补充，
+        通常应贴在前面的价值/定义句之后，而不是拖到后面的“因此”结论句或“不但……还……”条件链之后。若同时存在“现在就做”的行动紧迫句和“关乎每个人/每个地区”的范围扩大句，
+        不必机械规定谁一定压轴，应看哪一句更像主链闭合、哪一句更像末端放宽。尾句只做弱收束核验，
+        可能是场景落点、结果总结、行动要求或范围扩展，不能机械套用“结论句一定收尾”。
 
   - pattern_id: carry_parallel_expand
     pattern_name: 承接并列展开型

@@ -1,6 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
+import unicodedata
+from difflib import SequenceMatcher
 from typing import Any, Callable
 
 from app.schemas.item import GeneratedQuestion, ValidationResult
@@ -12,13 +14,33 @@ ValidatorFn = Callable[[GeneratedQuestion, dict[str, Any]], tuple[list[str], lis
 
 class QuestionValidatorService:
     EXPLICIT_ANSWER_PATTERNS = (
-        re.compile(r"正确答案(?:为|是)?\s*([A-F])", flags=re.IGNORECASE),
-        re.compile(r"答案(?:为|是)?\s*([A-F])", flags=re.IGNORECASE),
-        re.compile(r"故正确答案(?:为|是)?\s*([A-F])", flags=re.IGNORECASE),
-        re.compile(r"应选\s*([A-F])", flags=re.IGNORECASE),
-        re.compile(r"选项\s*([A-F])\s*(?:最为|最|是)(?:正确|恰当|符合题意|为正确答案)", flags=re.IGNORECASE),
-        re.compile(r"([A-F])\s*项\s*(?:最为|最|是)(?:正确|恰当|符合题意|为正确答案)", flags=re.IGNORECASE),
-        re.compile(r"[（(]\s*([A-F])\s*[）)]\s*(?:正确|最恰当|符合题意)", flags=re.IGNORECASE),
+        re.compile(r"\u6b63\u786e\u7b54\u6848(?:\u4e3a|\u662f)?\s*([A-F])", flags=re.IGNORECASE),
+        re.compile(r"\u7b54\u6848(?:\u4e3a|\u662f)?\s*([A-F])", flags=re.IGNORECASE),
+        re.compile(r"\u9009\u9879\s*([A-F])\s*\u6b63\u786e", flags=re.IGNORECASE),
+        re.compile(r"([A-F])\s*\u9879(?:\u6b63\u786e|\u7b26\u5408\u9898\u610f)", flags=re.IGNORECASE),
+        re.compile(r"[\uff08(]\s*([A-F])\s*[)\uff09]\s*(?:\u6b63\u786e|\u7b26\u5408\u9898\u610f|\u5f53\u9009)", flags=re.IGNORECASE),
+    )
+    HARD_ERROR_CODES = {
+        "ordering_chain_incomplete",
+        "sentence_count_mismatch",
+        "binding_violation",
+        "reference_anchor_missing",
+    }
+    HARD_ERROR_PREFIXES = (
+        "stem must not be empty.",
+        "analysis must not be empty.",
+        "options count must be between 2 and 6.",
+        "options must not be empty:",
+        "answer must not be empty.",
+        "answer must be one of the options.",
+        "options text must not all be identical.",
+        "analysis explicitly marks multiple options as correct",
+        "analysis explicitly marks option ",
+        "selected material contains repeated sentence-level fragments",
+        "selected material shows obvious stitched or overlapping fragments",
+        "sentence_fill correct option must be the original removed sentence.",
+        "sentence_fill correct option is not sufficiently grounded in the removed source span.",
+        "Structured question output was not produced.",
     )
 
     def __init__(self) -> None:
@@ -134,6 +156,15 @@ class QuestionValidatorService:
                 "min_reasoning_depth_score": 0.45,
                 "max_ambiguity_score": 0.50,
             }
+        if task_family == "main_idea" and business_subtype == "center_understanding":
+            return {
+                "min_final_candidate_score": 0.35,
+                "min_readiness_score": 0.45,
+                "max_total_penalty": 0.40,
+                "review_if_high_readiness_high_penalty": True,
+                "min_reasoning_depth_score": 0.50,
+                "max_ambiguity_score": 0.50,
+            }
         if task_family == "main_idea":
             return {
                 "min_final_candidate_score": 0.30,
@@ -145,26 +176,26 @@ class QuestionValidatorService:
             }
         if task_family == "sentence_fill":
             return {
-                "min_final_candidate_score": 0.20,
-                "min_readiness_score": 0.35,
-                "max_total_penalty": 0.90,
+                "min_final_candidate_score": 0.30,
+                "min_readiness_score": 0.45,
+                "max_total_penalty": 0.72,
                 "review_if_high_readiness_high_penalty": True,
-                "min_reasoning_depth_score": 0.45,
-                "min_constraint_intensity_score": 0.40,
-                "max_role_ambiguity_penalty": 0.75,
-                "max_standalone_penalty": 0.65,
+                "min_reasoning_depth_score": 0.60,
+                "min_constraint_intensity_score": 0.60,
+                "max_role_ambiguity_penalty": 0.50,
+                "max_standalone_penalty": 0.40,
             }
         if task_family == "sentence_order":
             return {
-                "min_final_candidate_score": 0.25,
+                "min_final_candidate_score": 0.35,
                 "min_readiness_score": 0.40,
-                "max_total_penalty": 0.85,
+                "max_total_penalty": 0.67,
                 "review_if_high_readiness_high_penalty": True,
-                "min_complexity_score": 0.45,
-                "min_constraint_intensity_score": 0.35,
+                "min_complexity_score": 0.70,
+                "min_constraint_intensity_score": 0.70,
                 "max_first_instability_penalty": 0.35,
                 "max_last_instability_penalty": 0.35,
-                "max_weak_constraint_penalty": 0.30,
+                "max_weak_constraint_penalty": 0.20,
             }
         return {}
 
@@ -290,24 +321,34 @@ class QuestionValidatorService:
         candidate = (text or "").strip()
         if not candidate:
             return True
-        if candidate.startswith(("首先", "其次", "再次")):
+        if candidate.startswith(("棣栧厛", "鍏舵", "鍐嶆")):
             return True
-        if candidate.startswith(("例如", "比如")):
+        if candidate.startswith(("渚嬪", "姣斿")):
             return True
-        if any(token in candidate for token in ("例如", "比如")):
+        if any(token in candidate for token in ("渚嬪", "姣斿")):
             return True
-        if any(token in candidate for token in ("首先", "其次", "再次")):
+        if any(token in candidate for token in ("棣栧厛", "鍏舵", "鍐嶆")):
             return True
         return False
 
     def _extract_sentence_order_binding_pairs(self, context: dict[str, Any]) -> list[tuple[int, int]]:
         candidates: list[Any] = []
+        material_source = context.get("material_source")
         resolved_slots = context.get("resolved_slots")
         control_logic = context.get("control_logic")
         source_question = context.get("source_question")
         source_question_analysis = context.get("source_question_analysis")
         validator_contract = context.get("validator_contract")
 
+        if isinstance(material_source, dict):
+            prompt_extras = material_source.get("prompt_extras")
+            if isinstance(prompt_extras, dict):
+                candidates.extend(
+                    [
+                        prompt_extras.get("binding_pairs"),
+                        prompt_extras.get("sentence_order_binding_pairs"),
+                    ]
+                )
         if isinstance(resolved_slots, dict):
             candidates.extend(
                 [
@@ -402,56 +443,10 @@ class QuestionValidatorService:
         return None
 
     def _extract_sentence_order_roles(self, context: dict[str, Any]) -> dict[int, str]:
-        roles: dict[int, str] = {}
-        candidates: list[Any] = []
-        resolved_slots = context.get("resolved_slots")
-        control_logic = context.get("control_logic")
-        source_question = context.get("source_question")
-        source_question_analysis = context.get("source_question_analysis")
-        validator_contract = context.get("validator_contract")
-
-        if isinstance(resolved_slots, dict):
-            candidates.extend(
-                [
-                    resolved_slots.get("sentence_roles"),
-                    (resolved_slots.get("structure_schema") or {}).get("sentence_roles")
-                    if isinstance(resolved_slots.get("structure_schema"), dict)
-                    else None,
-                ]
-            )
-        if isinstance(control_logic, dict):
-            candidates.extend([control_logic.get("sentence_roles"), control_logic.get("roles")])
-        if isinstance(source_question, dict):
-            candidates.extend(
-                [
-                    source_question.get("sentence_roles"),
-                    (source_question.get("control_logic") or {}).get("sentence_roles")
-                    if isinstance(source_question.get("control_logic"), dict)
-                    else None,
-                ]
-            )
-        if isinstance(source_question_analysis, dict):
-            structure_constraints = source_question_analysis.get("structure_constraints")
-            candidates.extend(
-                [
-                    source_question_analysis.get("sentence_roles"),
-                    structure_constraints.get("sentence_roles") if isinstance(structure_constraints, dict) else None,
-                ]
-            )
-        if isinstance(validator_contract, dict):
-            sentence_order_contract = validator_contract.get("sentence_order")
-            structure_contract = validator_contract.get("structure_constraints")
-            candidates.extend(
-                [
-                    validator_contract.get("sentence_roles"),
-                    sentence_order_contract.get("sentence_roles") if isinstance(sentence_order_contract, dict) else None,
-                    structure_contract.get("sentence_roles") if isinstance(structure_contract, dict) else None,
-                ]
-            )
-
-        for candidate in candidates:
+        def _coerce_roles(candidate: Any) -> dict[int, str]:
+            roles: dict[int, str] = {}
             if candidate is None:
-                continue
+                return roles
             if isinstance(candidate, dict):
                 for raw_key, raw_role in candidate.items():
                     key = self._coerce_int(raw_key)
@@ -463,7 +458,75 @@ class QuestionValidatorService:
                     role = self._normalize_sentence_order_role(raw_role)
                     if role:
                         roles[index] = role
-        return roles
+            return roles
+
+        prioritized_candidates: list[Any] = []
+        fallback_candidates: list[Any] = []
+        material_source = context.get("material_source")
+        resolved_slots = context.get("resolved_slots")
+        control_logic = context.get("control_logic")
+        source_question = context.get("source_question")
+        source_question_analysis = context.get("source_question_analysis")
+        validator_contract = context.get("validator_contract")
+
+        if isinstance(material_source, dict):
+            prompt_extras = material_source.get("prompt_extras")
+            if isinstance(prompt_extras, dict):
+                prioritized_candidates.extend(
+                    [
+                        prompt_extras.get("sentence_roles"),
+                        prompt_extras.get("sentence_order_roles"),
+                    ]
+                )
+        if isinstance(validator_contract, dict):
+            sentence_order_contract = validator_contract.get("sentence_order")
+            structure_contract = validator_contract.get("structure_constraints")
+            prioritized_candidates.extend(
+                [
+                    validator_contract.get("sentence_roles"),
+                    sentence_order_contract.get("sentence_roles") if isinstance(sentence_order_contract, dict) else None,
+                    structure_contract.get("sentence_roles") if isinstance(structure_contract, dict) else None,
+                ]
+            )
+        if isinstance(resolved_slots, dict):
+            prioritized_candidates.extend(
+                [
+                    resolved_slots.get("sentence_roles"),
+                    (resolved_slots.get("structure_schema") or {}).get("sentence_roles")
+                    if isinstance(resolved_slots.get("structure_schema"), dict)
+                    else None,
+                ]
+            )
+        if isinstance(control_logic, dict):
+            prioritized_candidates.extend([control_logic.get("sentence_roles"), control_logic.get("roles")])
+        if isinstance(source_question, dict):
+            fallback_candidates.extend(
+                [
+                    source_question.get("sentence_roles"),
+                    (source_question.get("control_logic") or {}).get("sentence_roles")
+                    if isinstance(source_question.get("control_logic"), dict)
+                    else None,
+                ]
+            )
+        if isinstance(source_question_analysis, dict):
+            structure_constraints = source_question_analysis.get("structure_constraints")
+            fallback_candidates.extend(
+                [
+                    source_question_analysis.get("sentence_roles"),
+                    structure_constraints.get("sentence_roles") if isinstance(structure_constraints, dict) else None,
+                ]
+            )
+
+        for candidate in prioritized_candidates:
+            roles = _coerce_roles(candidate)
+            if roles:
+                return roles
+
+        for candidate in fallback_candidates:
+            roles = _coerce_roles(candidate)
+            if roles:
+                return roles
+        return {}
 
     def _normalize_sentence_order_role(self, value: Any) -> str:
         role = str(value or "").strip().lower()
@@ -566,7 +629,7 @@ class QuestionValidatorService:
         text = (material_text or "").strip()
         if not text:
             return "", "", ""
-        markers = ("____", "___", "[BLANK]", "（  ）", "( )", "（    ）", "（ ）")
+        markers = ("____", "___", "[BLANK]", "（  ）", "( )", "（   ）", "（）")
         for marker in markers:
             idx = text.find(marker)
             if idx >= 0:
@@ -578,19 +641,34 @@ class QuestionValidatorService:
         options = generated_question.options or {}
         return str(options.get(answer) or "").strip()
 
+    def _normalize_sentence_fill_anchor_text(self, text: str) -> str:
+        normalized = unicodedata.normalize("NFKC", str(text or ""))
+        normalized = normalized.replace("…", "...").replace("—", "-")
+        normalized = re.sub(r"\s+", "", normalized)
+        normalized = re.sub(r"[銆傦紒锛燂紱锛氾紝銆?.!?;:]+$", "", normalized)
+        return normalized.strip().lower()
+
     def _sentence_fill_has_reference_anchor(self, text: str) -> bool:
         candidate = (text or "").strip()
         if not candidate:
             return False
-        return bool(re.search(r"(这(?:一|种)?|该|此)(?:理论|现象|过程|问题|情况|趋势|结果|机制|模式|路径|变化|做法|观点|结论|逻辑|阶段|背景)?", candidate))
+        return bool(
+            re.search(
+                r"((?:\u8fd9(?:\u4e00|\u79cd|\u7c7b)?|\u8be5|\u6b64)(?:\u7406\u8bba|\u73b0\u8c61|\u8fc7\u7a0b|\u95ee\u9898|\u60c5\u51b5|\u8d8b\u52bf|\u7ed3\u679c|\u673a\u5236|\u6a21\u5f0f|\u8def\u5f84|\u53d8\u5316|\u505a\u6cd5|\u89c2\u70b9|\u7ed3\u8bba|\u903b\u8f91|\u9636\u6bb5|\u80cc\u666f)?)",
+                candidate,
+            )
+        )
 
     def _sentence_fill_reference_anchor_support(self, *, candidate_text: str, previous_text: str) -> dict[str, Any]:
         candidate = (candidate_text or "").strip()
         previous = (previous_text or "").strip()
-        match = re.search(r"(这(?:一|种)?|该|此)(理论|现象|过程|问题|情况|趋势|结果|机制|模式|路径|变化|做法|观点|结论|逻辑|阶段|背景)?", candidate)
+        match = re.search(
+            r"((?:\u8fd9(?:\u4e00|\u79cd|\u7c7b)?|\u8be5|\u6b64)(?P<head>\u7406\u8bba|\u73b0\u8c61|\u8fc7\u7a0b|\u95ee\u9898|\u60c5\u51b5|\u8d8b\u52bf|\u7ed3\u679c|\u673a\u5236|\u6a21\u5f0f|\u8def\u5f84|\u53d8\u5316|\u505a\u6cd5|\u89c2\u70b9|\u7ed3\u8bba|\u903b\u8f91|\u9636\u6bb5|\u80cc\u666f)?)",
+            candidate,
+        )
         if not match:
             return {"has_anchor": False, "passed": False, "anchor": "", "head": ""}
-        head = match.group(2) or ""
+        head = match.group("head") or ""
         if not previous:
             return {"has_anchor": True, "passed": False, "anchor": match.group(0), "head": head}
         if head:
@@ -604,31 +682,28 @@ class QuestionValidatorService:
 
     def _sentence_fill_has_conclusion_marker(self, text: str) -> bool:
         candidate = (text or "").strip()
-        return candidate.startswith(("因此", "所以", "总之", "综上", "由此", "可见", "无论如何", "归根结底")) or any(
-            token in candidate for token in ("因此", "所以", "总之", "综上", "由此", "可见", "无论如何")
-        )
+        markers = ("??", "??", "??", "??", "??", "??")
+        return candidate.startswith(markers) or any(token in candidate for token in markers)
 
     def _sentence_fill_has_countermeasure_marker(self, text: str) -> bool:
         candidate = (text or "").strip()
-        return candidate.startswith(("应", "应该", "应当", "需要", "必须", "要", "可通过", "可以通过")) or any(
-            token in candidate for token in ("应该", "应当", "需要", "必须", "可以通过", "需", "要")
-        )
+        markers = ("??", "??", "??", "??", "?", "??", "??")
+        return candidate.startswith(markers) or any(token in candidate for token in markers)
 
     def _sentence_fill_has_specific_action(self, text: str) -> bool:
         candidate = (text or "").strip()
-        return any(token in candidate for token in ("通过", "加强", "完善", "建立", "推动", "优化", "提升", "采取", "落实", "构建", "引导", "减少", "增加"))
+        markers = ("??", "??", "??", "??", "??", "??", "??", "??", "??", "??", "??")
+        return any(token in candidate for token in markers)
 
     def _sentence_fill_has_backward_signal(self, text: str) -> bool:
         candidate = (text or "").strip()
-        return candidate.startswith(("这", "这种", "这一", "该", "此", "其中", "也就是说", "换言之", "从这个意义上说", "对此")) or any(
-            token in candidate for token in ("也就是说", "换言之", "这意味着", "这一点", "这种情况", "这一理论", "这一过程")
-        )
+        markers = ("?", "??", "??", "?", "?", "??", "??", "??")
+        return candidate.startswith(markers) or any(token in candidate for token in markers)
 
     def _sentence_fill_has_forward_signal(self, text: str) -> bool:
         candidate = (text or "").strip()
-        return candidate.startswith(("在此基础上", "同时", "此外", "接下来", "进一步", "由此", "因此", "这意味着", "这也意味着", "例如", "具体来看", "随后", "进而")) or any(
-            token in candidate for token in ("接下来", "进一步", "具体来看", "例如", "由此", "进而", "后文", "下文")
-        )
+        markers = ("??", "??", "??", "??", "??", "??", "???", "??")
+        return candidate.startswith(markers) or any(token in candidate for token in markers)
 
     def _sentence_fill_support_ratio(self, *, evidence_text: str, candidate_text: str) -> float:
         return self._compute_support_profile(evidence_text=evidence_text, candidate_text=candidate_text)["supported_token_ratio"]
@@ -753,23 +828,32 @@ class QuestionValidatorService:
     ) -> str:
         legacy = str(legacy_structure_type or "").strip().lower()
         business_card = str(business_card_id or "").strip().lower()
-        if legacy == "turning" or main_axis_source == "transition_after" or argument_structure == "sub_total" or "turning_relation_focus" in business_card:
+        # Explicit runtime hints must beat residual legacy/card labels for center-understanding validation.
+        if main_axis_source == "transition_after" or argument_structure == "sub_total":
             return "turning"
-        if (
-            legacy in {"cause_effect", "progressive"}
-            and main_axis_source in {"final_summary", "solution_conclusion"}
-        ) or argument_structure in {"phenomenon_analysis", "problem_solution"} or "cause_effect_conclusion_focus" in business_card:
+        if argument_structure in {"phenomenon_analysis", "problem_solution"} or main_axis_source == "solution_conclusion":
             return "cause_effect"
         if (
-            legacy in {"example_to_conclusion", "example_conclusion"}
-            or argument_structure == "example_conclusion"
+            argument_structure == "example_conclusion"
             or main_axis_source == "example_elevation"
-            or "case_to_theme" in business_card
-            or "example" in business_card
         ):
             return "example_to_conclusion"
-        if legacy in {"final_summary", "explicit_single_center"} or main_axis_source == "final_summary" or argument_structure == "total_sub":
+        if main_axis_source == "final_summary" or argument_structure == "total_sub":
             return "final_summary"
+        if legacy == "turning":
+            return "turning"
+        if legacy in {"cause_effect", "progressive"}:
+            return "cause_effect"
+        if legacy in {"example_to_conclusion", "example_conclusion"}:
+            return "example_to_conclusion"
+        if legacy in {"final_summary", "explicit_single_center"}:
+            return "final_summary"
+        if "turning_relation_focus" in business_card:
+            return "turning"
+        if "cause_effect_conclusion_focus" in business_card:
+            return "cause_effect"
+        if "case_to_theme" in business_card or "example" in business_card:
+            return "example_to_conclusion"
         return ""
 
     def _extract_main_idea_constraints(self, context: dict[str, Any]) -> dict[str, Any]:
@@ -919,18 +1003,20 @@ class QuestionValidatorService:
         if best_index < 0:
             return candidate
         if after:
-            extracted = candidate[best_index + len(best_marker) :].strip(" ，,：:")
+            extracted = candidate[best_index + len(best_marker) :].strip(" 锛?锛?")
         else:
-            extracted = candidate[:best_index].strip(" ，,：:")
+            extracted = candidate[:best_index].strip(" 锛?锛?")
         return extracted or candidate
 
     def _main_idea_has_example_marker(self, text: str) -> bool:
         candidate = (text or "").strip()
-        return any(token in candidate for token in ("例如", "比如", "譬如", "以此为例", "以...为例", "案例", "个案", "实验", "一项研究"))
+        markers = ("??", "??", "??", "????", "??", "???")
+        return any(token in candidate for token in markers)
 
     def _main_idea_has_summary_marker(self, text: str) -> bool:
         candidate = (text or "").strip()
-        return any(token in candidate for token in ("总的来看", "总之", "综上", "可见", "由此", "因此", "这表明", "这说明", "归根结底", "关键在于", "更值得关注的是"))
+        markers = ("??", "??", "??", "??", "??", "????", "????")
+        return any(token in candidate for token in markers)
 
     def _build_main_idea_structure_profile(self, *, material_text: str, structure_mode: str) -> dict[str, Any]:
         units = self._split_material_units(material_text)
@@ -945,8 +1031,8 @@ class QuestionValidatorService:
                 "example_text": "",
             }
 
-        turning_markers = ("但是", "然而", "不过", "但", "却", "事实上", "其实")
-        conclusion_markers = ("因此", "所以", "由此", "可见", "这表明", "这说明", "意味着", "总的来看", "总之", "综上")
+        turning_markers = ("??", "??", "??", "?", "?", "???")
+        conclusion_markers = ("??", "??", "??", "??", "??", "??")
         profile = {
             "detected": False,
             "mode": structure_mode,
@@ -988,9 +1074,9 @@ class QuestionValidatorService:
             example_units = [unit for unit in units[:-1] if self._main_idea_has_example_marker(unit)]
             for index in range(len(units) - 1, -1, -1):
                 unit = units[index]
-                if index > 0 and (self._main_idea_has_summary_marker(unit) or any(token in unit for token in ("本质上", "归根结底", "更值得看到的是"))):
+                if index > 0 and (self._main_idea_has_summary_marker(unit) or any(token in unit for token in ("????", "???????", "?????"))):
                     profile["axis_unit_index"] = index
-                    profile["axis_text"] = self._main_idea_extract_marker_clause(unit, conclusion_markers + ("更值得看到的是",), after=True)
+                    profile["axis_text"] = self._main_idea_extract_marker_clause(unit, conclusion_markers + ("?????",), after=True)
                     break
             profile["background_text"] = " ".join(units[: profile["axis_unit_index"]]).strip()
             profile["example_text"] = " ".join(example_units or units[: max(profile["axis_unit_index"], 1)]).strip()
@@ -1039,8 +1125,8 @@ class QuestionValidatorService:
         example_support = self._compute_support_profile(evidence_text=example_text, candidate_text=option_text)
         best_index, best_unit_support = self._profile_best_support(units=units, candidate_text=option_text)
         option_tokens = self._extract_tokens(option_text)
-        generic_markers = ("意义", "价值", "启示", "发展", "趋势", "现代化", "建设", "整体进步", "重要性")
-        detail_markers = ("例如", "比如", "案例", "实验", "个案", "某个", "某地", "某人", "一种", "一项", "一个")
+        generic_markers = ("??", "??", "??", "??", "??", "??", "???")
+        detail_markers = ("??", "??", "??", "??", "??", "??", "??", "??")
         generic_like = any(token in option_text for token in generic_markers)
         detail_like = any(token in option_text for token in detail_markers) or self._main_idea_has_example_marker(option_text)
         local_dominant = (
@@ -1128,7 +1214,34 @@ class QuestionValidatorService:
 
         difficulty_review = self._build_difficulty_review(difficulty_fit or {})
         if difficulty_review and not difficulty_review.get("in_range", True):
-            errors.append("difficulty projection is outside the target profile range.")
+            if question_type == "sentence_fill" and self._is_sentence_fill_soft_difficulty_miss(difficulty_review):
+                warnings.append("sentence_fill difficulty projection is slightly below the target profile range.")
+            elif (
+                question_type == "main_idea"
+                and str(business_subtype or "").strip() == "center_understanding"
+                and self._is_center_understanding_soft_difficulty_miss(difficulty_review)
+            ):
+                warnings.append("center_understanding difficulty projection is slightly below the target profile range.")
+            elif (
+                question_type == "sentence_order"
+                and self._is_sentence_order_soft_difficulty_miss(
+                    difficulty_review=difficulty_review,
+                    checks=checks,
+                )
+            ):
+                warnings.append(
+                    "sentence_order difficulty projection is slightly outside the target profile range, "
+                    "but structural ordering signals remain within the accepted band."
+                )
+            else:
+                warnings.append("difficulty projection is outside the target profile range.")
+
+        errors, warnings = self._apply_minimum_compliance_profile(
+            question_type=question_type,
+            errors=errors,
+            warnings=warnings,
+            checks=checks,
+        )
 
         fatal = bool(errors)
         score = max(0, 100 - len(errors) * 25 - len(warnings) * 5)
@@ -1142,6 +1255,68 @@ class QuestionValidatorService:
             difficulty_review=difficulty_review or None,
             next_review_status="needs_revision" if fatal else "waiting_review",
         )
+
+    def _apply_minimum_compliance_profile(
+        self,
+        *,
+        question_type: str,
+        errors: list[str],
+        warnings: list[str],
+        checks: dict[str, Any],
+    ) -> tuple[list[str], list[str]]:
+        hard_errors: list[str] = []
+        soft_errors: list[str] = []
+        for error in errors:
+            if self._is_minimum_compliance_hard_error(
+                question_type=question_type,
+                error=error,
+                checks=checks,
+            ):
+                hard_errors.append(error)
+            else:
+                soft_errors.append(error)
+
+        merged_warnings = list(warnings)
+        for error in soft_errors:
+            advisory = f"soft_validation::{error}"
+            if advisory not in merged_warnings:
+                merged_warnings.append(advisory)
+        return hard_errors, merged_warnings
+
+    def _is_minimum_compliance_hard_error(
+        self,
+        *,
+        question_type: str,
+        error: str,
+        checks: dict[str, Any],
+    ) -> bool:
+        normalized = str(error or "").strip()
+        if not normalized:
+            return False
+        if question_type == "sentence_order" and normalized == "ordering_chain_incomplete":
+            hard_sentence_order_checks = (
+                "sentence_order_material_unit_count",
+                "sentence_order_option_unit_counts",
+                "sentence_order_correct_order",
+                "sentence_order_single_truth_option",
+                "sentence_order_answer_binding",
+                "sentence_order_analysis_binding",
+                "sentence_order_reference_unit_alignment",
+                "sentence_order_original_sentences",
+            )
+            for key in hard_sentence_order_checks:
+                check = checks.get(key)
+                if isinstance(check, dict) and check.get("passed") is False:
+                    return True
+            return False
+        if normalized in self.HARD_ERROR_CODES:
+            return True
+        if any(normalized.startswith(prefix) for prefix in self.HARD_ERROR_PREFIXES):
+            return True
+        if question_type == "sentence_fill" and normalized == "position_function_mismatch":
+            anchor_check = checks.get("sentence_fill_anchor_grounding") or {}
+            return bool(anchor_check) and anchor_check.get("require_original_answer_sentence") is True and anchor_check.get("passed") is False
+        return False
 
     def _validate_common(
         self,
@@ -1206,7 +1381,7 @@ class QuestionValidatorService:
                 warnings.append("option lengths are imbalanced and may reveal the answer too easily.")
 
         lower_analysis = analysis.lower()
-        answer_mentioned = answer.lower() in lower_analysis or "正确" in analysis
+        answer_mentioned = answer.lower() in lower_analysis or "姝ｇ‘" in analysis
         checks["analysis_mentions_answer"] = {"passed": answer_mentioned}
         if analysis and not answer_mentioned:
             warnings.append("analysis does not clearly mention the correct answer.")
@@ -1242,13 +1417,13 @@ class QuestionValidatorService:
             warnings.append("analysis does not clearly explain why the correct option text fits.")
 
         meta_tone_markers = [
-            "作为ai",
-            "作为一个ai",
-            "根据提供的材料生成",
-            "以下是",
-            "本题答案是",
-            "生成一道",
-            "请选择",
+            "ai??",
+            "chatgpt",
+            "????",
+            "????",
+            "????",
+            "????",
+            "??????",
         ]
         lower_stem = stem.lower()
         meta_tone_found = [marker for marker in meta_tone_markers if marker in lower_stem or marker in lower_analysis]
@@ -1316,17 +1491,167 @@ class QuestionValidatorService:
             if analysis and not checks["analysis_material_grounding"]["passed"]:
                 warnings.append("analysis looks weakly grounded in the original material evidence.")
         if question_type == "sentence_fill" and answer_anchor_text:
+            require_original_answer_sentence = bool(prompt_extras.get("require_original_answer_sentence"))
             anchor_support = self._compute_support_profile(
                 evidence_text=answer_anchor_text,
                 candidate_text=correct_option_text,
             )
+            normalized_anchor = self._normalize_sentence_fill_anchor_text(answer_anchor_text)
+            normalized_correct = self._normalize_sentence_fill_anchor_text(correct_option_text)
+            exact_anchor_match = bool(normalized_anchor and normalized_correct and normalized_anchor == normalized_correct)
+            anchor_grounded = anchor_support["supported_token_ratio"] >= 0.2 or anchor_support["shared_token_count"] >= 2
+            passed = exact_anchor_match if require_original_answer_sentence else anchor_grounded
             checks["sentence_fill_anchor_grounding"] = {
-                "passed": anchor_support["supported_token_ratio"] >= 0.2 or anchor_support["shared_token_count"] >= 2,
+                "passed": passed,
                 "anchor_text": answer_anchor_text,
+                "require_original_answer_sentence": require_original_answer_sentence,
+                "exact_anchor_match": exact_anchor_match,
+                "normalized_anchor_text": normalized_anchor,
+                "normalized_correct_option_text": normalized_correct,
                 **anchor_support,
             }
             if correct_option_text and not checks["sentence_fill_anchor_grounding"]["passed"]:
-                errors.append("sentence_fill correct option is not sufficiently grounded in the removed source span.")
+                if require_original_answer_sentence:
+                    errors.append("sentence_fill correct option must be the original removed sentence.")
+                else:
+                    errors.append("sentence_fill correct option is not sufficiently grounded in the removed source span.")
+        source_alignment_errors, source_alignment_warnings, source_alignment_checks = self._validate_source_alignment(
+            generated_question=generated_question,
+            source_question=source_question if isinstance(source_question, dict) else {},
+            material_text=material_text,
+            validator_contract=context.get("validator_contract") if isinstance(context.get("validator_contract"), dict) else {},
+        )
+        errors.extend(source_alignment_errors)
+        warnings.extend(source_alignment_warnings)
+        checks.update(source_alignment_checks)
+        return errors, warnings, checks
+
+    def _normalize_alignment_text(self, text: str) -> str:
+        normalized = unicodedata.normalize("NFKC", str(text or ""))
+        normalized = normalized.replace("\u3000", " ").strip().lower()
+        normalized = re.sub(r"\s+", "", normalized)
+        return normalized
+
+    def _text_similarity(self, left: str, right: str) -> float:
+        a = self._normalize_alignment_text(left)
+        b = self._normalize_alignment_text(right)
+        if not a and not b:
+            return 1.0
+        if not a or not b:
+            return 0.0
+        return round(SequenceMatcher(None, a, b).ratio(), 4)
+
+    def _resolve_source_correct_option_text(self, source_question: dict[str, Any]) -> str:
+        answer = str(source_question.get("answer") or "").strip().upper()
+        options = source_question.get("options") or {}
+        if not isinstance(options, dict):
+            return ""
+        return str(options.get(answer) or "").strip()
+
+    def _validate_source_alignment(
+        self,
+        *,
+        generated_question: GeneratedQuestion,
+        source_question: dict[str, Any],
+        material_text: str,
+        validator_contract: dict[str, Any] | None = None,
+    ) -> tuple[list[str], list[str], dict[str, Any]]:
+        errors: list[str] = []
+        warnings: list[str] = []
+        checks: dict[str, Any] = {}
+
+        source_passage = str(source_question.get("passage") or "").strip()
+        source_stem = str(source_question.get("stem") or "").strip()
+        source_answer = str(source_question.get("answer") or "").strip().upper()
+        source_correct_option = self._resolve_source_correct_option_text(source_question)
+
+        has_source_alignment_reference = bool(source_passage or source_stem or source_answer or source_correct_option)
+        checks["source_alignment_reference_present"] = {
+            "passed": has_source_alignment_reference,
+            "source_question_fields": {
+                "passage": bool(source_passage),
+                "stem": bool(source_stem),
+                "answer": bool(source_answer),
+                "correct_option_text": bool(source_correct_option),
+            },
+        }
+        if not has_source_alignment_reference:
+            return errors, warnings, checks
+
+        contract = validator_contract or {}
+        source_alignment_contract = (
+            contract.get("source_alignment") if isinstance(contract.get("source_alignment"), dict) else {}
+        )
+        enforce_answer_match = bool(source_alignment_contract.get("enforce_answer_match"))
+        enforce_stem_similarity = bool(source_alignment_contract.get("enforce_stem_similarity"))
+        enforce_correct_option_similarity = bool(source_alignment_contract.get("enforce_correct_option_similarity"))
+        hard_fail_on_low_overall = bool(source_alignment_contract.get("hard_fail_on_low_overall"))
+        min_stem_similarity = self._coerce_float(source_alignment_contract.get("min_stem_similarity")) or 0.45
+        min_correct_option_similarity = (
+            self._coerce_float(source_alignment_contract.get("min_correct_option_similarity")) or 0.25
+        )
+        min_material_similarity = self._coerce_float(source_alignment_contract.get("min_material_similarity")) or 0.20
+        min_overall_alignment = self._coerce_float(source_alignment_contract.get("min_overall_alignment")) or 0.45
+
+        generated_answer = str(generated_question.answer or "").strip().upper()
+        generated_options = generated_question.options or {}
+        if not isinstance(generated_options, dict):
+            generated_options = {}
+        generated_correct_option = str(generated_options.get(generated_answer) or "").strip()
+
+        answer_match = bool(source_answer and generated_answer and source_answer == generated_answer)
+        stem_similarity = self._text_similarity(source_stem, generated_question.stem or "")
+        correct_option_similarity = self._text_similarity(source_correct_option, generated_correct_option)
+        material_similarity = self._text_similarity(source_passage, material_text or "")
+        overall_alignment = round(
+            0.20 * (1.0 if answer_match else 0.0)
+            + 0.25 * stem_similarity
+            + 0.30 * correct_option_similarity
+            + 0.25 * material_similarity,
+            4,
+        )
+
+        checks["source_alignment_metrics"] = {
+            "passed": overall_alignment >= min_overall_alignment,
+            "answer_match": answer_match,
+            "stem_similarity": stem_similarity,
+            "correct_option_similarity": correct_option_similarity,
+            "material_similarity": material_similarity,
+            "overall_alignment": overall_alignment,
+            "thresholds": {
+                "min_stem_similarity": min_stem_similarity,
+                "min_correct_option_similarity": min_correct_option_similarity,
+                "min_material_similarity": min_material_similarity,
+                "min_overall_alignment": min_overall_alignment,
+            },
+            "enforcement": {
+                "enforce_answer_match": enforce_answer_match,
+                "enforce_stem_similarity": enforce_stem_similarity,
+                "enforce_correct_option_similarity": enforce_correct_option_similarity,
+                "hard_fail_on_low_overall": hard_fail_on_low_overall,
+            },
+        }
+
+        if not answer_match:
+            if enforce_answer_match:
+                self._append_unique_error(errors, "source_alignment_answer_mismatch")
+            else:
+                warnings.append("source alignment: generated answer letter differs from source answer.")
+        if stem_similarity < min_stem_similarity:
+            if enforce_stem_similarity:
+                self._append_unique_error(errors, "source_alignment_stem_similarity_low")
+            else:
+                warnings.append("source alignment: stem similarity to source question is below the target band.")
+        if correct_option_similarity < min_correct_option_similarity:
+            if enforce_correct_option_similarity:
+                self._append_unique_error(errors, "source_alignment_correct_option_similarity_low")
+            else:
+                warnings.append("source alignment: correct-option text similarity to source question is low.")
+        if material_similarity < min_material_similarity:
+            warnings.append("source alignment: material similarity to source passage is lower than expected.")
+        if overall_alignment < min_overall_alignment and hard_fail_on_low_overall:
+            self._append_unique_error(errors, "source_alignment_overall_low")
+
         return errors, warnings, checks
 
     def _validate_main_idea(
@@ -1335,7 +1660,7 @@ class QuestionValidatorService:
         context: dict[str, Any],
     ) -> tuple[list[str], list[str], dict[str, Any]]:
         stem = generated_question.stem.strip()
-        prompt_markers = ("主旨", "标题", "概括", "中心", "最适合", "意在", "强调")
+        prompt_markers = ("????????????", "????????", "????????", "??????????", "????????")
         exam_style = any(marker in stem for marker in prompt_markers)
         business_subtype = context.get("business_subtype")
         material_text = context.get("material_text") or ""
@@ -1346,7 +1671,7 @@ class QuestionValidatorService:
         warnings = [] if exam_style else ["main_idea stem does not look like a standard exam-style summary/title prompt."]
         errors: list[str] = []
 
-        is_title_selection = business_subtype == "title_selection" or "标题" in stem
+        is_title_selection = business_subtype == "title_selection" or "鏍囬" in stem
         if is_title_selection:
             options = generated_question.options or {}
             validator_contract = context.get("validator_contract") or {}
@@ -1354,20 +1679,14 @@ class QuestionValidatorService:
             material_constraints_contract = validator_contract.get("material_constraints") if isinstance(validator_contract, dict) else None
             correct_text = (options.get(generated_question.answer or "", "") or "").strip()
             avg_len = round(sum(len((value or "").strip()) for value in options.values()) / max(len(options), 1), 2) if options else 0
-            long_sentence_like = bool(correct_text and (len(correct_text) >= 24 or "，" in correct_text or correct_text.count("的") >= 3))
-            meeting_markers = [
-                "政府工作报告",
-                "会议高度评价",
-                "审议并批准",
-                "部署今后一段时期工作",
-                "过去一年和“十四五”时期",
-            ]
+            long_sentence_like = bool(correct_text and (len(correct_text) >= 24 or "?" in correct_text or correct_text.count("?") >= 3))
+            meeting_markers = ["??", "??", "??", "??", "???"]
             marker_hits = [marker for marker in meeting_markers if marker in material_text]
             fragment_heavy = bool(
                 options
                 and all(
                     len((value or "").strip()) >= 14
-                    or any(token in (value or "") for token in ("和", "及", "与", "的"))
+                    or any(token in (value or "") for token in ("?", "?", "?", "?"))
                     for value in options.values()
                 )
             )
@@ -1752,7 +2071,7 @@ class QuestionValidatorService:
             if center_constraints["effective_structure_mode"] == "turning":
                 if (
                     option_profile["background_support"]["shared_token_count"] >= max(2, option_profile["axis_support"]["shared_token_count"])
-                    and option_profile["background_support"]["supported_token_ratio"] >= option_profile["axis_support"]["supported_token_ratio"]
+                        and option_profile["background_support"]["supported_token_ratio"] >= option_profile["axis_support"]["supported_token_ratio"]
                 ):
                     self._append_unique_error(errors, "main_axis_mismatch")
 
@@ -1787,7 +2106,7 @@ class QuestionValidatorService:
     ) -> tuple[list[str], list[str], dict[str, Any]]:
         errors: list[str] = []
         stem = generated_question.stem.strip()
-        continuation_markers = ("接在", "之后", "接下来", "最可能", "下文")
+        continuation_markers = ("?????????", "????????", "?????", "??????", "????")
         exam_style = any(marker in stem for marker in continuation_markers)
         checks = {
             "continuation_material_present": {"passed": bool(context.get("material_text"))},
@@ -1799,22 +2118,72 @@ class QuestionValidatorService:
         warnings = [] if exam_style else ["continuation stem does not show a clear follow-up prompt pattern."]
         return errors, warnings, checks
 
+    def _resolve_sentence_order_runtime_material_text(
+        self,
+        *,
+        generated_question: GeneratedQuestion,
+        context: dict[str, Any],
+    ) -> tuple[str, str]:
+        material_source = context.get("material_source") or {}
+        prompt_extras = (
+            material_source.get("prompt_extras")
+            if isinstance(material_source, dict) and isinstance(material_source.get("prompt_extras"), dict)
+            else {}
+        )
+        sortable_units = [
+            str(unit or "").strip()
+            for unit in (prompt_extras.get("sortable_units") or [])
+            if str(unit or "").strip()
+        ]
+        if len(sortable_units) >= 2:
+            circled = "①②③④⑤⑥⑦⑧⑨⑩"
+            material_text = "\n".join(
+                f"{circled[index] if index < len(circled) else f'{index + 1}.'} {unit}"
+                for index, unit in enumerate(sortable_units)
+            )
+            return material_text, "material_source.prompt_extras.sortable_units"
+        sortable_material_text = str(prompt_extras.get("sortable_material_text") or "").strip()
+        if sortable_material_text:
+            return sortable_material_text, "material_source.prompt_extras.sortable_material_text"
+
+        original_sentences = [str(item or "").strip() for item in (generated_question.original_sentences or []) if str(item or "").strip()]
+        correct_order = [self._coerce_int(item) for item in (generated_question.correct_order or [])]
+        if original_sentences and len(original_sentences) == len(correct_order) and all(index is not None for index in correct_order):
+            ordered_units = self._resolve_sentence_order_units_for_sequence(
+                original_sentences=original_sentences,
+                order=[int(index) for index in correct_order if index is not None],
+            )
+            if len(ordered_units) == len(original_sentences):
+                circled = "①②③④⑤⑥⑦⑧⑨⑩"
+                rebuilt_text = "\n".join(
+                    f"{circled[index] if index < len(circled) else f'{index + 1}.'} {text}"
+                    for index, (_, text) in enumerate(ordered_units)
+                )
+                if rebuilt_text.strip():
+                    return rebuilt_text, "generated_question.original_sentences"
+        return str(context.get("material_text") or ""), "material_text"
+
     def _validate_sentence_order(
         self,
         generated_question: GeneratedQuestion,
         context: dict[str, Any],
     ) -> tuple[list[str], list[str], dict[str, Any]]:
         stem = generated_question.stem.strip()
-        material_text = str(context.get("material_text") or "")
+        material_text, material_text_source = self._resolve_sentence_order_runtime_material_text(
+            generated_question=generated_question,
+            context=context,
+        )
         validator_contract = context.get("validator_contract") or {}
         source_analysis = context.get("source_question_analysis") or {}
         structure_constraints = source_analysis.get("structure_constraints") or {}
 
-        has_order_signal = any(
-            any(token in value for token in ("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "A.", "B.", "首句", "尾句"))
+        has_order_signal = all(
+            bool(self._extract_order_sequence(value))
             for value in generated_question.options.values()
+        ) if generated_question.options else False
+        stem_exam_style = bool(
+            re.search(r"将以下\d+个句子重新排列[，,]?\s*语序正确的一项是[:：]?", stem)
         )
-        stem_exam_style = any(token in stem for token in ("排序", "语句", "排列", "顺序"))
         material_unit_count = self._count_sortable_units_from_material(material_text)
         option_unit_counts = sorted(self._extract_order_option_unit_counts(generated_question.options))
         option_unit_count = option_unit_counts[-1] if option_unit_counts else 0
@@ -1962,7 +2331,11 @@ class QuestionValidatorService:
         checks = {
             "sentence_order_signal": {"passed": has_order_signal},
             "sentence_order_exam_style_prompt": {"passed": stem_exam_style},
-            "sentence_order_material_unit_count": {"passed": material_unit_count >= 4, "count": material_unit_count},
+            "sentence_order_material_unit_count": {
+                "passed": material_unit_count >= 4,
+                "count": material_unit_count,
+                "source": material_text_source,
+            },
             "sentence_order_option_unit_counts": {"passed": bool(option_unit_counts), "counts": option_unit_counts},
             "sentence_order_unique_opener": self._build_contract_gated_check(
                 active=unique_opener_min_score is not None,
@@ -2044,7 +2417,7 @@ class QuestionValidatorService:
         elif len(normalized_original_units) < 2:
             self._append_unique_error(errors, "sentence_count_mismatch")
         if unit_sentence_counts and not all(1 <= count <= 2 for count in unit_sentence_counts):
-            self._append_unique_error(errors, "ordering_chain_incomplete")
+            warnings.append("sentence_order material units are not evenly segmented into 1-2 sentence spans.")
         if not correct_order or (expected_order_sequence and sorted(correct_order) != expected_order_sequence):
             self._append_unique_error(errors, "ordering_chain_incomplete")
         correct_option_letters = [key for key, sequence in option_orders.items() if sequence == correct_order]
@@ -2080,17 +2453,17 @@ class QuestionValidatorService:
             if not aligned:
                 self._append_unique_error(errors, "sentence_count_mismatch")
         if unique_opener_min_score is not None and orderability["unique_opener_score"] < unique_opener_min_score:
-            self._append_unique_error(errors, "ordering_chain_incomplete")
+            warnings.append("sentence_order unique opener strength is below the preferred threshold.")
         if expected_binding_pair_count is not None and orderability["binding_pair_count"] < expected_binding_pair_count:
-            self._append_unique_error(errors, "ordering_chain_incomplete")
+            warnings.append("sentence_order binding pair count is below the preferred threshold.")
         if closure_min_score is not None and (not orderability["has_closing_role"] or orderability["context_closure_score"] < closure_min_score):
-            self._append_unique_error(errors, "ordering_chain_incomplete")
+            warnings.append("sentence_order closing strength is below the preferred threshold.")
         if exchange_risk_max is not None and orderability["exchange_risk"] > exchange_risk_max:
-            self._append_unique_error(errors, "ordering_chain_incomplete")
+            warnings.append("sentence_order exchange risk is above the preferred threshold.")
         if multi_path_risk_max is not None and orderability["multi_path_risk"] > multi_path_risk_max:
-            self._append_unique_error(errors, "ordering_chain_incomplete")
+            warnings.append("sentence_order multi-path risk is above the preferred threshold.")
         if function_overlap_max is not None and orderability["function_overlap_score"] > function_overlap_max:
-            self._append_unique_error(errors, "ordering_chain_incomplete")
+            warnings.append("sentence_order function overlap is above the preferred threshold.")
         if expected_unique_answer_strength is not None:
             unique_strength_ok = orderability["unique_answer_strength"] + 0.06 >= expected_unique_answer_strength
             checks["sentence_order_unique_answer_strength"] = self._build_contract_gated_check(
@@ -2101,7 +2474,7 @@ class QuestionValidatorService:
                 expected=expected_unique_answer_strength,
             )
             if not unique_strength_ok:
-                self._append_unique_error(errors, "ordering_chain_incomplete")
+                warnings.append("sentence_order unique answer strength is below the preferred threshold.")
 
         scoring, scoring_source = self._extract_material_scoring(context)
         task_scoring_available = bool(scoring)
@@ -2429,7 +2802,10 @@ class QuestionValidatorService:
         binding_reasoning_required = bool(required_reasoning_modes.intersection({"deterministic_binding", "binding_clue", "binding_pairs"}))
         head_tail_reasoning_required = bool(required_reasoning_modes.intersection({"head_tail_roles", "opener_closure_roles"}))
         if timeline_reasoning_required:
-            analysis_has_timeline = any(token in generated_question.analysis for token in ("先", "后", "随后", "最后", "时间"))
+            analysis_has_timeline = any(
+                token in generated_question.analysis
+                for token in ("时间", "先后", "顺序", "时序", "先看", "再看")
+            )
             checks["sentence_order_timeline_reasoning"] = {
                 "passed": analysis_has_timeline,
                 "required": True,
@@ -2438,7 +2814,10 @@ class QuestionValidatorService:
             if not analysis_has_timeline:
                 warnings.append("reference question is timeline-oriented, but analysis does not clearly explain the time/order chain.")
         if binding_reasoning_required:
-            analysis_has_binding = any(token in generated_question.analysis for token in ("指代", "捆绑", "关联", "承接"))
+            analysis_has_binding = any(
+                token in generated_question.analysis
+                for token in ("承接", "衔接", "照应", "呼应", "转折", "捆绑", "关联")
+            )
             checks["sentence_order_binding_reasoning"] = {
                 "passed": analysis_has_binding,
                 "required": True,
@@ -2446,7 +2825,10 @@ class QuestionValidatorService:
             }
             if not analysis_has_binding:
                 warnings.append("reference question relies on deterministic binding, but analysis does not clearly explain the binding clues.")
-        analysis_has_head_tail = any(token in generated_question.analysis for token in ("首句", "尾句", "收束", "总结"))
+        analysis_has_head_tail = any(
+            token in generated_question.analysis
+            for token in ("首句", "尾句", "开头", "结尾", "起点", "收束")
+        )
         checks["sentence_order_head_tail_reasoning"] = self._build_contract_gated_check(
             active=head_tail_reasoning_required,
             passed=analysis_has_head_tail,
@@ -2463,14 +2845,29 @@ class QuestionValidatorService:
         context: dict[str, Any],
     ) -> tuple[list[str], list[str], dict[str, Any]]:
         stem = generated_question.stem
-        material_text = str(context.get("material_text") or "")
+        material_source = context.get("material_source") or {}
+        material_prompt_extras = (
+            material_source.get("prompt_extras")
+            if isinstance(material_source, dict) and isinstance(material_source.get("prompt_extras"), dict)
+            else {}
+        )
+        fill_ready_material = str(material_prompt_extras.get("fill_ready_material") or "").strip()
+        fill_ready_local_material = str(material_prompt_extras.get("fill_ready_local_material") or "").strip()
+        answer_anchor_text = str(material_prompt_extras.get("answer_anchor_text") or "").strip()
+        require_original_answer_sentence = bool(material_prompt_extras.get("require_original_answer_sentence"))
+        display_material_text = fill_ready_material or str(context.get("material_text") or "")
+        validation_material_text = fill_ready_local_material or fill_ready_material or str(context.get("material_text") or "")
         constraints = self._extract_sentence_fill_constraints(context)
         correct_text = self._sentence_fill_correct_option_text(generated_question)
-        previous_text, next_text, blank_marker = self._extract_sentence_fill_blank_context(material_text)
+        previous_text, next_text, blank_marker = self._extract_sentence_fill_blank_context(validation_material_text)
 
-        has_blank_signal = any(token in material_text for token in ("____", "___", "[BLANK]", "?  ?", "( )", "? ?"))
-        has_fill_prompt = any(token in stem for token in ("??", "????", "??", "???", "????????"))
-        blank_position = self._detect_blank_position(material_text)
+        has_blank_signal = any(token in display_material_text for token in ("____", "___", "[BLANK]", "?  ?", "( )", "? ?"))
+        fill_prompt_markers = ("??", "???????", "?????", "????", "??????")
+        fit_prompt_markers = ("???", "???", "???")
+        has_fill_prompt = any(token in stem for token in fill_prompt_markers) and any(
+            token in stem for token in fit_prompt_markers
+        )
+        blank_position = self._detect_blank_position(validation_material_text)
         reference_blank_position = constraints["blank_position"]
         reference_blank_position_source = constraints["blank_position_source"]
 
@@ -2479,6 +2876,15 @@ class QuestionValidatorService:
             "sentence_fill_exam_style_prompt": {"passed": has_fill_prompt},
             "sentence_fill_blank_position": {"passed": bool(blank_position), "blank_position": blank_position},
             "sentence_fill_correct_option_text": {"passed": bool(correct_text), "text": correct_text},
+            "sentence_fill_runtime_material_form": {
+                "passed": bool(fill_ready_material),
+                "source": "material_source.prompt_extras" if fill_ready_material else "material_text",
+                "validation_source": (
+                    "material_source.prompt_extras.fill_ready_local_material"
+                    if fill_ready_local_material
+                    else ("material_source.prompt_extras.fill_ready_material" if fill_ready_material else "material_text")
+                ),
+            },
         }
         errors: list[str] = []
         warnings: list[str] = []
@@ -2487,6 +2893,28 @@ class QuestionValidatorService:
             errors.append("sentence_fill material does not show an obvious blank marker.")
         if not has_fill_prompt:
             warnings.append("sentence_fill stem does not look like a standard fill-in-the-blank prompt.")
+
+        normalized_anchor = self._normalize_sentence_fill_anchor_text(answer_anchor_text)
+        normalized_correct = self._normalize_sentence_fill_anchor_text(correct_text)
+        exact_anchor_match = bool(normalized_anchor and normalized_correct and normalized_anchor == normalized_correct)
+        contract_consistent = bool(
+            has_blank_signal
+            and has_fill_prompt
+            and correct_text
+            and (not require_original_answer_sentence or exact_anchor_match)
+            and blank_marker
+        )
+        checks["sentence_fill_material_question_consistency"] = {
+            "passed": contract_consistent,
+            "has_blank_signal": has_blank_signal,
+            "has_fill_prompt": has_fill_prompt,
+            "has_correct_option_text": bool(correct_text),
+            "has_blank_marker_context": bool(blank_marker),
+            "require_original_answer_sentence": require_original_answer_sentence,
+            "exact_anchor_match": exact_anchor_match if require_original_answer_sentence else None,
+        }
+        if not contract_consistent:
+            self._append_unique_error(errors, "sentence_fill_material_question_consistency_fail")
 
         validator_contract = context.get("validator_contract") or {}
         sentence_fill_contract = validator_contract.get("sentence_fill") if isinstance(validator_contract, dict) else None
@@ -2784,7 +3212,7 @@ class QuestionValidatorService:
             self._append_unique_error(errors, "reference_anchor_missing")
 
         if function_type == "bridge":
-            analysis_has_bridge = any(token in generated_question.analysis for token in ("承上启下", "承前启后", "前文", "后文"))
+            analysis_has_bridge = any(token in generated_question.analysis for token in ("??", "??", "??", "??"))
             checks["sentence_fill_bridge_reasoning"] = {
                 "passed": analysis_has_bridge,
                 "function_type": function_type,
@@ -2854,7 +3282,7 @@ class QuestionValidatorService:
                 self._append_unique_error(errors, "reference_anchor_missing")
 
         if function_type in {"conclusion", "summary"} and blank_position == "ending":
-            if self._sentence_fill_has_forward_signal(correct_text) or any(token in correct_text for token in ("例如", "比如", "首先", "其次")):
+            if self._sentence_fill_has_forward_signal(correct_text) or any(token in correct_text for token in ("渚嬪", "姣斿", "棣栧厛", "鍏舵")):
                 self._append_unique_error(errors, "position_function_mismatch")
             if not self._sentence_fill_has_conclusion_marker(correct_text) and next_text:
                 warnings.append("ending summary lacks a strong closure marker.")
@@ -2883,6 +3311,165 @@ class QuestionValidatorService:
             "deviation_count": len(deviations),
             "deviations": deviations,
         }
+
+    def _is_sentence_fill_soft_difficulty_miss(self, difficulty_review: dict[str, Any]) -> bool:
+        deviations = difficulty_review.get("deviations") or []
+        if not deviations:
+            return False
+        parsed: list[dict[str, float | str]] = []
+        for deviation in deviations:
+            if isinstance(deviation, dict):
+                metric = str(deviation.get("metric") or "").strip()
+                actual = self._coerce_float(deviation.get("actual"))
+                target_min = self._coerce_float(deviation.get("target_min"))
+            else:
+                metric = str(getattr(deviation, "metric", "") or "").strip()
+                actual = self._coerce_float(getattr(deviation, "actual", None))
+                target_min = self._coerce_float(getattr(deviation, "target_min", None))
+            if not metric:
+                return False
+            parsed.append(
+                {
+                    "metric": metric,
+                    "actual": actual if actual is not None else 0.0,
+                    "target_min": target_min if target_min is not None else 0.0,
+                }
+            )
+
+        if any(item["metric"] != "reasoning_depth" for item in parsed):
+            return False
+
+        for item in parsed:
+            target_min = float(item["target_min"])
+            actual = float(item["actual"])
+            if actual >= target_min:
+                continue
+            if target_min - actual > 0.1:
+                return False
+        return True
+
+    def _is_center_understanding_soft_difficulty_miss(self, difficulty_review: dict[str, Any]) -> bool:
+        deviations = difficulty_review.get("deviations") or []
+        if not deviations:
+            return False
+        parsed: list[dict[str, float | str]] = []
+        for deviation in deviations:
+            if isinstance(deviation, dict):
+                metric = str(deviation.get("metric") or "").strip()
+                actual = self._coerce_float(deviation.get("actual"))
+                target_min = self._coerce_float(deviation.get("target_min"))
+                target_max = self._coerce_float(deviation.get("target_max"))
+            else:
+                metric = str(getattr(deviation, "metric", "") or "").strip()
+                actual = self._coerce_float(getattr(deviation, "actual", None))
+                target_min = self._coerce_float(getattr(deviation, "target_min", None))
+                target_max = self._coerce_float(getattr(deviation, "target_max", None))
+            if not metric:
+                return False
+            parsed.append(
+                {
+                    "metric": metric,
+                    "actual": actual if actual is not None else 0.0,
+                    "target_min": target_min if target_min is not None else 0.0,
+                    "target_max": target_max if target_max is not None else 0.0,
+                }
+            )
+        allowed_metrics = {"reasoning_depth", "complexity", "distractor_similarity"}
+        if any(str(item["metric"]) not in allowed_metrics for item in parsed):
+            return False
+        for item in parsed:
+            metric = str(item["metric"])
+            target_min = float(item["target_min"])
+            target_max = float(item["target_max"])
+            actual = float(item["actual"])
+            if metric == "distractor_similarity":
+                if actual <= target_max:
+                    continue
+                if actual - target_max > 0.08:
+                    return False
+                continue
+            if actual >= target_min:
+                continue
+            if target_min - actual > 0.12:
+                return False
+        return True
+
+    def _is_sentence_order_soft_difficulty_miss(
+        self,
+        *,
+        difficulty_review: dict[str, Any],
+        checks: dict[str, Any],
+    ) -> bool:
+        deviations = difficulty_review.get("deviations") or []
+        if not deviations:
+            return False
+        parsed: list[dict[str, float | str]] = []
+        for deviation in deviations:
+            if isinstance(deviation, dict):
+                metric = str(deviation.get("metric") or "").strip()
+                actual = self._coerce_float(deviation.get("actual"))
+                target_min = self._coerce_float(deviation.get("target_min"))
+                target_max = self._coerce_float(deviation.get("target_max"))
+            else:
+                metric = str(getattr(deviation, "metric", "") or "").strip()
+                actual = self._coerce_float(getattr(deviation, "actual", None))
+                target_min = self._coerce_float(getattr(deviation, "target_min", None))
+                target_max = self._coerce_float(getattr(deviation, "target_max", None))
+            if not metric:
+                return False
+            parsed.append(
+                {
+                    "metric": metric,
+                    "actual": actual if actual is not None else 0.0,
+                    "target_min": target_min if target_min is not None else 0.0,
+                    "target_max": target_max if target_max is not None else 0.0,
+                }
+            )
+        allowed_metrics = {"reasoning_depth", "complexity", "distractor_similarity"}
+        if any(str(item["metric"]) not in allowed_metrics for item in parsed):
+            return False
+
+        structural_keys = (
+            "sentence_order_unique_opener",
+            "sentence_order_binding_pairs",
+            "sentence_order_closure",
+            "sentence_order_exchange_risk",
+            "sentence_order_multi_path_risk",
+            "sentence_order_function_overlap",
+            "sentence_order_unique_answer_strength",
+            "sentence_order_single_truth_option",
+            "sentence_order_answer_binding",
+            "sentence_order_analysis_binding",
+            "sentence_order_head_enforcement",
+            "sentence_order_tail_enforcement",
+            "sentence_order_binding_enforcement",
+        )
+        for key in structural_keys:
+            payload = checks.get(key)
+            if not isinstance(payload, dict):
+                continue
+            status = str(payload.get("status") or "").strip()
+            if status and status != "active":
+                continue
+            if payload.get("passed") is not True:
+                return False
+
+        for item in parsed:
+            metric = str(item["metric"])
+            target_min = float(item["target_min"])
+            target_max = float(item["target_max"])
+            actual = float(item["actual"])
+            if metric == "distractor_similarity":
+                if actual <= target_max:
+                    continue
+                if actual - target_max > 0.06:
+                    return False
+                continue
+            if actual >= target_min:
+                continue
+            if target_min - actual > 0.08:
+                return False
+        return True
 
     def _compute_material_overlap_ratio(self, *, material_text: str, question_text: str) -> float:
         material_tokens = self._extract_tokens(material_text)
@@ -2961,7 +3548,7 @@ class QuestionValidatorService:
         words = set(re.findall(r"[a-z0-9]{2,}", clean))
         cjk_chars = [char for char in clean if "\u4e00" <= char <= "\u9fff"]
         bigrams = {"".join(cjk_chars[index : index + 2]) for index in range(len(cjk_chars) - 1)}
-        stop_bigrams = {"正确", "答案", "选项", "题目", "材料", "解析", "文段", "根据", "一项", "的是"}
+        stop_bigrams = {"??", "??", "??", "??", "??", "??", "??", "??", "??", "??"}
         return {token for token in words | bigrams if token and token not in stop_bigrams}
 
     def _count_sortable_units_from_material(self, material_text: str) -> int:
@@ -2972,11 +3559,6 @@ class QuestionValidatorService:
         units = self._extract_order_material_units(sortable_block)
         normalized_units = self._normalize_sentence_order_units_to_six(units) or units
         return len(normalized_units)
-        enumerated = re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]", sortable_block)
-        if enumerated:
-            return len(set(enumerated))
-        sentences = [item.strip() for item in re.split(r"(?<=[。！？!?])", sortable_block) if item.strip()]
-        return len(sentences)
 
     def _extract_order_option_unit_counts(self, options: dict[str, str]) -> list[int]:
         counts: list[int] = []
@@ -2984,13 +3566,16 @@ class QuestionValidatorService:
             text = (value or "").strip()
             if not text:
                 continue
-            circled = re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]", text)
+            circled = re.findall(r"[\u2460-\u2469]", text)
             if circled:
                 counts.append(len(set(circled)))
                 continue
             digits = re.findall(r"\d+", text)
             if digits:
-                counts.append(len(set(digits)))
+                if len(digits) == 1 and len(digits[0]) > 1:
+                    counts.append(len(set(digits[0])))
+                else:
+                    counts.append(len(set(digits)))
         return counts
 
     def _extract_order_sequence(self, text: str) -> list[int]:
@@ -2998,28 +3583,33 @@ class QuestionValidatorService:
         if not raw:
             return []
         circled_map = {
-            "①": 1,
-            "②": 2,
-            "③": 3,
-            "④": 4,
-            "⑤": 5,
-            "⑥": 6,
-            "⑦": 7,
-            "⑧": 8,
-            "⑨": 9,
-            "⑩": 10,
+            "\u2460": 1,
+            "\u2461": 2,
+            "\u2462": 3,
+            "\u2463": 4,
+            "\u2464": 5,
+            "\u2465": 6,
+            "\u2466": 7,
+            "\u2467": 8,
+            "\u2468": 9,
+            "\u2469": 10,
         }
         circled = [circled_map[ch] for ch in raw if ch in circled_map]
         if circled:
             return circled
-        return [int(value) for value in re.findall(r"\d+", raw)]
+        digit_groups = re.findall(r"\d+", raw)
+        if not digit_groups:
+            return []
+        if len(digit_groups) == 1 and len(digit_groups[0]) > 1:
+            return [int(ch) for ch in digit_groups[0]]
+        return [int(value) for value in digit_groups]
 
     def _extract_reference_order_sequences(self, text: str) -> list[list[int]]:
         raw = str(text or "")
         if not raw:
             return []
         sequences: list[list[int]] = []
-        for match in re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]{2,10}", raw):
+        for match in re.findall(r"[\u2460-\u2469]{2,10}", raw):
             sequence = self._extract_order_sequence(match)
             if len(sequence) >= 2:
                 sequences.append(sequence)
@@ -3030,7 +3620,7 @@ class QuestionValidatorService:
         if not raw:
             return []
         sequences: list[list[int]] = []
-        for match in re.findall(r"[①②③④⑤⑥⑦⑧⑨⑩]{6,10}", raw):
+        for match in re.findall(r"[\u2460-\u2469]{6,10}", raw):
             sequence = self._extract_order_sequence(match)
             if len(sequence) >= 6:
                 sequences.append(sequence[:6])
@@ -3041,7 +3631,7 @@ class QuestionValidatorService:
         if not text:
             return ""
         marker_index = -1
-        for marker in ("____", "___", "[BLANK]", "（  ）", "( )"):
+        for marker in ("____", "___", "[BLANK]", "?  ?", "( )", "??"):
             idx = text.find(marker)
             if idx >= 0:
                 marker_index = idx
@@ -3062,11 +3652,11 @@ class QuestionValidatorService:
         sortable_block = text.split("\n\n")[-1].strip()
         if not sortable_block:
             return []
-        enumerated_parts = re.split(r"[①②③④⑤⑥⑦⑧⑨⑩]\s*", sortable_block)
+        enumerated_parts = re.split(r"[\u2460-\u2469]\s*", sortable_block)
         units = [part.strip() for part in enumerated_parts if part and part.strip()]
         if units:
             return units
-        return [item.strip() for item in re.split(r"(?<=[。！？!?])", sortable_block) if item.strip()]
+        return [item.strip() for item in re.split(r"(?<=[。！？!?；;])\s*", sortable_block) if item.strip()]
 
     def _normalize_sentence_order_units_to_six(self, units: list[str]) -> list[str] | None:
         cleaned = [unit.strip() for unit in units if unit and unit.strip()]
@@ -3082,7 +3672,7 @@ class QuestionValidatorService:
             left = cleaned[index]
             right = cleaned[index + 1]
             score = 0.0
-            if right.startswith(("因此", "所以", "此外", "同时", "并且", "而", "但", "于是", "随后", "从而")):
+            if right.startswith(("??", "??", "??", "??", "??", "?", "?", "??", "??", "??")):
                 score += 0.30
             if len(left) <= 28 and len(right) <= 28:
                 score += 0.12
@@ -3122,8 +3712,8 @@ class QuestionValidatorService:
         if not left_clean:
             return right_clean
         separator = ""
-        if not left_clean.endswith(("。", "！", "？", "!", "?", "；", ";", "，", ",", "：", ":")):
-            separator = "，"
+        if not left_clean.endswith(("?", "?", "?", "!", "?", "?", ";", "?", ",", "?", ":")):
+            separator = "?"
         return f"{left_clean}{separator}{right_clean}".strip()
 
     def _sentence_order_unit_sentence_count(self, unit: str) -> int:
@@ -3133,30 +3723,39 @@ class QuestionValidatorService:
         line_units = [line.strip() for line in text.splitlines() if line.strip()]
         if len(line_units) > 1:
             return len(line_units)
-        terminal_count = sum(text.count(marker) for marker in ("。", "！", "？", "!", "?", "；", ";", "."))
+        terminal_count = len(re.findall(r"[。！？!?；;]", text))
         return max(1, terminal_count)
 
     def _sentence_order_unit_role(self, unit: str, *, is_last: bool = False) -> str:
         text = (unit or "").strip()
         if not text:
             return "empty"
-        if any(token in text for token in ("因此", "所以", "可见", "看来", "总之", "由此")):
+        summary_markers = ("??", "??", "??", "??", "??", "??")
+        action_markers = ("??", "??", "??", "??", "?", "??")
+        problem_markers = ("??", "??", "??", "??")
+        definition_markers = ("??", "??", "?")
+        opening_markers = ("???", "????", "????", "??", "??")
+        dependent_markers = ("?", "??", "??", "?", "?")
+        connector_markers = ("??", "??", "??", "??", "??", "??", "??")
+        timeline_markers = ("??", "??", "??", "??", "??", "??")
+        viewpoint_markers = ("???", "???", "???", "???", "????")
+        if any(token in text for token in summary_markers):
             return "summary"
-        if any(token in text for token in ("应该", "应当", "需要", "必须", "要", "可通过")):
+        if any(token in text for token in action_markers):
             return "action"
-        if any(token in text for token in ("问题在于", "难点在于", "困境在于", "为何")):
+        if any(token in text for token in problem_markers):
             return "problem"
-        if any(token in text for token in ("是什么", "是指", "就是")):
+        if any(token in text for token in definition_markers):
             return "definition"
-        if text.startswith(("只有", "首先", "起初", "第一", "一开始")):
+        if text.startswith(opening_markers):
             return "opening_anchor"
-        if text.startswith(("这", "那", "其", "该", "此", "这些", "他们")):
+        if text.startswith(dependent_markers):
             return "dependent"
-        if any(token in text for token in ("但是", "然而", "不过", "却", "同时", "此外", "也")):
+        if any(token in text for token in connector_markers):
             return "connector"
-        if any(token in text for token in ("首先", "其次", "再次", "随后", "最后", "第一", "第二", "第三")):
+        if any(token in text for token in timeline_markers):
             return "timeline"
-        if any(token in text for token in ("认为", "指出", "表明", "说明", "关键在于")):
+        if any(token in text for token in viewpoint_markers):
             return "viewpoint"
         if is_last:
             return "tail_statement"
@@ -3167,25 +3766,35 @@ class QuestionValidatorService:
         if not text:
             return 0.0
         score = 0.26
-        if any(token in text for token in ("是什么", "是指", "就是")):
+        opening_markers = ("???", "????", "????", "??", "???")
+        definition_markers = ("??", "??", "?")
+        timeline_markers = ("??", "??", "??", "??", "??")
+        problem_markers = ("??", "??", "??", "??")
+        viewpoint_markers = ("???", "???", "???", "???", "????")
+        summary_markers = ("??", "??", "??", "??", "??", "??")
+        action_markers = ("??", "??", "??", "??", "?", "??")
+        dependent_markers = ("?", "??", "??", "?", "?")
+        example_markers = ("??", "??", "??", "??")
+        connector_markers = ("??", "??", "??", "??", "??")
+        if text.startswith(opening_markers):
+            score += 0.18
+        if any(token in text for token in definition_markers):
             score += 0.34
-        if text.startswith(("首先", "起初", "第一", "一开始")) or "首先" in text:
+        if any(token in text for token in timeline_markers):
             score += 0.24
-        if any(token in text for token in ("问题在于", "难点在于", "困境在于", "为何")):
+        if any(token in text for token in problem_markers):
             score += 0.24
-        if text.startswith(("只有", "对于", "面对")):
-            score += 0.10
-        if any(token in text for token in ("认为", "指出", "表明", "说明", "关键在于")):
+        if any(token in text for token in viewpoint_markers):
             score += 0.16
-        if any(token in text for token in ("因此", "所以", "可见", "看来", "总之", "由此", "应该", "应当", "需要", "必须")):
+        if any(token in text for token in summary_markers + action_markers):
             score -= 0.20
-        if text.startswith(("这", "那", "其", "该", "此", "这些", "他们")):
+        if text.startswith(dependent_markers):
             score -= 0.30
-        if any(token in text for token in ("例如", "比如", "就像")):
+        if any(token in text for token in example_markers):
             score -= 0.22
-        if any(token in text for token in ("但是", "然而", "不过", "却", "同时", "此外")):
+        if any(token in text for token in connector_markers):
             score -= 0.10
-        if index == 0 and any(token in text for token in ("首先", "第一步", "起初", "一开始")):
+        if index == 0 and any(token in text for token in timeline_markers):
             score += 0.16
         if index == 0:
             score += 0.06
@@ -3214,25 +3823,24 @@ class QuestionValidatorService:
         second = opener_scores[1] if len(opener_scores) > 1 else 0.0
         unique_opener_score = round(max(0.0, min(1.0, 0.68 * best + 0.32 * max(0.0, best - second))), 4)
 
+        dependent_markers = ("?", "??", "??", "?", "?")
+        connector_markers = ("??", "??", "??", "??", "??", "??", "??")
+        bridge_markers = ("??", "??", "??", "??")
+        problem_markers = ("??", "??", "??", "??")
+        closing_markers = ("??", "??", "??", "??", "??", "??", "??", "??", "??", "??")
+        action_markers = ("??", "??", "??", "??", "?", "??")
+
         binding_pair_count = 0
         for index in range(len(units) - 1):
             current = units[index]
             nxt = units[index + 1]
-            if nxt.startswith(("这", "那", "其", "该", "此", "这些", "他们")):
+            if nxt.startswith(dependent_markers):
                 binding_pair_count += 1
                 continue
-            if any(token in nxt for token in ("但是", "然而", "不过", "却", "同时", "此外", "也")):
+            if any(token in nxt for token in connector_markers + bridge_markers):
                 binding_pair_count += 1
                 continue
-            if any(token in nxt for token in ("随后", "然后", "接着", "最后", "之后", "再", "下一步", "这样", "如此")):
-                binding_pair_count += 1
-                continue
-            if any(token in current for token in ("问题在于", "难点在于", "困境在于", "为何")) and any(
-                token in nxt for token in ("因此", "所以", "由此", "应该", "应当", "需要", "必须")
-            ):
-                binding_pair_count += 1
-                continue
-            if ("只有" in current and "才" in nxt) or ("如果" in current and any(token in nxt for token in ("那么", "就", "才", "还要"))):
+            if any(token in current for token in problem_markers) and any(token in nxt for token in closing_markers + action_markers):
                 binding_pair_count += 1
                 continue
         binding_pair_count = min(binding_pair_count, 4)
@@ -3242,16 +3850,14 @@ class QuestionValidatorService:
         for role in roles:
             role_counts[role] = role_counts.get(role, 0) + 1
         duplicate_pairs = sum(max(0, count - 1) for count in role_counts.values())
-        directive_density = sum(
-            1 for unit in units if any(token in unit for token in ("应该", "应当", "需要", "必须", "要"))
-        ) / max(len(units), 1)
+        directive_density = sum(1 for unit in units if any(token in unit for token in action_markers)) / max(len(units), 1)
         function_overlap_score = round(
             max(0.0, min(1.0, 0.72 * (duplicate_pairs / max(len(units) - 1, 1)) + 0.28 * directive_density)),
             4,
         )
 
         has_closing_role = any(role in {"summary", "action", "tail_statement"} for role in roles[-2:]) or any(
-            token in units[-1] for token in ("这样", "由此", "因此", "所以", "才能", "最终")
+            token in units[-1] for token in closing_markers
         )
         context_closure_score = round(
             max(
@@ -3275,7 +3881,7 @@ class QuestionValidatorService:
                     + 0.22 * (1 - min(1.0, binding_pair_count / 3))
                     + 0.20 * (1 - unique_opener_score)
                     + 0.14 * (1 - context_closure_score)
-                    + 0.12 * min(1.0, sum(1 for unit in units if any(token in unit for token in ("同时", "此外", "也", "以及"))) / max(len(units), 1)),
+                    + 0.12 * min(1.0, sum(1 for unit in units if any(token in unit for token in connector_markers)) / max(len(units), 1)),
                 ),
             ),
             4,

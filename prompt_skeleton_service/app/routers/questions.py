@@ -1,6 +1,8 @@
-from uuid import uuid4
+﻿from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from contextlib import nullcontext
+
+from fastapi import APIRouter, Depends, Request
 
 from app.core.dependencies import get_prompt_template_registry, get_question_repository, get_registry, get_runtime_registry
 from app.core.exceptions import DomainError
@@ -38,8 +40,95 @@ from app.services.prompt_template_registry import PromptTemplateRegistry
 from app.services.runtime_registry import RuntimeConfigRegistry
 from app.services.source_question_analyzer import SourceQuestionAnalyzer
 from app.services.source_question_parser import SourceQuestionParserService
+from app.services.generation_gate import acquire_generation_slot
 
 router = APIRouter(prefix="/api/v1/questions", tags=["questions"])
+HEAVY_REVIEW_ACTIONS = {"minor_edit", "question_modify", "text_modify", "distractor_patch"}
+
+_UI_SPECIAL_TYPE_BY_BUSINESS_CARD_ID = {
+    "turning_relation_focus__main_idea": "turning_relation_focus",
+    "cause_effect__conclusion_focus__main_idea": "cause_effect__conclusion_focus",
+    "necessary_condition_countermeasure__main_idea": "necessary_condition_countermeasure",
+    "parallel_comprehensive_summary__main_idea": "parallel_comprehensive_summary",
+    "theme_word_focus__main_idea": "theme_word_focus",
+    "sentence_order__head_tail_logic__abstract": "first_background_intro",
+    "sentence_order__head_tail_lock__abstract": "rel_turning",
+    "sentence_order__deterministic_binding__abstract": "rel_parallel",
+    "sentence_order__discourse_logic__abstract": "writing_view_explain",
+    "sentence_order__timeline_action_sequence__abstract": "daily_time_timeline",
+    "sentence_fill__opening_summary__abstract": "opening_summary",
+    "sentence_fill__opening_topic_intro__abstract": "opening_topic_intro",
+    "sentence_fill__middle_carry_previous__abstract": "middle_carry_previous",
+    "sentence_fill__middle_lead_next__abstract": "middle_lead_next",
+    "sentence_fill__middle_bridge_both_sides__abstract": "middle_bridge_both_sides",
+    "sentence_fill__ending_summary__abstract": "ending_summary",
+    "sentence_fill__ending_countermeasure__abstract": "ending_countermeasure",
+}
+
+_UI_CHILD_FAMILY_BY_BUSINESS_CARD_ID = {
+    "turning_relation_focus__main_idea": "center_understanding_relation_words",
+    "cause_effect__conclusion_focus__main_idea": "center_understanding_relation_words",
+    "necessary_condition_countermeasure__main_idea": "center_understanding_relation_words",
+    "parallel_comprehensive_summary__main_idea": "center_understanding_relation_words",
+    "theme_word_focus__main_idea": "center_understanding_relation_words",
+    "sentence_order__head_tail_logic__abstract": "sentence_order_first_sentence",
+    "sentence_order__head_tail_lock__abstract": "sentence_order_fixed_bundle",
+    "sentence_order__deterministic_binding__abstract": "sentence_order_fixed_bundle",
+    "sentence_order__discourse_logic__abstract": "sentence_order_sequence",
+    "sentence_order__timeline_action_sequence__abstract": "sentence_order_sequence",
+    "sentence_fill__opening_summary__abstract": "sentence_fill_head_start",
+    "sentence_fill__opening_topic_intro__abstract": "sentence_fill_head_start",
+    "sentence_fill__middle_carry_previous__abstract": "sentence_fill_middle",
+    "sentence_fill__middle_lead_next__abstract": "sentence_fill_middle",
+    "sentence_fill__middle_bridge_both_sides__abstract": "sentence_fill_middle",
+    "sentence_fill__ending_summary__abstract": "sentence_fill_tail_end",
+    "sentence_fill__ending_countermeasure__abstract": "sentence_fill_tail_end",
+}
+
+_MATERIAL_STRUCTURE_BY_MAIN_IDEA_CARD_ID = {
+    "turning_relation_focus__main_idea": "转折归旨",
+    "necessary_condition_countermeasure__main_idea": "问题-对策",
+    "parallel_comprehensive_summary__main_idea": "并列推进",
+    "cause_effect__conclusion_focus__main_idea": "背景-核心结论",
+    "theme_word_focus__main_idea": "总分归纳",
+}
+
+
+def _question_focus_for_detected_target(*, question_type: str, business_subtype: str | None) -> str:
+    if question_type == "sentence_order":
+        return "sentence_order"
+    if question_type == "sentence_fill":
+        return "sentence_fill"
+    if question_type == "main_idea" and business_subtype in {"center_understanding", "title_selection"}:
+        return "center_understanding"
+    return "center_understanding"
+
+
+def _business_subtype_for_detected_target(
+    *,
+    question_type: str,
+    business_subtype: str | None,
+    business_card_ids: list[str],
+) -> str | None:
+    for card_id in business_card_ids:
+        mapped = _UI_CHILD_FAMILY_BY_BUSINESS_CARD_ID.get(str(card_id or "").strip())
+        if mapped:
+            return mapped
+    if question_type == "sentence_order":
+        return None
+    if question_type == "sentence_fill":
+        return None
+    if question_type == "main_idea" and business_subtype in {"center_understanding", "title_selection"}:
+        return "center_understanding_relation_words"
+    return business_subtype
+
+
+def _primary_special_type_from_business_cards(business_card_ids: list[str]) -> str | None:
+    for card_id in business_card_ids:
+        mapped = _UI_SPECIAL_TYPE_BY_BUSINESS_CARD_ID.get(str(card_id or "").strip())
+        if mapped:
+            return mapped
+    return None
 
 
 @router.post("/source-question/parse", response_model=SourceQuestionParseResponse)
@@ -58,63 +147,52 @@ def detect_source_question_fields(
     runtime_registry: RuntimeConfigRegistry = Depends(get_runtime_registry),
 ) -> SourceQuestionDetectResponse:
     analyzer = SourceQuestionAnalyzer(runtime_registry.get())
+    inferred_target = analyzer.infer_request_target(request.source_question) or {}
+    question_type = str(inferred_target.get("question_type") or "main_idea").strip() or "main_idea"
+    business_subtype = inferred_target.get("business_subtype")
+    if question_type == "main_idea" and business_subtype not in {"center_understanding", "title_selection"}:
+        business_subtype = "center_understanding"
     analysis = analyzer.analyze(
         source_question=request.source_question,
-        question_type="main_idea",
-        business_subtype="center_understanding",
+        question_type=question_type,
+        business_subtype=business_subtype,
     )
-    stem = (request.source_question.stem or "").strip()
-    passage = (request.source_question.passage or "").strip()
-    combined = f"{stem}\n{passage}"
-
-    question_focus = "中心理解题"
-    special_question_type = None
-    if any(token in stem for token in ("排序", "重新排列", "语序正确")):
-        question_focus = "语句排序题"
-        special_question_type = None
-    elif any(token in stem for token in ("填入", "横线", "最恰当的一项")):
-        question_focus = "语句填空题"
-        special_question_type = None
-    elif any(token in stem for token in ("接在", "接续", "接语", "衔接")):
-        question_focus = "接语选择题"
-        special_question_type = None
-    elif "标题" in stem:
-        question_focus = "标题填入题"
-        special_question_type = "选择标题"
-
     business_card_ids = analysis.get("business_card_ids") or []
-    material_structure = "总分归纳"
-    if "turning_relation_focus__main_idea" in business_card_ids:
-        material_structure = "转折归旨"
-    elif "necessary_condition_countermeasure__main_idea" in business_card_ids:
-        material_structure = "问题-对策"
-    elif "parallel_comprehensive_summary__main_idea" in business_card_ids:
-        material_structure = "并列推进"
-    elif "cause_effect__conclusion_focus__main_idea" in business_card_ids:
-        material_structure = "背景-核心结论"
-
-    text_direction = "评论文"
-    if any(token in combined for token in ("根据《", "办法", "条例", "通知", "规定", "意见", "机制", "治理")):
-        text_direction = "政策文"
-    elif any(token in combined for token in ("实验", "研究", "科学家", "发现", "细胞", "物理", "化学", "生物")):
-        text_direction = "科普文"
-    elif any(token in combined for token in ("记者", "报道", "消息", "近日", "发布会")):
-        text_direction = "新闻报道"
+    question_focus = _question_focus_for_detected_target(
+        question_type=question_type,
+        business_subtype=business_subtype,
+    )
+    resolved_business_subtype = _business_subtype_for_detected_target(
+        question_type=question_type,
+        business_subtype=business_subtype,
+        business_card_ids=business_card_ids,
+    )
+    special_question_type = _primary_special_type_from_business_cards(business_card_ids)
+    material_structure = None
+    if question_type == "main_idea" and business_subtype == "center_understanding":
+        for card_id in business_card_ids:
+            material_structure = _MATERIAL_STRUCTURE_BY_MAIN_IDEA_CARD_ID.get(str(card_id or "").strip())
+            if material_structure:
+                break
 
     return SourceQuestionDetectResponse(
         question_focus=question_focus,
+        business_subtype=resolved_business_subtype,
         special_question_type=special_question_type,
-        text_direction=text_direction,
         material_structure=material_structure,
         topic=analysis.get("topic"),
         business_card_ids=business_card_ids,
         query_terms=analysis.get("query_terms") or [],
+        leaf_id_primary=analysis.get("leaf_id_primary"),
+        leaf_id_candidates=analysis.get("leaf_id_candidates") or [],
+        analysis_confidence=analysis.get("analysis_confidence"),
     )
 
 
 @router.post("/generate", response_model=QuestionGenerationBatchResponse)
 def generate_questions(
     request: QuestionGenerateRequest,
+    http_request: Request,
     registry: ConfigRegistry = Depends(get_registry),
     runtime_registry: RuntimeConfigRegistry = Depends(get_runtime_registry),
     prompt_template_registry: PromptTemplateRegistry = Depends(get_prompt_template_registry),
@@ -127,7 +205,9 @@ def generate_questions(
         repository=repository,
         prompt_template_registry=prompt_template_registry,
     )
-    return QuestionGenerationBatchResponse.model_validate(service.generate(request))
+    with acquire_generation_slot() as gate_state:
+        http_request.state.generation_gate = gate_state
+        return QuestionGenerationBatchResponse.model_validate(service.generate(request))
 
 
 @router.get("/batches", response_model=QuestionBatchListResponse)
@@ -262,6 +342,7 @@ def list_replacement_materials(
 def fine_tune_question_item(
     item_id: str,
     request: QuestionFineTuneRequest,
+    http_request: Request,
     registry: ConfigRegistry = Depends(get_registry),
     runtime_registry: RuntimeConfigRegistry = Depends(get_runtime_registry),
     prompt_template_registry: PromptTemplateRegistry = Depends(get_prompt_template_registry),
@@ -281,7 +362,9 @@ def fine_tune_question_item(
         instruction=request.instruction,
         operator=request.operator,
     )
-    return QuestionReviewActionResponse.model_validate(service.apply_action(item_id, action_request))
+    with acquire_generation_slot() as gate_state:
+        http_request.state.generation_gate = gate_state
+        return QuestionReviewActionResponse.model_validate(service.apply_action(item_id, action_request))
 
 
 @router.post("/{item_id}/confirm", response_model=QuestionReviewActionResponse)
@@ -373,6 +456,7 @@ def list_question_usage_events(
 def review_question_item(
     item_id: str,
     request: QuestionReviewActionRequest,
+    http_request: Request,
     registry: ConfigRegistry = Depends(get_registry),
     runtime_registry: RuntimeConfigRegistry = Depends(get_runtime_registry),
     prompt_template_registry: PromptTemplateRegistry = Depends(get_prompt_template_registry),
@@ -386,4 +470,8 @@ def review_question_item(
         prompt_template_registry=prompt_template_registry,
     )
     service = QuestionReviewService(repository, generation_service)
-    return QuestionReviewActionResponse.model_validate(service.apply_action(item_id, request))
+    gate_context = acquire_generation_slot() if request.action in HEAVY_REVIEW_ACTIONS else nullcontext(None)
+    with gate_context as gate_state:
+        if gate_state is not None:
+            http_request.state.generation_gate = gate_state
+        return QuestionReviewActionResponse.model_validate(service.apply_action(item_id, request))

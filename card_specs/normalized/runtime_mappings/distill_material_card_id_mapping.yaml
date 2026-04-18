@@ -1,0 +1,260 @@
+﻿schema_version: distill_runtime_material_card_mapping.v1
+notes:
+  - Keep runtime ids stable: do not create new material_card ids or question_card ids here.
+  - node_to_material_card preserves the distill-side subtype naming.
+  - runtime_row_mapping is the executable layer used by evaluation and replay scripts.
+  - Priority order for runtime_row_mapping is pattern_tag -> subfamily -> source_doc.
+
+batches:
+  center_understanding_relation_words_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    candidate_type: closed_span
+    node_to_material_card:
+      变形考法: center_material.relation_variant
+      并列: center_material.relation_parallel
+      对策: center_material.relation_countermeasure
+      普通考法: center_material.relation_plain
+      转折: center_material.relation_turning
+    runtime_row_mapping:
+      pattern_tag:
+        变形考法:
+          material_card_id: center_material.relation_variant
+        并列:
+          material_card_id: center_material.relation_parallel
+        对策:
+          material_card_id: center_material.relation_countermeasure
+        普通考法:
+          material_card_id: center_material.relation_plain
+        转折:
+          material_card_id: center_material.relation_turning
+
+  center_understanding_special_types_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    candidate_type: closed_span
+    node_to_material_card:
+      fable_story: center_material.subsentence_example
+      special_other: center_material.subsentence_other
+      keywords_theme: center_material.relation_plain
+      classical_prose: center_material.subsentence_other
+    runtime_row_mapping:
+      pattern_tag:
+        主题词、关键词:
+          material_card_id: center_material.relation_plain
+        寓言故事:
+          material_card_id: center_material.subsentence_example
+        文言文、散文等:
+          material_card_id: center_material.subsentence_other
+        特殊问法-其他:
+          material_card_id: center_material.subsentence_other
+
+  center_understanding_standalone_subfamilies_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    candidate_type: closed_span
+    node_to_material_card:
+      keywords_theme: center_material.relation_plain
+      degree_words: center_material.relation_plain
+    runtime_row_mapping:
+      subfamily:
+        主题词:
+          material_card_id: center_material.relation_plain
+        程度词:
+          material_card_id: center_material.relation_plain
+      source_doc:
+        主题词.docx:
+          material_card_id: center_material.relation_plain
+        程度词.docx:
+          material_card_id: center_material.relation_plain
+
+  center_understanding_subsentence_features_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    candidate_type: closed_span
+    node_to_material_card:
+      multi_angle: center_material.subsentence_multi_angle
+      other: center_material.subsentence_other
+      example: center_material.subsentence_example
+      data: center_material.subsentence_data
+      prelude: center_material.subsentence_prelude
+    runtime_row_mapping:
+      pattern_tag:
+        举例子:
+          material_card_id: center_material.subsentence_example
+        分述句特征（原为 行文脉络）-其他:
+          material_card_id: center_material.subsentence_other
+        多角度论述:
+          material_card_id: center_material.subsentence_multi_angle
+        引入铺垫:
+          material_card_id: center_material.subsentence_prelude
+        数据资料:
+          material_card_id: center_material.subsentence_data
+
+  sentence_fill_head_start_2026-04-14:
+    business_family_id: sentence_fill
+    question_card_id: question.sentence_fill.standard_v1
+    candidate_type: closed_span
+    enable_fill_bridge: true
+    node_to_material_card:
+      head_summary: fill_material.opening_summary
+      head_topic_intro: fill_material.opening_topic_intro
+      head_clause: fill_material.opening_clause_lead
+    runtime_row_mapping:
+      pattern_tag:
+        横线在开头-概括后文:
+          material_card_id: fill_material.opening_summary
+          truth_blank_position: opening
+          truth_function_type: summary
+        横线在开头-话题引入:
+          material_card_id: fill_material.opening_topic_intro
+          truth_blank_position: opening
+          truth_function_type: topic_intro
+        横线在开头-横线为首句中的分句:
+          material_card_id: fill_material.opening_clause_lead
+          truth_blank_position: opening
+          truth_function_type: topic_intro
+
+  sentence_fill_middle_2026-04-14:
+    business_family_id: sentence_fill
+    question_card_id: question.sentence_fill.standard_v1
+    candidate_type: closed_span
+    enable_fill_bridge: true
+    node_to_material_card:
+      middle_bridge: fill_material.bridge_transition
+      middle_lead_next: fill_material.middle_focus_shift
+      middle_carry_prev: fill_material.middle_explanation
+    runtime_row_mapping:
+      pattern_tag:
+        横线在中间-承上启下:
+          material_card_id: fill_material.bridge_transition
+          truth_blank_position: middle
+          truth_function_type: bridge
+        横线在中间-启下:
+          material_card_id: fill_material.middle_focus_shift
+          truth_blank_position: middle
+          truth_function_type: lead_next
+        横线在中间-承上:
+          material_card_id: fill_material.middle_explanation
+          truth_blank_position: middle
+          truth_function_type: carry_previous
+
+  sentence_fill_tail_end_2026-04-14:
+    business_family_id: sentence_fill
+    question_card_id: question.sentence_fill.standard_v1
+    candidate_type: closed_span
+    enable_fill_bridge: true
+    node_to_material_card:
+      tail_clause: fill_material.ending_clause_summary
+      tail_summary: fill_material.ending_summary
+      tail_countermeasure: fill_material.ending_countermeasure
+    runtime_row_mapping:
+      pattern_tag:
+        横线在结尾-横线为尾句中的分句:
+          material_card_id: fill_material.ending_clause_summary
+          truth_blank_position: ending
+          truth_function_type: conclusion
+        横线在结尾-总结前文（原为 结论）:
+          material_card_id: fill_material.ending_summary
+          truth_blank_position: ending
+          truth_function_type: conclusion
+        横线在结尾-提出对策（原为 对策）:
+          material_card_id: fill_material.ending_countermeasure
+          truth_blank_position: ending
+          truth_function_type: countermeasure
+
+  sentence_order_first_sentence_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    candidate_type: sentence_block_group
+    enable_order_bridge: true
+    node_to_material_card:
+      nonfirst_rel_tail: order_material.first_sentence_gate
+      nonfirst_other: order_material.first_sentence_gate
+      nonfirst_pronoun_ambiguous: order_material.first_sentence_gate
+      first_background_intro: order_material.first_sentence_gate
+      first_definition: order_material.first_sentence_gate
+      first_raise_viewpoint: order_material.first_sentence_gate
+      nonfirst_example: order_material.first_sentence_gate
+    runtime_row_mapping:
+      pattern_tag:
+        非首句特征-举例子:
+          material_card_id: order_material.first_sentence_gate
+        非首句特征-关联词的后半部分:
+          material_card_id: order_material.first_sentence_gate
+        非首句特征-其他:
+          material_card_id: order_material.first_sentence_gate
+        非首句特征-指代不清的指代词:
+          material_card_id: order_material.first_sentence_gate
+        首句特征-下定义:
+          material_card_id: order_material.first_sentence_gate
+        首句特征-提出观点:
+          material_card_id: order_material.first_sentence_gate
+        首句特征-背景引入:
+          material_card_id: order_material.first_sentence_gate
+
+  sentence_order_fixed_bundle_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    candidate_type: sentence_block_group
+    enable_order_bridge: true
+    node_to_material_card:
+      rel_parallel: order_material.carry_parallel_expand
+      rel_turning: order_material.dual_anchor_lock
+      other_fixed_bundle: order_material.dual_anchor_lock
+      pronoun: order_material.dual_anchor_lock
+      rel_other: order_material.dual_anchor_lock
+    runtime_row_mapping:
+      pattern_tag:
+        关联词-并列:
+          material_card_id: order_material.carry_parallel_expand
+        关联词-转折:
+          material_card_id: order_material.dual_anchor_lock
+        关联词-其他:
+          material_card_id: order_material.dual_anchor_lock
+        其他（确定捆绑）:
+          material_card_id: order_material.dual_anchor_lock
+        指代词:
+          material_card_id: order_material.dual_anchor_lock
+
+  sentence_order_sequence_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    candidate_type: sentence_block_group
+    enable_order_bridge: true
+    node_to_material_card:
+      daily_time_timeline: order_material.timeline_progression
+      writing_view_explain: order_material.viewpoint_reason_action
+      writing_other: order_material.dual_anchor_lock
+      writing_problem_solution: order_material.problem_solution_case_blocks
+      daily_action_order: order_material.timeline_progression
+      writing_qa: order_material.first_sentence_gate
+    runtime_row_mapping:
+      pattern_tag:
+        日常逻辑-时间脉络:
+          material_card_id: order_material.timeline_progression
+        日常逻辑-行动顺序:
+          material_card_id: order_material.timeline_progression
+        行文逻辑-观点+解释说明:
+          material_card_id: order_material.viewpoint_reason_action
+        行文逻辑-问题+对策:
+          material_card_id: order_material.problem_solution_case_blocks
+        行文逻辑-提问+回答:
+          material_card_id: order_material.first_sentence_gate
+        行文逻辑-其他:
+          material_card_id: order_material.dual_anchor_lock
+
+  sentence_order_tail_sentence_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    candidate_type: sentence_block_group
+    enable_order_bridge: true
+    node_to_material_card:
+      tail_conclusion: order_material.tail_sentence_gate
+      tail_countermeasure: order_material.tail_sentence_gate
+    runtime_row_mapping:
+      pattern_tag:
+        结论:
+          material_card_id: order_material.tail_sentence_gate
+        对策:
+          material_card_id: order_material.tail_sentence_gate

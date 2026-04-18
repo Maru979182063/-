@@ -174,19 +174,6 @@ class MaterialPipelineV2Service(ServiceBase):
             cached_item = cached_payload.get(business_family_id)
             if not cached_item:
                 continue
-            if self._cached_item_requires_rebuild(
-                cached_item=cached_item,
-                business_family_id=business_family_id,
-                question_card=question_card,
-            ):
-                rebuilt_item = self._rebuild_cached_item(
-                    material=material,
-                    business_family_id=business_family_id,
-                    question_card=question_card,
-                )
-                if rebuilt_item is None:
-                    continue
-                cached_item = rebuilt_item
             if not self._cached_item_matches_front_filters(cached_item=cached_item, payload=payload):
                 continue
             selected_business_card = str(((cached_item.get("question_ready_context") or {}).get("selected_business_card")) or "")
@@ -367,12 +354,24 @@ class MaterialPipelineV2Service(ServiceBase):
         cached_question_card_id = str(((cached_item.get("question_ready_context") or {}).get("question_card_id")) or "")
         if cached_question_card_id != str(question_card.get("card_id") or ""):
             return True
-        if business_family_id in {"title_selection", "sentence_fill", "sentence_order"}:
+        if business_family_id in {"title_selection", "center_understanding", "sentence_fill", "sentence_order"}:
             scoring = self.pipeline._selected_task_scoring_for_item(
                 item=cached_item,
                 business_family_id=business_family_id,
             )
             if not scoring:
+                return True
+        if business_family_id == "center_understanding":
+            qrc = dict(cached_item.get("question_ready_context") or {})
+            selected_material_card = str(qrc.get("selected_material_card") or cached_item.get("material_card_id") or "")
+            if selected_material_card and not selected_material_card.startswith("center_material."):
+                return True
+            recommendations = [
+                str(value)
+                for value in (cached_item.get("material_card_recommendations") or [])
+                if str(value)
+            ]
+            if recommendations and not any(card_id.startswith("center_material.") for card_id in recommendations):
                 return True
         return False
 
@@ -417,35 +416,11 @@ class MaterialPipelineV2Service(ServiceBase):
             min_card_score=float(payload.get("min_card_score", 0.55) or 0.55),
             min_business_card_score=float(payload.get("min_business_card_score", 0.45) or 0.45),
             require_business_card=False,
-        )
-        if gate_passed:
-            return refreshed
-        rebuilt = self._rebuild_cached_item(
-            material=material,
-            business_family_id=business_family_id,
-            question_card=question_card,
-        )
-        if rebuilt is None:
-            return None
-        rebuilt = self.pipeline.refresh_cached_item(
-            cached_item=rebuilt,
-            query_terms=payload.get("query_terms") or [],
-            target_length=payload.get("target_length"),
-            length_tolerance=payload.get("length_tolerance", 120),
-            enable_anchor_adaptation=payload.get("enable_anchor_adaptation", True),
-            preserve_anchor=payload.get("preserve_anchor", True),
-        )
-        gate_passed, _ = self.pipeline._passes_runtime_material_gate(
-            item=rebuilt,
-            business_family_id=business_family_id,
-            question_card=question_card,
-            min_card_score=float(payload.get("min_card_score", 0.55) or 0.55),
-            min_business_card_score=float(payload.get("min_business_card_score", 0.45) or 0.45),
-            require_business_card=False,
+            skip_llm_adjudication_enforcement=True,
         )
         if not gate_passed:
             return None
-        return rebuilt
+        return refreshed
 
     def _load_review_status_map(self, material_ids: list[str]) -> dict[str, str]:
         if not material_ids:

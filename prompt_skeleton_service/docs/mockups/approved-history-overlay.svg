@@ -1,0 +1,40 @@
+<svg width="1440" height="900" viewBox="0 0 1440 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1440" height="900" fill="#DDE5F1"/>
+  <rect x="72" y="34" width="1296" height="832" rx="30" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <rect x="72" y="34" width="1296" height="96" rx="30" fill="#F7FAFE"/>
+  <text x="116" y="88" fill="#20324D" font-size="34" font-family="Arial" font-weight="700">已确认历史</text>
+  <text x="116" y="116" fill="#63758E" font-size="18" font-family="Arial">累计所有确认通过的题。左边挑题，右边即看即下。</text>
+  <rect x="1210" y="64" width="92" height="40" rx="12" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="1238" y="90" fill="#4A607B" font-size="18" font-family="Arial">关闭</text>
+  <rect x="116" y="162" width="390" height="656" rx="24" fill="#FBFDFF" stroke="#E1EAF5"/>
+  <rect x="138" y="190" width="346" height="122" rx="18" fill="#FFFFFF" stroke="#8BB0E9"/>
+  <text x="160" y="226" fill="#20324D" font-size="21" font-family="Arial" font-weight="700">中心理解题 / 中心理解</text>
+  <text x="160" y="256" fill="#61738E" font-size="16" font-family="Arial">2026/04/17 14:32</text>
+  <text x="160" y="287" fill="#61738E" font-size="16" font-family="Arial">材料前几个字……政策执行不是简单传达，而是…</text>
+  <rect x="138" y="330" width="346" height="122" rx="18" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="160" y="366" fill="#20324D" font-size="21" font-family="Arial" font-weight="700">语句填空题 / 语句填空</text>
+  <text x="160" y="396" fill="#61738E" font-size="16" font-family="Arial">2026/04/16 20:11</text>
+  <text x="160" y="427" fill="#61738E" font-size="16" font-family="Arial">材料前几个字……城市更新要避免只重外观、不顾…</text>
+  <rect x="138" y="470" width="346" height="122" rx="18" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="160" y="506" fill="#20324D" font-size="21" font-family="Arial" font-weight="700">语句排序题 / 语句排序</text>
+  <text x="160" y="536" fill="#61738E" font-size="16" font-family="Arial">2026/04/15 10:47</text>
+  <text x="160" y="567" fill="#61738E" font-size="16" font-family="Arial">材料前几个字……真正的基层协同，不是把任务层层…</text>
+  <rect x="536" y="162" width="768" height="112" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="204" fill="#20324D" font-size="28" font-family="Arial" font-weight="700">中心理解题 / 中心理解</text>
+  <text x="566" y="235" fill="#61738E" font-size="17" font-family="Arial">最近更新时间：2026/04/17 14:32</text>
+  <rect x="1012" y="188" width="120" height="44" rx="14" fill="#F3F8FE" stroke="#8BB0E9"/>
+  <text x="1036" y="216" fill="#275B97" font-size="18" font-family="Arial" font-weight="700">版本历史</text>
+  <rect x="1148" y="188" width="126" height="44" rx="14" fill="#2F6CC2"/>
+  <text x="1177" y="216" fill="#FFFFFF" font-size="18" font-family="Arial" font-weight="700">下载这题</text>
+  <rect x="536" y="294" width="768" height="184" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="332" fill="#30415E" font-size="22" font-family="Arial" font-weight="700">材料</text>
+  <text x="566" y="370" fill="#4B5F79" font-size="18" font-family="Arial">政策执行并不是把文件精神简单转述下去，而是要在理解现实场景的基础上…</text>
+  <rect x="536" y="500" width="768" height="114" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="538" fill="#30415E" font-size="22" font-family="Arial" font-weight="700">题干</text>
+  <text x="566" y="575" fill="#4B5F79" font-size="18" font-family="Arial">这段文字意在说明的是：</text>
+  <rect x="536" y="636" width="768" height="182" rx="20" fill="#FFFFFF" stroke="#D8E2EF"/>
+  <text x="566" y="674" fill="#30415E" font-size="22" font-family="Arial" font-weight="700">选项与解析</text>
+  <text x="566" y="712" fill="#4B5F79" font-size="17" font-family="Arial">A. 政策执行要结合现实场景理解与转化</text>
+  <text x="566" y="742" fill="#4B5F79" font-size="17" font-family="Arial">B. 政策文件只要传达到位就能自然落地</text>
+  <text x="566" y="772" fill="#4B5F79" font-size="17" font-family="Arial">答案：A　解析：材料强调“理解场景并转化执行”，不是机械传达。</text>
+</svg>

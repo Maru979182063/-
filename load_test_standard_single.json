@@ -1,0 +1,224 @@
+{
+  "base_url": "http://127.0.0.1:8111",
+  "endpoint": "/api/v1/questions/generate",
+  "preset": "standard",
+  "requests": 1,
+  "concurrency": 1,
+  "timeout_seconds": 300.0,
+  "payload": {
+    "question_focus": "center_understanding",
+    "difficulty_level": "medium",
+    "text_direction": "policy",
+    "count": 1,
+    "source_question": {
+      "passage": "人工智能正在进入城市治理、医疗协同和公共服务等领域。技术提升效率的同时，也要求制度设计、伦理审查和数据治理同步跟进。",
+      "stem": "根据材料，下列最适合作为标题的一项是？",
+      "options": {
+        "A": "智能技术应用需要与制度建设同步推进",
+        "B": "只要引入人工智能，治理问题就会自然消失",
+        "C": "技术企业应独自承担全部公共治理责任",
+        "D": "公共服务数字化意味着传统治理方式已经失效"
+      },
+      "answer": "A",
+      "analysis": "A项能够概括材料主旨，兼顾技术应用与制度建设两方面要求。"
+    }
+  },
+  "ready_probe": {
+    "status_code": 200,
+    "service_status": "ready",
+    "continued": true,
+    "payload": {
+      "service": "prompt_skeleton_service",
+      "status": "ready",
+      "checks": [
+        {
+          "name": "config_dir",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+            "exists": true,
+            "kind": "dir"
+          }
+        },
+        {
+          "name": "runtime_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.dev.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "prompt_template_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "question_repository",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+            "exists": true,
+            "repository_initialized": true
+          }
+        },
+        {
+          "name": "config_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "loaded_types": 4,
+            "warnings": []
+          }
+        },
+        {
+          "name": "prompt_template_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "active_templates": 23
+          }
+        },
+        {
+          "name": "runtime_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "materials_base_url": "http://127.0.0.1:8101",
+            "materials_v2_search_path": "/materials/v2/search",
+            "llm_provider": "generation_llm"
+          }
+        },
+        {
+          "name": "passage_service",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "base_url": "http://127.0.0.1:8101",
+            "health_url": "http://127.0.0.1:8101/healthz",
+            "status_code": 200,
+            "reachable": true
+          }
+        }
+      ],
+      "settings": {
+        "config_dir": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+        "runtime_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.dev.yaml",
+        "prompt_template_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+        "question_db_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+        "generation_queue": {
+          "max_concurrent": 3,
+          "max_waiting": 12,
+          "acquire_timeout_seconds": 240
+        }
+      },
+      "runtime_state": {
+        "generation_queue": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "max_concurrent": 3,
+          "max_waiting": 12
+        }
+      }
+    }
+  },
+  "warmup": {
+    "count": 0,
+    "success": 0,
+    "failure": 0
+  },
+  "results": [
+    {
+      "request_index": 1,
+      "started_at": 1776329961.6702635,
+      "duration_ms": 5732.63,
+      "status_code": 502,
+      "ok": false,
+      "batch_id": null,
+      "item_count": null,
+      "request_id": "49101596-9b65-4e4c-9c1c-31f3b0e65e96",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 1,
+      "waiting_requests": 0,
+      "error_message": "No eligible materials were returned by passage_service.",
+      "error_reason": null,
+      "error_details": {
+        "question_type": "main_idea",
+        "request_id": "49101596-9b65-4e4c-9c1c-31f3b0e65e96"
+      }
+    }
+  ],
+  "summary": {
+    "success_count": 0,
+    "failure_count": 1,
+    "success_rate": 0.0,
+    "throughput_rps": 0.174,
+    "total_seconds": 5.735,
+    "latency_ms": {
+      "min": 5732.63,
+      "avg": 5732.63,
+      "p50": 5732.63,
+      "p90": 5732.63,
+      "p95": 5732.63,
+      "max": 5732.63
+    },
+    "queue": {
+      "queued_request_count": 0,
+      "max_queue_position_seen": 0,
+      "wait_seconds_avg": 0.0,
+      "wait_seconds_p95": 0.0,
+      "wait_seconds_max": 0.0
+    },
+    "status_codes": {
+      "502": 1
+    },
+    "error_reasons": {
+      "unknown": 1
+    }
+  },
+  "diagnostics": {
+    "sample_count": 4,
+    "max_active_requests": 1,
+    "max_waiting_requests": 0,
+    "samples": [
+      {
+        "captured_at": 1776329961.6679485,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329963.5780349,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329965.4223075,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776329967.2000382,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 0,
+        "waiting_requests": 0
+      }
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from unittest import TestCase
 
@@ -59,6 +59,138 @@ class QuestionValidatorUnitTest(TestCase):
         self.assertFalse(result.difficulty_review["in_range"])
         self.assertEqual(result.difficulty_review["deviation_count"], 1)
         self.assertIn("difficulty projection is outside the target profile range.", result.errors)
+
+    def test_center_understanding_soft_difficulty_miss_becomes_warning(self) -> None:
+        result = self.validator.validate(
+            question_type="main_idea",
+            business_subtype="center_understanding",
+            generated_question=GeneratedQuestion(
+                question_type="main_idea",
+                business_subtype="center_understanding",
+                stem="这段文字旨在说明（ ）。",
+                options={
+                    "A": "科技创新和产业创新深度融合是提升竞争优势的战略选择",
+                    "B": "国际竞争加剧要求所有技术都尽快完成产业化",
+                    "C": "产业升级只能依靠最新科技成果直接落地",
+                    "D": "新质生产力的发展主要取决于扩大产业规模",
+                },
+                answer="A",
+                analysis="文段先谈国际竞争，再谈产业升级，最后落到科技创新和产业创新深度融合这一总体判断，故A项最能概括全文。",
+            ),
+            material_text="国际科技和产业竞争加剧，要求科技创新前瞻谋划产业化。与此同时，产业转型升级也必须主动吸纳最新科技进展。可见，科技创新和产业创新深度融合已成为提升竞争优势、实现并跑乃至领跑的战略选择。",
+            material_source={
+                "prompt_extras": {
+                    "argument_structure": "phenomenon_analysis",
+                    "main_axis_source": "global_abstraction",
+                    "abstraction_level": "medium",
+                }
+            },
+            validator_contract={
+                "center_understanding": {
+                    "argument_structure": "phenomenon_analysis",
+                    "main_axis_source": "global_abstraction",
+                    "abstraction_level": "medium",
+                }
+            },
+            difficulty_fit={
+                "in_range": False,
+                "deviations": [{"metric": "complexity", "target_min": 0.38, "target_max": 0.62, "actual": 0.29}],
+            },
+        )
+
+        self.assertNotIn("difficulty projection is outside the target profile range.", result.errors)
+        self.assertIn("center_understanding difficulty projection is slightly below the target profile range.", result.warnings)
+
+    def test_center_understanding_soft_distractor_similarity_miss_becomes_warning(self) -> None:
+        result = self.validator.validate(
+            question_type="main_idea",
+            business_subtype="center_understanding",
+            generated_question=GeneratedQuestion(
+                question_type="main_idea",
+                business_subtype="center_understanding",
+                stem="这段文字旨在说明（ ）。",
+                options={
+                    "A": "科技创新和产业创新深度融合是提升竞争优势的重要抓手",
+                    "B": "产业升级必须同步吸收科技创新成果才能形成持续竞争力",
+                    "C": "科技成果转化速度加快对产业布局提出更高前瞻要求",
+                    "D": "科技创新和产业创新深度融合已成为培育新质生产力的战略选择",
+                },
+                answer="D",
+                analysis="文段先从国际竞争和技术周期缩短切入，再说明产业体系必须吸纳科技成果，最后总结科技创新和产业创新深度融合已成为培育新质生产力的战略选择，D项概括最全面。",
+            ),
+            material_text="在国际科技和产业竞争中，技术从发现到应用、产业化的周期不断缩短。科技创新必须前瞻性对接产业化方向，产业体系也要主动吸纳最新科技成果。可见，科技创新和产业创新深度融合已经成为培育新质生产力的战略选择。",
+            difficulty_fit={
+                "in_range": False,
+                "deviations": [
+                    {
+                        "metric": "distractor_similarity",
+                        "target_min": 0.45,
+                        "target_max": 0.72,
+                        "actual": 0.78,
+                    }
+                ],
+            },
+        )
+
+        self.assertNotIn("difficulty projection is outside the target profile range.", result.errors)
+        self.assertIn(
+            "center_understanding difficulty projection is slightly below the target profile range.",
+            result.warnings,
+        )
+
+    def test_sentence_order_soft_difficulty_miss_requires_sound_structure(self) -> None:
+        checks = {
+            "sentence_order_unique_opener": {"passed": True, "status": "active"},
+            "sentence_order_binding_pairs": {"passed": True, "status": "active"},
+            "sentence_order_closure": {"passed": True, "status": "active"},
+            "sentence_order_exchange_risk": {"passed": True, "status": "active"},
+            "sentence_order_multi_path_risk": {"passed": True, "status": "active"},
+            "sentence_order_function_overlap": {"passed": True, "status": "active"},
+            "sentence_order_unique_answer_strength": {"passed": True, "status": "active"},
+            "sentence_order_single_truth_option": {"passed": True},
+            "sentence_order_answer_binding": {"passed": True},
+            "sentence_order_analysis_binding": {"passed": True},
+            "sentence_order_head_enforcement": {"passed": True},
+            "sentence_order_tail_enforcement": {"passed": True},
+            "sentence_order_binding_enforcement": {"passed": True},
+        }
+        difficulty_review = {
+            "in_range": False,
+            "deviation_count": 1,
+            "deviations": [{"metric": "complexity", "target_min": 0.42, "target_max": 0.62, "actual": 0.36}],
+        }
+
+        self.assertTrue(
+            self.validator._is_sentence_order_soft_difficulty_miss(
+                difficulty_review=difficulty_review,
+                checks=checks,
+            )
+        )
+        checks["sentence_order_binding_pairs"]["passed"] = False
+        self.assertFalse(
+            self.validator._is_sentence_order_soft_difficulty_miss(
+                difficulty_review=difficulty_review,
+                checks=checks,
+            )
+        )
+
+    def test_sentence_order_natural_openers_get_opening_credit(self) -> None:
+        ifengshuo = self.validator._sentence_order_unit_opener_score("如果说制度与技术的完善为残疾学生搭建了受教育的平台，那么特教教师则是连接最后一公里的关键桥梁。", index=0)
+        quoted = self.validator._sentence_order_unit_opener_score("在《辞源》里，“寿岳”的注释就是南岳。", index=0)
+        concessive = self.validator._sentence_order_unit_opener_score("虽然数字变了又变，但有一点从来没变过：祝融峰是南岳主峰和最高峰。", index=0)
+        dependent = self.validator._sentence_order_unit_opener_score("这也意味着后续讨论必须回到制度执行层面。", index=0)
+
+        self.assertGreater(ifengshuo, dependent)
+        self.assertGreater(quoted, dependent)
+        self.assertGreater(concessive, dependent)
+        self.assertEqual(
+            self.validator._sentence_order_unit_role("如果说制度与技术的完善为残疾学生搭建了受教育的平台，那么特教教师则是连接最后一公里的关键桥梁。"),
+            "opening_anchor",
+        )
+        self.assertEqual(
+            self.validator._sentence_order_unit_role("虽然数字变了又变，但有一点从来没变过：祝融峰是南岳主峰和最高峰。"),
+            "opening_anchor",
+        )
 
     def test_validator_fails_when_analysis_explicitly_points_to_different_answer(self) -> None:
         result = self.validator.validate(
@@ -228,6 +360,24 @@ class QuestionValidatorUnitTest(TestCase):
         self.assertNotIn("sentence_order_binding_pairs", {k: v for k, v in result.checks.items() if v.get("source") == "compatibility_source_question_analysis"})
         self.assertNotIn("sentence_order_timeline_reasoning", result.checks)
 
+    def test_sentence_order_runtime_roles_override_source_question_analysis_roles(self) -> None:
+        roles = self.validator._extract_sentence_order_roles(
+            {
+                "material_source": {
+                    "prompt_extras": {
+                        "sentence_roles": {"1": "thesis", "6": "conclusion"},
+                    }
+                },
+                "source_question_analysis": {
+                    "structure_constraints": {
+                        "sentence_roles": {"3": "conclusion"},
+                    }
+                },
+            }
+        )
+
+        self.assertEqual(roles, {1: "thesis", 6: "conclusion"})
+
     def test_sentence_order_contract_enforces_card_specific_constraints(self) -> None:
         generated_question = GeneratedQuestion(
             question_type="sentence_order",
@@ -320,6 +470,215 @@ class QuestionValidatorUnitTest(TestCase):
         )
         self.assertTrue(result.checks["sentence_fill_bridge_reasoning"]["passed"])
 
+    def test_sentence_fill_standard_prompt_is_recognized(self) -> None:
+        generated_question = GeneratedQuestion(
+            question_type="sentence_fill",
+            stem="下列句子填入文中横线处，最恰当的一项是：",
+            options={
+                "A": "这句话承接前文并自然引出后文。",
+                "B": "这句话只重复后文。",
+                "C": "这句话改写了无关话题。",
+                "D": "这句话直接给出宏观结论。",
+            },
+            answer="A",
+            analysis="A项既承接前文，也引出后文，适合填入横线处。",
+        )
+
+        result = self.validator.validate(
+            question_type="sentence_fill",
+            generated_question=generated_question,
+            material_text="前文先提出背景。____。后文继续展开做法。",
+            material_source={
+                "prompt_extras": {
+                    "fill_ready_material": "前文先提出背景。____。后文继续展开做法。",
+                    "blank_position": "middle",
+                    "function_type": "bridge",
+                }
+            },
+            difficulty_fit={"in_range": True, "deviations": []},
+        )
+
+        self.assertTrue(result.checks["sentence_fill_exam_style_prompt"]["passed"])
+        self.assertNotIn(
+            "sentence_fill stem does not look like a standard fill-in-the-blank prompt.",
+            result.warnings,
+        )
+
+    def test_sentence_fill_requires_original_removed_sentence_when_flag_enabled(self) -> None:
+        anchor_sentence = "因此，必须完善协同机制，持续提升治理效能。"
+        generated_question = GeneratedQuestion(
+            question_type="sentence_fill",
+            stem="填入画横线部分最恰当的一句是（    ）。",
+            options={
+                "A": anchor_sentence,
+                "B": "因此，应持续优化治理体系，推进高质量发展。",
+                "C": "可见，治理效率提升主要依赖制度改革。",
+                "D": "总之，前文已经完整解释了问题成因。",
+            },
+            answer="A",
+            analysis="A项与前后文衔接自然，且与被挖原句一致，最适合填入。",
+        )
+
+        result = self.validator.validate(
+            question_type="sentence_fill",
+            generated_question=generated_question,
+            material_text="前文分析现实压力。____。后文展开执行路径。",
+            material_source={
+                "prompt_extras": {
+                    "fill_ready_material": "前文分析现实压力。____。后文展开执行路径。",
+                    "answer_anchor_text": anchor_sentence,
+                    "require_original_answer_sentence": True,
+                    "blank_position": "middle",
+                    "function_type": "bridge",
+                }
+            },
+            difficulty_fit={"in_range": True, "deviations": []},
+        )
+
+        self.assertTrue(result.checks["sentence_fill_anchor_grounding"]["passed"])
+        self.assertTrue(result.checks["sentence_fill_anchor_grounding"]["exact_anchor_match"])
+        self.assertTrue(result.checks["sentence_fill_material_question_consistency"]["passed"])
+        self.assertNotIn("sentence_fill correct option must be the original removed sentence.", result.errors)
+
+    def test_sentence_fill_rejects_paraphrase_when_original_answer_is_required(self) -> None:
+        generated_question = GeneratedQuestion(
+            question_type="sentence_fill",
+            stem="填入画横线部分最恰当的一句是（    ）。",
+            options={
+                "A": "因此，应持续优化治理体系，推进高质量发展。",
+                "B": "因此，必须完善协同机制，持续提升治理效能。",
+                "C": "可见，治理效率提升主要依赖制度改革。",
+                "D": "总之，前文已经完整解释了问题成因。",
+            },
+            answer="A",
+            analysis="A项与前后文衔接较好，能够承接语义。",
+        )
+
+        result = self.validator.validate(
+            question_type="sentence_fill",
+            generated_question=generated_question,
+            material_text="前文分析现实压力。____。后文展开执行路径。",
+            material_source={
+                "prompt_extras": {
+                    "fill_ready_material": "前文分析现实压力。____。后文展开执行路径。",
+                    "answer_anchor_text": "因此，必须完善协同机制，持续提升治理效能。",
+                    "require_original_answer_sentence": True,
+                    "blank_position": "middle",
+                    "function_type": "bridge",
+                }
+            },
+            difficulty_fit={"in_range": True, "deviations": []},
+        )
+
+        self.assertFalse(result.checks["sentence_fill_anchor_grounding"]["passed"])
+        self.assertFalse(result.checks["sentence_fill_anchor_grounding"]["exact_anchor_match"])
+        self.assertIn("sentence_fill correct option must be the original removed sentence.", result.errors)
+        self.assertIn("sentence_fill_material_question_consistency_fail", result.errors)
+
+    def test_sentence_fill_prefers_local_validator_material_for_blank_position(self) -> None:
+        generated_question = GeneratedQuestion(
+            question_type="sentence_fill",
+            stem="下列句子填入文中横线处，最恰当的一项是：",
+            options={
+                "A": "因此，必须从制度协同和资源配置两端同时发力。",
+                "B": "这一问题主要来自历史条件差异。",
+                "C": "例如，可以再补充一个案例。",
+                "D": "总之，前文已经说明了全部结论。",
+            },
+            answer="A",
+            analysis="A项放在文末能够承接前文分析，并自然落到解决路径上。",
+        )
+
+        result = self.validator.validate(
+            question_type="sentence_fill",
+            generated_question=generated_question,
+            material_text="前文分析现实压力。中间补充政策背景。____",
+            material_source={
+                "prompt_extras": {
+                    "fill_ready_material": "第一段先交代现实压力。第二句补充政策背景。第三句分析执行难点。____",
+                    "fill_ready_local_material": "第三句分析执行难点。____",
+                    "blank_position": "ending",
+                    "function_type": "countermeasure",
+                }
+            },
+            validator_contract={"sentence_fill": {"blank_position": "ending", "function_type": "countermeasure"}},
+            difficulty_fit={"in_range": True, "deviations": []},
+        )
+
+        self.assertEqual(
+            result.checks["sentence_fill_runtime_material_form"]["validation_source"],
+            "material_source.prompt_extras.fill_ready_local_material",
+        )
+        self.assertEqual(
+            result.checks["sentence_fill_blank_position_alignment"]["generated_blank_position"],
+            "ending",
+        )
+        self.assertNotIn("position_function_mismatch", result.errors)
+
+    def test_sentence_fill_soft_reasoning_depth_miss_becomes_warning(self) -> None:
+        generated_question = GeneratedQuestion(
+            question_type="sentence_fill",
+            stem="下列句子填入文中横线处，最恰当的一项是：",
+            options={
+                "A": "这句话承接前文并自然引出后文。",
+                "B": "这句话只重复后文。",
+                "C": "这句话改写了无关话题。",
+                "D": "这句话直接给出宏观结论。",
+            },
+            answer="A",
+            analysis="A项既承接前文，也引出后文，适合填入横线处。",
+        )
+
+        result = self.validator.validate(
+            question_type="sentence_fill",
+            generated_question=generated_question,
+            material_text="前文先提出背景。____。后文继续展开做法。",
+            material_source={
+                "prompt_extras": {
+                    "fill_ready_material": "前文先提出背景。____。后文继续展开做法。",
+                    "blank_position": "middle",
+                    "function_type": "bridge",
+                }
+            },
+            difficulty_fit={
+                "in_range": False,
+                "deviations": [
+                    {
+                        "metric": "reasoning_depth",
+                        "target_min": 0.38,
+                        "target_max": 0.64,
+                        "actual": 0.30,
+                    }
+                ],
+            },
+        )
+
+        self.assertNotIn("difficulty projection is outside the target profile range.", result.errors)
+        self.assertIn(
+            "sentence_fill difficulty projection is slightly below the target profile range.",
+            result.warnings,
+        )
+
+    def test_main_idea_structure_mode_prefers_explicit_argument_structure_over_business_card(self) -> None:
+        mode = self.validator._derive_main_idea_structure_mode(
+            argument_structure="phenomenon_analysis",
+            main_axis_source="global_abstraction",
+            legacy_structure_type="progressive",
+            business_card_id="title_material.turning_relation_focus",
+        )
+
+        self.assertEqual(mode, "cause_effect")
+
+    def test_main_idea_structure_mode_prefers_explicit_argument_structure_over_legacy_turning(self) -> None:
+        mode = self.validator._derive_main_idea_structure_mode(
+            argument_structure="phenomenon_analysis",
+            main_axis_source="global_abstraction",
+            legacy_structure_type="turning",
+            business_card_id="title_material.turning_relation_focus",
+        )
+
+        self.assertEqual(mode, "cause_effect")
+
     def test_sentence_order_contract_values_override_source_question_analysis(self) -> None:
         generated_question = GeneratedQuestion(
             question_type="sentence_order",
@@ -379,6 +738,68 @@ class QuestionValidatorUnitTest(TestCase):
         self.assertEqual(result.checks["sentence_order_unique_answer_strength"]["source"], "validator_contract")
         self.assertEqual(result.checks["sentence_order_head_tail_reasoning"]["source"], "validator_contract")
         self.assertNotIn("sentence_order_timeline_reasoning", result.checks)
+
+    def test_sentence_order_prefers_generated_original_sentences_for_runtime_material(self) -> None:
+        generated_question = GeneratedQuestion(
+            question_type="sentence_order",
+            stem="将以下6个部分重新排列，语序正确的一项是：",
+            original_sentences=[
+                "在此基础上，才能进一步分析成因。",
+                "要想看清问题，先要回到事实本身。",
+                "只有把事实摆清楚，讨论才有可靠起点。",
+                "找到成因之后，还要比较不同路径的得失。",
+                "因此，结论也就更容易成立。",
+                "经过这样的层层推进，思路才会逐渐完整。",
+            ],
+            correct_order=[2, 3, 1, 4, 6, 5],
+            options={
+                "A": "③①②④⑥⑤",
+                "B": "①②③④⑤⑥",
+                "C": "②①③④⑤⑥",
+                "D": "①③②④⑤⑥",
+            },
+            answer="A",
+            analysis="先看起句是否能作为论述起点，再看尾句是否形成结论收束。",
+        )
+
+        result = self.validator.validate(
+            question_type="sentence_order",
+            generated_question=generated_question,
+            material_text="原始材料抽取失败时的脏文本占位",
+            material_source={
+                "prompt_extras": {
+                    "sortable_units": [
+                        "要想看清问题，先要回到事实本身。",
+                        "只有把事实摆清楚，讨论才有可靠起点。",
+                        "在此基础上，才能进一步分析成因。",
+                        "找到成因之后，还要比较不同路径的得失。",
+                        "经过这样的层层推进，思路才会逐渐完整。",
+                        "因此，结论也就更容易成立。",
+                    ],
+                    "sortable_material_text": (
+                        "① 要想看清问题，先要回到事实本身。\n"
+                        "② 只有把事实摆清楚，讨论才有可靠起点。\n"
+                        "③ 在此基础上，才能进一步分析成因。\n"
+                        "④ 找到成因之后，还要比较不同路径的得失。\n"
+                        "⑤ 经过这样的层层推进，思路才会逐渐完整。\n"
+                        "⑥ 因此，结论也就更容易成立。"
+                    ),
+                }
+            },
+            validator_contract={
+                "sentence_order": {
+                    "sortable_unit_count": 6,
+                    "expected_binding_pair_count": 1,
+                }
+            },
+            difficulty_fit={"in_range": True, "deviations": []},
+        )
+
+        self.assertEqual(
+            result.checks["sentence_order_material_unit_count"]["source"],
+            "generated_question.original_sentences",
+        )
+        self.assertEqual(result.checks["sentence_order_material_unit_count"]["count"], 6)
 
     def test_sentence_fill_validator_contract_overrides_source_analysis_without_runtime_extras(self) -> None:
         generated_question = GeneratedQuestion(

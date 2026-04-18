@@ -1,6 +1,8 @@
 param(
-    [int]$PromptPort = 8000,
-    [int]$PassagePort = 8001,
+    [ValidateSet("default", "mvp", "dev", "uat")]
+    [string]$Profile = "default",
+    [int]$PromptPort = 0,
+    [int]$PassagePort = 0,
     [switch]$StartNgrok,
     [switch]$Reload,
     [string]$NgrokPath = "ngrok",
@@ -12,20 +14,58 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$defaultPromptEnvFile = Join-Path $root ".env.demo"
-$defaultPassageEnvFile = Join-Path $root "passage_service\\.env"
-if (-not $PromptEnvFile) {
-    $PromptEnvFile = $defaultPromptEnvFile
-}
-if (-not $PassageEnvFile) {
-    if (Test-Path $defaultPassageEnvFile) {
-        $PassageEnvFile = $defaultPassageEnvFile
-    } else {
-        $PassageEnvFile = $defaultPromptEnvFile
+$profileName = if ($Profile -eq "uat") { "mvp" } else { $Profile }
+$profileDefaults = @{
+    "default" = @{
+        PromptPort = 8000
+        PassagePort = 8001
+        PromptEnvFiles = @(
+            (Join-Path $root ".env.demo")
+        )
+        PassageEnvFiles = @(
+            (Join-Path $root "passage_service\.env")
+        )
+    }
+    "mvp" = @{
+        PromptPort = 8011
+        PassagePort = 8001
+        PromptEnvFiles = @(
+            (Join-Path $root ".env.demo"),
+            (Join-Path $root ".env.mvp")
+        )
+        PassageEnvFiles = @(
+            (Join-Path $root ".env.demo"),
+            (Join-Path $root "passage_service\.env.mvp")
+        )
+    }
+    "dev" = @{
+        PromptPort = 8111
+        PassagePort = 8101
+        PromptEnvFiles = @(
+            (Join-Path $root ".env.demo"),
+            (Join-Path $root ".env.dev")
+        )
+        PassageEnvFiles = @(
+            (Join-Path $root ".env.demo"),
+            (Join-Path $root "passage_service\.env.dev")
+        )
     }
 }
-$promptPython = Join-Path $root ".venv\\Scripts\\python.exe"
-$passagePython = Join-Path $root "passage_service\\.venv\\Scripts\\python.exe"
+
+if (-not $profileDefaults.ContainsKey($profileName)) {
+    throw "Unsupported profile: $Profile"
+}
+
+$activeProfile = $profileDefaults[$profileName]
+if ($PromptPort -le 0) {
+    $PromptPort = [int]$activeProfile.PromptPort
+}
+if ($PassagePort -le 0) {
+    $PassagePort = [int]$activeProfile.PassagePort
+}
+
+$promptPython = Join-Path $root ".venv\Scripts\python.exe"
+$passagePython = Join-Path $root "passage_service\.venv\Scripts\python.exe"
 
 function Wait-HttpReady {
     param(
@@ -38,7 +78,7 @@ function Wait-HttpReady {
     do {
         try {
             $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5
-            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
                 Write-Host "$Name is ready: $Url" -ForegroundColor Green
                 return
             }
@@ -48,6 +88,26 @@ function Wait-HttpReady {
     } while ((Get-Date) -lt $deadline)
 
     throw "$Name did not become ready within $TimeoutSeconds seconds: $Url"
+}
+
+function Assert-PortAvailable {
+    param(
+        [int]$Port,
+        [string]$Name
+    )
+
+    $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $listener) {
+        return
+    }
+
+    $processSummary = "unknown process"
+    $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
+    if ($processInfo) {
+        $processSummary = if ($processInfo.CommandLine) { $processInfo.CommandLine } else { $processInfo.Name }
+    }
+
+    throw "$Name cannot start because port $Port is already in use by PID $($listener.OwningProcess): $processSummary"
 }
 
 function Start-UvicornService {
@@ -90,7 +150,22 @@ function Start-UvicornService {
         $psi.Environment[$entry.Name] = $entry.Value
     }
 
-    foreach ($name in @("OPENAI_API_KEY", "OPENAI_BASE_URL", "PASSAGE_OPENAI_API_KEY", "PASSAGE_OPENAI_BASE_URL", "PROMPT_SERVICE_SECURITY_ENABLED", "PROMPT_SERVICE_API_TOKEN", "PROMPT_SERVICE_RATE_LIMIT_PER_MINUTE")) {
+    foreach ($name in @(
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "PASSAGE_OPENAI_API_KEY",
+        "PASSAGE_OPENAI_BASE_URL",
+        "PASSAGE_DATABASE_URL",
+        "PASSAGE_ALLOW_NON_PRIMARY_DATABASE",
+        "PASSAGE_DISABLE_SCHEDULER",
+        "PROMPT_SERVICE_SECURITY_ENABLED",
+        "PROMPT_SERVICE_API_TOKEN",
+        "PROMPT_SERVICE_RATE_LIMIT_PER_MINUTE",
+        "PROMPT_RUNTIME_CONFIG_PATH",
+        "PROMPT_TEMPLATE_CONFIG_PATH",
+        "PROMPT_DATA_DIR",
+        "PROMPT_QUESTION_DB_PATH"
+    )) {
         if ($psi.Environment.ContainsKey($name)) {
             [void]$psi.Environment.Remove($name)
         }
@@ -138,8 +213,49 @@ function Read-DemoEnvFile {
     return $envMap
 }
 
-$promptEnv = Read-DemoEnvFile -Path $PromptEnvFile
-$passageEnv = Read-DemoEnvFile -Path $PassageEnvFile
+function Resolve-EnvFileList {
+    param(
+        [string]$ExplicitPath,
+        [object[]]$DefaultPaths
+    )
+
+    if ($ExplicitPath) {
+        return @($ExplicitPath)
+    }
+    return @($DefaultPaths | Where-Object { $_ })
+}
+
+function Read-DemoEnvFiles {
+    param([string[]]$Paths)
+
+    $merged = @{}
+    $loadedPaths = @()
+    foreach ($path in $Paths) {
+        if (-not $path) {
+            continue
+        }
+        if (-not (Test-Path $path)) {
+            Write-Host "Env file not found at $path, skipping dotenv load." -ForegroundColor DarkYellow
+            continue
+        }
+        $loadedPaths += $path
+        $envMap = Read-DemoEnvFile -Path $path
+        foreach ($key in $envMap.Keys) {
+            $merged[$key] = $envMap[$key]
+        }
+    }
+    return @{
+        Map = $merged
+        LoadedPaths = $loadedPaths
+    }
+}
+
+$promptEnvFiles = Resolve-EnvFileList -ExplicitPath $PromptEnvFile -DefaultPaths $activeProfile.PromptEnvFiles
+$passageEnvFiles = Resolve-EnvFileList -ExplicitPath $PassageEnvFile -DefaultPaths $activeProfile.PassageEnvFiles
+$promptEnvBundle = Read-DemoEnvFiles -Paths $promptEnvFiles
+$passageEnvBundle = Read-DemoEnvFiles -Paths $passageEnvFiles
+$promptEnv = $promptEnvBundle.Map
+$passageEnv = $passageEnvBundle.Map
 
 if (-not (Test-Path $promptPython)) {
     throw "Prompt service Python runtime not found at $promptPython"
@@ -151,13 +267,16 @@ if (-not (Test-Path $passagePython)) {
 
 $promptDir = Join-Path $root "prompt_skeleton_service"
 $passageDir = Join-Path $root "passage_service"
+Write-Host "Profile: $profileName" -ForegroundColor DarkCyan
+Assert-PortAvailable -Port $PassagePort -Name "passage_service"
 Write-Host "Starting passage_service on http://127.0.0.1:$PassagePort" -ForegroundColor Cyan
 Start-UvicornService -PythonPath $passagePython -WorkingDirectory $passageDir -Port $PassagePort -EnvMap $passageEnv
-Wait-HttpReady -Url "http://127.0.0.1:$PassagePort/docs" -TimeoutSeconds 90 -Name "passage_service"
+Wait-HttpReady -Url "http://127.0.0.1:$PassagePort/readyz" -TimeoutSeconds 90 -Name "passage_service"
 
+Assert-PortAvailable -Port $PromptPort -Name "prompt_skeleton_service"
 Write-Host "Starting prompt_skeleton_service on http://127.0.0.1:$PromptPort" -ForegroundColor Cyan
 Start-UvicornService -PythonPath $promptPython -WorkingDirectory $promptDir -Port $PromptPort -EnvMap $promptEnv
-Wait-HttpReady -Url "http://127.0.0.1:$PromptPort/healthz" -TimeoutSeconds 90 -Name "prompt_skeleton_service"
+Wait-HttpReady -Url "http://127.0.0.1:$PromptPort/readyz" -TimeoutSeconds 90 -Name "prompt_skeleton_service"
 
 if ($StartNgrok) {
     if (-not $NgrokAuthtoken) {
@@ -181,11 +300,16 @@ Write-Host ""
 Write-Host "Demo services launched." -ForegroundColor Green
 Write-Host "prompt_skeleton_service: http://127.0.0.1:$PromptPort"
 Write-Host "passage_service: http://127.0.0.1:$PassagePort"
-Write-Host "prompt env: $PromptEnvFile"
-Write-Host "passage env: $PassageEnvFile"
+Write-Host "prompt diagnostics: http://127.0.0.1:$PromptPort/api/v1/diagnostics/dependencies"
+Write-Host "passage diagnostics: http://127.0.0.1:$PassagePort/api/v1/diagnostics/runtime"
+Write-Host "prompt env files: $([string]::Join(', ', $promptEnvBundle.LoadedPaths))"
+Write-Host "passage env files: $([string]::Join(', ', $passageEnvBundle.LoadedPaths))"
 Write-Host ""
 Write-Host "Optional security env vars before startup:" -ForegroundColor DarkGray
 Write-Host "  PROMPT_SERVICE_API_TOKEN"
 Write-Host "  PROMPT_SERVICE_SECURITY_ENABLED=true"
 Write-Host "  PROMPT_SERVICE_RATE_LIMIT_PER_MINUTE=120"
+Write-Host "  PROMPT_GENERATION_MAX_CONCURRENT=2"
+Write-Host "  PROMPT_GENERATION_MAX_QUEUE=12"
+Write-Host "  PROMPT_GENERATION_ACQUIRE_TIMEOUT_SECONDS=240"
 Write-Host "  NGROK_AUTHTOKEN=<your-ngrok-token>"

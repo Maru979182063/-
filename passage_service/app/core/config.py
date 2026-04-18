@@ -23,6 +23,69 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
     disable_scheduler: bool = False
+    allow_non_primary_database: bool = False
+    expected_primary_database_name: str = "passage_service.db"
+    db_pool_size: int = 20
+    db_max_overflow: int = 40
+    db_pool_timeout_seconds: float = 60.0
+    db_pool_recycle_seconds: int = 1800
+
+    @property
+    def service_root(self) -> Path:
+        return Path(__file__).resolve().parents[2]
+
+    @property
+    def resolved_database_url(self) -> str:
+        raw = (self.database_url or "").strip()
+        if not raw.startswith("sqlite:///"):
+            return raw
+        suffix = raw[len("sqlite:///") :]
+        db_path = Path(suffix)
+        if not db_path.is_absolute():
+            db_path = (self.service_root / db_path).resolve()
+        return f"sqlite:///{db_path.as_posix()}"
+
+    @property
+    def resolved_database_path(self) -> Path | None:
+        raw = (self.resolved_database_url or "").strip()
+        if not raw.startswith("sqlite:///"):
+            return None
+        return Path(raw[len("sqlite:///") :]).resolve()
+
+    @property
+    def database_mode(self) -> str:
+        db_path = self.resolved_database_path
+        if db_path is None:
+            return "non_sqlite"
+        name = db_path.name.lower()
+        expected = self.expected_primary_database_name.lower()
+        if name == expected:
+            return "primary"
+        if ".mvp." in name or name.endswith(".mvp.db"):
+            return "mvp"
+        if ".dev." in name or name.endswith(".dev.db"):
+            return "dev"
+        return "custom"
+
+    @property
+    def database_is_primary(self) -> bool:
+        return self.database_mode == "primary"
+
+    @property
+    def database_guard(self) -> dict[str, Any]:
+        db_path = self.resolved_database_path
+        return {
+            "configured_database_url": self.database_url,
+            "resolved_database_url": self.resolved_database_url,
+            "resolved_database_path": str(db_path) if db_path else None,
+            "database_mode": self.database_mode,
+            "expected_primary_database_name": self.expected_primary_database_name,
+            "allow_non_primary_database": self.allow_non_primary_database,
+            "db_pool_size": self.db_pool_size,
+            "db_max_overflow": self.db_max_overflow,
+            "db_pool_timeout_seconds": self.db_pool_timeout_seconds,
+            "db_pool_recycle_seconds": self.db_pool_recycle_seconds,
+        }
 
     @property
     def resolved_openai_api_key(self) -> str | None:

@@ -57,6 +57,7 @@ class QuestionItem(BaseModel):
     current_status: str = "draft"
     latest_action: str | None = None
     latest_action_at: str | None = None
+    manual_override_active: bool = False
     selected_pattern: str
     pattern_selection_reason: PatternSelectionReason | None = None
     resolved_slots: dict[str, Any]

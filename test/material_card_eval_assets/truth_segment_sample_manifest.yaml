@@ -1,0 +1,2262 @@
+schema_version: truth_segment_sample_manifest.v1
+source_mapping: C:\Users\Maru\Documents\agent\card_specs\normalized\runtime_mappings\distill_material_card_id_mapping.yaml
+selection_policy:
+  train_count_per_batch: 10
+  holdout_count_per_batch: 5
+  group_key_priority:
+  - pattern_tag
+  - subfamily
+  - source_doc
+  distribution: round_robin_by_group
+batches:
+  center_understanding_relation_words_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 249
+      clean_rows: 249
+      negative_rows: 0
+      group_count: 5
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.center_understanding.10319924::变形考法::变形考法.docx
+      sample_id: truth.center_understanding.10319924
+      question_id: '10319924'
+      source_doc: 变形考法.docx
+      subfamily: 关联词
+      pattern_tag: 变形考法
+      group_key: pattern_tag:变形考法
+      expected_material_card_id: center_material.relation_variant
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10319917::对策::对策.docx
+      sample_id: truth.center_understanding.10319917
+      question_id: '10319917'
+      source_doc: 对策.docx
+      subfamily: 关联词
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: center_material.relation_countermeasure
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10227153::并列::并列.docx
+      sample_id: truth.center_understanding.10227153
+      question_id: '10227153'
+      source_doc: 并列.docx
+      subfamily: 关联词
+      pattern_tag: 并列
+      group_key: pattern_tag:并列
+      expected_material_card_id: center_material.relation_parallel
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10530622::普通考法::普通考法.docx
+      sample_id: truth.center_understanding.10530622
+      question_id: '10530622'
+      source_doc: 普通考法.docx
+      subfamily: 关联词
+      pattern_tag: 普通考法
+      group_key: pattern_tag:普通考法
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10319905::转折::转折.docx
+      sample_id: truth.center_understanding.10319905
+      question_id: '10319905'
+      source_doc: 转折.docx
+      subfamily: 关联词
+      pattern_tag: 转折
+      group_key: pattern_tag:转折
+      expected_material_card_id: center_material.relation_turning
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.11155133::变形考法::变形考法.docx
+      sample_id: truth.center_understanding.11155133
+      question_id: '11155133'
+      source_doc: 变形考法.docx
+      subfamily: 关联词
+      pattern_tag: 变形考法
+      group_key: pattern_tag:变形考法
+      expected_material_card_id: center_material.relation_variant
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10319969::对策::对策.docx
+      sample_id: truth.center_understanding.10319969
+      question_id: '10319969'
+      source_doc: 对策.docx
+      subfamily: 关联词
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: center_material.relation_countermeasure
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10319970::并列::并列.docx
+      sample_id: truth.center_understanding.10319970
+      question_id: '10319970'
+      source_doc: 并列.docx
+      subfamily: 关联词
+      pattern_tag: 并列
+      group_key: pattern_tag:并列
+      expected_material_card_id: center_material.relation_parallel
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10530623::普通考法::普通考法.docx
+      sample_id: truth.center_understanding.10530623
+      question_id: '10530623'
+      source_doc: 普通考法.docx
+      subfamily: 关联词
+      pattern_tag: 普通考法
+      group_key: pattern_tag:普通考法
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10530625::转折::转折.docx
+      sample_id: truth.center_understanding.10530625
+      question_id: '10530625'
+      source_doc: 转折.docx
+      subfamily: 关联词
+      pattern_tag: 转折
+      group_key: pattern_tag:转折
+      expected_material_card_id: center_material.relation_turning
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.center_understanding.11209634::变形考法::变形考法.docx
+      sample_id: truth.center_understanding.11209634
+      question_id: '11209634'
+      source_doc: 变形考法.docx
+      subfamily: 关联词
+      pattern_tag: 变形考法
+      group_key: pattern_tag:变形考法
+      expected_material_card_id: center_material.relation_variant
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.10765911::对策::对策.docx
+      sample_id: truth.center_understanding.10765911
+      question_id: '10765911'
+      source_doc: 对策.docx
+      subfamily: 关联词
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: center_material.relation_countermeasure
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.10721707::并列::并列.docx
+      sample_id: truth.center_understanding.10721707
+      question_id: '10721707'
+      source_doc: 并列.docx
+      subfamily: 关联词
+      pattern_tag: 并列
+      group_key: pattern_tag:并列
+      expected_material_card_id: center_material.relation_parallel
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.10765934::普通考法::普通考法.docx
+      sample_id: truth.center_understanding.10765934
+      question_id: '10765934'
+      source_doc: 普通考法.docx
+      subfamily: 关联词
+      pattern_tag: 普通考法
+      group_key: pattern_tag:普通考法
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.11030143::转折::转折.docx
+      sample_id: truth.center_understanding.11030143
+      question_id: '11030143'
+      source_doc: 转折.docx
+      subfamily: 关联词
+      pattern_tag: 转折
+      group_key: pattern_tag:转折
+      expected_material_card_id: center_material.relation_turning
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []
+  center_understanding_special_types_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 84
+      clean_rows: 84
+      negative_rows: 0
+      group_count: 4
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.center_understanding.2160706::主题词、关键词::主题词、关键词.docx
+      sample_id: truth.center_understanding.2160706
+      question_id: '2160706'
+      source_doc: 主题词、关键词.docx
+      subfamily: 特殊题型
+      pattern_tag: 主题词、关键词
+      group_key: pattern_tag:主题词、关键词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.19300266::寓言故事::寓言故事.docx
+      sample_id: truth.center_understanding.19300266
+      question_id: '19300266'
+      source_doc: 寓言故事.docx
+      subfamily: 特殊题型
+      pattern_tag: 寓言故事
+      group_key: pattern_tag:寓言故事
+      expected_material_card_id: center_material.subsentence_example
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.2114352::文言文、散文等::文言文、散文等.docx
+      sample_id: truth.center_understanding.2114352
+      question_id: '2114352'
+      source_doc: 文言文、散文等.docx
+      subfamily: 特殊题型
+      pattern_tag: 文言文、散文等
+      group_key: pattern_tag:文言文、散文等
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.16070105::特殊问法-其他::特殊问法-其他.docx
+      sample_id: truth.center_understanding.16070105
+      question_id: '16070105'
+      source_doc: 特殊问法-其他.docx
+      subfamily: 特殊题型
+      pattern_tag: 特殊问法-其他
+      group_key: pattern_tag:特殊问法-其他
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.2368134::主题词、关键词::主题词、关键词.docx
+      sample_id: truth.center_understanding.2368134
+      question_id: '2368134'
+      source_doc: 主题词、关键词.docx
+      subfamily: 特殊题型
+      pattern_tag: 主题词、关键词
+      group_key: pattern_tag:主题词、关键词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.2010476::寓言故事::寓言故事.docx
+      sample_id: truth.center_understanding.2010476
+      question_id: '2010476'
+      source_doc: 寓言故事.docx
+      subfamily: 特殊题型
+      pattern_tag: 寓言故事
+      group_key: pattern_tag:寓言故事
+      expected_material_card_id: center_material.subsentence_example
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.2169477::文言文、散文等::文言文、散文等.docx
+      sample_id: truth.center_understanding.2169477
+      question_id: '2169477'
+      source_doc: 文言文、散文等.docx
+      subfamily: 特殊题型
+      pattern_tag: 文言文、散文等
+      group_key: pattern_tag:文言文、散文等
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.17913764::特殊问法-其他::特殊问法-其他.docx
+      sample_id: truth.center_understanding.17913764
+      question_id: '17913764'
+      source_doc: 特殊问法-其他.docx
+      subfamily: 特殊题型
+      pattern_tag: 特殊问法-其他
+      group_key: pattern_tag:特殊问法-其他
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.2451242::主题词、关键词::主题词、关键词.docx
+      sample_id: truth.center_understanding.2451242
+      question_id: '2451242'
+      source_doc: 主题词、关键词.docx
+      subfamily: 特殊题型
+      pattern_tag: 主题词、关键词
+      group_key: pattern_tag:主题词、关键词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.2033830::寓言故事::寓言故事.docx
+      sample_id: truth.center_understanding.2033830
+      question_id: '2033830'
+      source_doc: 寓言故事.docx
+      subfamily: 特殊题型
+      pattern_tag: 寓言故事
+      group_key: pattern_tag:寓言故事
+      expected_material_card_id: center_material.subsentence_example
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.center_understanding.2507463::主题词、关键词::主题词、关键词.docx
+      sample_id: truth.center_understanding.2507463
+      question_id: '2507463'
+      source_doc: 主题词、关键词.docx
+      subfamily: 特殊题型
+      pattern_tag: 主题词、关键词
+      group_key: pattern_tag:主题词、关键词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.2033846::寓言故事::寓言故事.docx
+      sample_id: truth.center_understanding.2033846
+      question_id: '2033846'
+      source_doc: 寓言故事.docx
+      subfamily: 特殊题型
+      pattern_tag: 寓言故事
+      group_key: pattern_tag:寓言故事
+      expected_material_card_id: center_material.subsentence_example
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.2400788::文言文、散文等::文言文、散文等.docx
+      sample_id: truth.center_understanding.2400788
+      question_id: '2400788'
+      source_doc: 文言文、散文等.docx
+      subfamily: 特殊题型
+      pattern_tag: 文言文、散文等
+      group_key: pattern_tag:文言文、散文等
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.2010524::特殊问法-其他::特殊问法-其他.docx
+      sample_id: truth.center_understanding.2010524
+      question_id: '2010524'
+      source_doc: 特殊问法-其他.docx
+      subfamily: 特殊题型
+      pattern_tag: 特殊问法-其他
+      group_key: pattern_tag:特殊问法-其他
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.2519063::主题词、关键词::主题词、关键词.docx
+      sample_id: truth.center_understanding.2519063
+      question_id: '2519063'
+      source_doc: 主题词、关键词.docx
+      subfamily: 特殊题型
+      pattern_tag: 主题词、关键词
+      group_key: pattern_tag:主题词、关键词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []
+  center_understanding_standalone_subfamilies_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 97
+      clean_rows: 97
+      negative_rows: 0
+      group_count: 2
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.center_understanding.10003196::::主题词.docx
+      sample_id: truth.center_understanding.10003196
+      question_id: '10003196'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10530612::::程度词.docx
+      sample_id: truth.center_understanding.10530612
+      question_id: '10530612'
+      source_doc: 程度词.docx
+      subfamily: 程度词
+      pattern_tag: ''
+      group_key: subfamily:程度词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10043582::::主题词.docx
+      sample_id: truth.center_understanding.10043582
+      question_id: '10043582'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.12117243::::程度词.docx
+      sample_id: truth.center_understanding.12117243
+      question_id: '12117243'
+      source_doc: 程度词.docx
+      subfamily: 程度词
+      pattern_tag: ''
+      group_key: subfamily:程度词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10043594::::主题词.docx
+      sample_id: truth.center_understanding.10043594
+      question_id: '10043594'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.13314352::::程度词.docx
+      sample_id: truth.center_understanding.13314352
+      question_id: '13314352'
+      source_doc: 程度词.docx
+      subfamily: 程度词
+      pattern_tag: ''
+      group_key: subfamily:程度词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10765910::::主题词.docx
+      sample_id: truth.center_understanding.10765910
+      question_id: '10765910'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.14936781::::程度词.docx
+      sample_id: truth.center_understanding.14936781
+      question_id: '14936781'
+      source_doc: 程度词.docx
+      subfamily: 程度词
+      pattern_tag: ''
+      group_key: subfamily:程度词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10765974::::主题词.docx
+      sample_id: truth.center_understanding.10765974
+      question_id: '10765974'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.15419054::::程度词.docx
+      sample_id: truth.center_understanding.15419054
+      question_id: '15419054'
+      source_doc: 程度词.docx
+      subfamily: 程度词
+      pattern_tag: ''
+      group_key: subfamily:程度词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.center_understanding.10765984::::主题词.docx
+      sample_id: truth.center_understanding.10765984
+      question_id: '10765984'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.15595879::::程度词.docx
+      sample_id: truth.center_understanding.15595879
+      question_id: '15595879'
+      source_doc: 程度词.docx
+      subfamily: 程度词
+      pattern_tag: ''
+      group_key: subfamily:程度词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.11030153::::主题词.docx
+      sample_id: truth.center_understanding.11030153
+      question_id: '11030153'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.16070105::::程度词.docx
+      sample_id: truth.center_understanding.16070105
+      question_id: '16070105'
+      source_doc: 程度词.docx
+      subfamily: 程度词
+      pattern_tag: ''
+      group_key: subfamily:程度词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.11357952::::主题词.docx
+      sample_id: truth.center_understanding.11357952
+      question_id: '11357952'
+      source_doc: 主题词.docx
+      subfamily: 主题词
+      pattern_tag: ''
+      group_key: subfamily:主题词
+      expected_material_card_id: center_material.relation_plain
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []
+  center_understanding_subsentence_features_2026-04-14:
+    business_family_id: center_understanding
+    question_card_id: question.center_understanding.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 228
+      clean_rows: 228
+      negative_rows: 0
+      group_count: 5
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.center_understanding.10208388::举例子::举例子.docx
+      sample_id: truth.center_understanding.10208388
+      question_id: '10208388'
+      source_doc: 举例子.docx
+      subfamily: 分述句特征
+      pattern_tag: 举例子
+      group_key: pattern_tag:举例子
+      expected_material_card_id: center_material.subsentence_example
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10043579::分述句特征（原为 行文脉络）-其他::分述句特征（原为 行文脉络）-其他.docx
+      sample_id: truth.center_understanding.10043579
+      question_id: '10043579'
+      source_doc: 分述句特征（原为 行文脉络）-其他.docx
+      subfamily: 分述句特征
+      pattern_tag: 分述句特征（原为 行文脉络）-其他
+      group_key: pattern_tag:分述句特征（原为 行文脉络）-其他
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.11030144::多角度论述::多角度论述.docx
+      sample_id: truth.center_understanding.11030144
+      question_id: '11030144'
+      source_doc: 多角度论述.docx
+      subfamily: 分述句特征
+      pattern_tag: 多角度论述
+      group_key: pattern_tag:多角度论述
+      expected_material_card_id: center_material.subsentence_multi_angle
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.11030142::引入铺垫::引入铺垫.docx
+      sample_id: truth.center_understanding.11030142
+      question_id: '11030142'
+      source_doc: 引入铺垫.docx
+      subfamily: 分述句特征
+      pattern_tag: 引入铺垫
+      group_key: pattern_tag:引入铺垫
+      expected_material_card_id: center_material.subsentence_prelude
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10820991::数据资料::数据资料.docx
+      sample_id: truth.center_understanding.10820991
+      question_id: '10820991'
+      source_doc: 数据资料.docx
+      subfamily: 分述句特征
+      pattern_tag: 数据资料
+      group_key: pattern_tag:数据资料
+      expected_material_card_id: center_material.subsentence_data
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10765988::举例子::举例子.docx
+      sample_id: truth.center_understanding.10765988
+      question_id: '10765988'
+      source_doc: 举例子.docx
+      subfamily: 分述句特征
+      pattern_tag: 举例子
+      group_key: pattern_tag:举例子
+      expected_material_card_id: center_material.subsentence_example
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.11357413::分述句特征（原为 行文脉络）-其他::分述句特征（原为 行文脉络）-其他.docx
+      sample_id: truth.center_understanding.11357413
+      question_id: '11357413'
+      source_doc: 分述句特征（原为 行文脉络）-其他.docx
+      subfamily: 分述句特征
+      pattern_tag: 分述句特征（原为 行文脉络）-其他
+      group_key: pattern_tag:分述句特征（原为 行文脉络）-其他
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.11316671::多角度论述::多角度论述.docx
+      sample_id: truth.center_understanding.11316671
+      question_id: '11316671'
+      source_doc: 多角度论述.docx
+      subfamily: 分述句特征
+      pattern_tag: 多角度论述
+      group_key: pattern_tag:多角度论述
+      expected_material_card_id: center_material.subsentence_multi_angle
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.15597610::引入铺垫::引入铺垫.docx
+      sample_id: truth.center_understanding.15597610
+      question_id: '15597610'
+      source_doc: 引入铺垫.docx
+      subfamily: 分述句特征
+      pattern_tag: 引入铺垫
+      group_key: pattern_tag:引入铺垫
+      expected_material_card_id: center_material.subsentence_prelude
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.center_understanding.10821312::数据资料::数据资料.docx
+      sample_id: truth.center_understanding.10821312
+      question_id: '10821312'
+      source_doc: 数据资料.docx
+      subfamily: 分述句特征
+      pattern_tag: 数据资料
+      group_key: pattern_tag:数据资料
+      expected_material_card_id: center_material.subsentence_data
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.center_understanding.10821339::举例子::举例子.docx
+      sample_id: truth.center_understanding.10821339
+      question_id: '10821339'
+      source_doc: 举例子.docx
+      subfamily: 分述句特征
+      pattern_tag: 举例子
+      group_key: pattern_tag:举例子
+      expected_material_card_id: center_material.subsentence_example
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.11789781::分述句特征（原为 行文脉络）-其他::分述句特征（原为 行文脉络）-其他.docx
+      sample_id: truth.center_understanding.11789781
+      question_id: '11789781'
+      source_doc: 分述句特征（原为 行文脉络）-其他.docx
+      subfamily: 分述句特征
+      pattern_tag: 分述句特征（原为 行文脉络）-其他
+      group_key: pattern_tag:分述句特征（原为 行文脉络）-其他
+      expected_material_card_id: center_material.subsentence_other
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.11789707::多角度论述::多角度论述.docx
+      sample_id: truth.center_understanding.11789707
+      question_id: '11789707'
+      source_doc: 多角度论述.docx
+      subfamily: 分述句特征
+      pattern_tag: 多角度论述
+      group_key: pattern_tag:多角度论述
+      expected_material_card_id: center_material.subsentence_multi_angle
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.19087318::引入铺垫::引入铺垫.docx
+      sample_id: truth.center_understanding.19087318
+      question_id: '19087318'
+      source_doc: 引入铺垫.docx
+      subfamily: 分述句特征
+      pattern_tag: 引入铺垫
+      group_key: pattern_tag:引入铺垫
+      expected_material_card_id: center_material.subsentence_prelude
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.center_understanding.11209976::数据资料::数据资料.docx
+      sample_id: truth.center_understanding.11209976
+      question_id: '11209976'
+      source_doc: 数据资料.docx
+      subfamily: 分述句特征
+      pattern_tag: 数据资料
+      group_key: pattern_tag:数据资料
+      expected_material_card_id: center_material.subsentence_data
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []
+  sentence_fill_head_start_2026-04-14:
+    business_family_id: sentence_fill
+    question_card_id: question.sentence_fill.standard_v1
+    curation_mode: manual
+    stats:
+      total_rows: 135
+      clean_rows: 121
+      negative_rows: 14
+      group_count: 3
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.sentence_fill.5695745::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.5695745
+      question_id: '5695745'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      expected_material_card_id: fill_material.opening_summary
+      material_text_override: 人工智能准确地识别唇语，还有很长的路要走。从语言本身来看，人类语言具有较高的复杂性，仅有约30%的音标由嘴唇直接控制，其余齿音、舌音和喉音很难通过视觉准确区分。而且，不同人说话的语气、方言、连词和口音，也都会导致嘴型发生细微变化。
+      repair_notes:
+      - prepend_answer_before_leading_punct
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.11030149::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.11030149
+      question_id: '11030149'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      expected_material_card_id: fill_material.opening_summary
+      material_text_override: 随着养老服务日趋体系化、多元化，行业的人才需求也更加旺盛。各地纷纷推出补贴、落户等红利政策，养老机构中35岁及以下职工人数也呈递增趋势。
+      repair_notes:
+      - prepend_answer_before_leading_punct
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.10765912::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.10765912
+      question_id: '10765912'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      expected_material_card_id: fill_material.opening_summary
+      material_text_override: 乡村休闲旅游不仅是一种旅游方式，更是一种追求宁静自由的生活态度。在快节奏的都市生活中，人们越来越向往乡村的宁静与美好，而乡村休闲旅游恰好满足了这一需求。它能让城市居民暂时忘却都市的喧嚣，走进乡村的怀抱，感受大自然的恩赐，体验那份久违的宁静与美好。乡村休闲旅游，正是为了那些渴望回归乡村生活的人们准备的最好去处。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.4661077::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.4661077
+      question_id: '4661077'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      expected_material_card_id: fill_material.opening_summary
+      material_text_override: 中华民族历来是爱好和平的民族。在五千多年的文明发展中，中华民族一直追求和传承着和平、和睦、和谐的坚定理念，中华民族的血液中没有侵略他人、称霸世界的基因。张骞出使西域、郑和远航都带去的不是火与剑，而是和平友谊的种子。
+      repair_notes:
+      - prepend_answer_before_leading_punct
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.4884578::横线在开头-话题引入::横线在开头-话题引入.docx
+      sample_id: truth.sentence_fill.4884578
+      question_id: '4884578'
+      source_doc: 横线在开头-话题引入.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-话题引入
+      group_key: pattern_tag:横线在开头-话题引入
+      expected_material_card_id: fill_material.opening_topic_intro
+      material_text_override: 虽然父亲为子女带来的往往是爱与关怀，但有时父亲与子女也难免存在分歧和对立。一个典型的例子发生在英国著名作家艾德蒙·戈斯的回忆录《父与子》中。
+      repair_notes:
+      - strip_tail:填入括号部分最恰当的一项是
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.11209953::横线在开头-话题引入::横线在开头-话题引入.docx
+      sample_id: truth.sentence_fill.11209953
+      question_id: '11209953'
+      source_doc: 横线在开头-话题引入.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-话题引入
+      group_key: pattern_tag:横线在开头-话题引入
+      expected_material_card_id: fill_material.opening_topic_intro
+      material_text_override: 正所谓“明者因时而变，知者随事而制”。正确认识和把握共建“一带一路”面临的新形势，是继续推动其高质量发展的必要前提。总体上看，共建“一带一路”仍面临重要机遇，因为和平与发展的时代主题没有改变，经济全球化大方向没有变。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_empty_quote
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.2181247::横线在开头-话题引入::横线在开头-话题引入.docx
+      sample_id: truth.sentence_fill.2181247
+      question_id: '2181247'
+      source_doc: 横线在开头-话题引入.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-话题引入
+      group_key: pattern_tag:横线在开头-话题引入
+      expected_material_card_id: fill_material.opening_topic_intro
+      material_text_override: 古诗云：“胡马依北风，越鸟巢南枝”。许多动物都有一种对自己出生地的深深依恋，这几乎已经构成了一种本能。人作为有思想情感的高等动物，也会把这种本能提升为对故乡深切执着的爱。
+      repair_notes:
+      - strip_tail:文中括号处应引用的句子是
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.2028008::横线在开头-横线为首句中的分句::横线在开头-横线为首句中的分句.docx
+      sample_id: truth.sentence_fill.2028008
+      question_id: '2028008'
+      source_doc: 横线在开头-横线为首句中的分句.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-横线为首句中的分句
+      group_key: pattern_tag:横线在开头-横线为首句中的分句
+      expected_material_card_id: fill_material.opening_clause_lead
+      material_text_override: 基于卫星等航天器的空间量子通信，有着地面光纤量子通信网络无法比拟的优势。第一个原因是在同样距离下，光子在光纤中的损耗远高于自由空间的损耗。第二个原因是受到地面条件的限制，很多地方无法铺设量子通信的专用光纤。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.13772687::横线在开头-横线为首句中的分句::横线在开头-横线为首句中的分句.docx
+      sample_id: truth.sentence_fill.13772687
+      question_id: '13772687'
+      source_doc: 横线在开头-横线为首句中的分句.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-横线为首句中的分句
+      group_key: pattern_tag:横线在开头-横线为首句中的分句
+      expected_material_card_id: fill_material.opening_clause_lead
+      material_text_override: 激发科学兴趣应从娃娃抓起，科学的种子茁壮成长，离不开悉心呵护，持续培养，因此，有必要推动科普与学校教育深度融合。一方面需要通过加强科学教师培训等方式提升科学教育整体水平；另一方面还可以借助各类科技馆资源开展馆校合作。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+      - manual_text_override
+    - split: train
+      row_key: truth.sentence_fill.12571780::横线在开头-横线为首句中的分句::横线在开头-横线为首句中的分句.docx
+      sample_id: truth.sentence_fill.12571780
+      question_id: '12571780'
+      source_doc: 横线在开头-横线为首句中的分句.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-横线为首句中的分句
+      group_key: pattern_tag:横线在开头-横线为首句中的分句
+      expected_material_card_id: fill_material.opening_clause_lead
+      material_text_override: 一个时期以来，全国许多地方特别是一些大城市通过摇号或竞价的方式发放车辆号牌，限制消费者进行消费，其实是一种特定阶段的特定举措。严格的购买管理暂缓了矛盾堆积，为政策跟进留下了时间。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+      - manual_text_override
+    holdout:
+    - split: holdout
+      row_key: truth.sentence_fill.5767266::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.5767266
+      question_id: '5767266'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      expected_material_card_id: fill_material.opening_summary
+      material_text_override: 人类社会之初，香料其实并不那么亲民。作为特殊的社会资源，它们只掌握在极少数人的手中，仅用于贵族祈祝神灵和祭祀祖先，处于社会中下层的人们无缘与香料亲密接触。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一句是
+      - fill_blank_before_punct
+      - manual_text_override
+    - split: holdout
+      row_key: truth.sentence_fill.19455539::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.19455539
+      question_id: '19455539'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      expected_material_card_id: fill_material.opening_summary
+      material_text_override: 组合字浑然一体，在特定情境下更符合传统审美。中国传统思维注重整体，习惯将万事万物当作一个整体看待；在有限空间里，多字分开不免局促，组合字反而更紧凑饱满。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一句是
+      - prepend_answer_before_leading_punct
+      - manual_text_override
+    - split: holdout
+      row_key: truth.sentence_fill.3519666::横线在开头-话题引入::横线在开头-话题引入.docx
+      sample_id: truth.sentence_fill.3519666
+      question_id: '3519666'
+      source_doc: 横线在开头-话题引入.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-话题引入
+      group_key: pattern_tag:横线在开头-话题引入
+      expected_material_card_id: fill_material.opening_topic_intro
+      material_text_override: “胸怀千秋伟业，恰是百年风华。”2021年是中国共产党百年华诞，触摸中国共产党百年征程的脉搏，我们感受到了时代发展的喜悦。
+      repair_notes:
+      - strip_tail:填入括号部分最恰当的一项是
+      - manual_text_override
+    - split: holdout
+      row_key: truth.sentence_fill.5760793::横线在开头-话题引入::横线在开头-话题引入.docx
+      sample_id: truth.sentence_fill.5760793
+      question_id: '5760793'
+      source_doc: 横线在开头-话题引入.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-话题引入
+      group_key: pattern_tag:横线在开头-话题引入
+      expected_material_card_id: fill_material.opening_topic_intro
+      material_text_override: “功崇惟志，业广惟勤。”理想是点亮人生方向的灯塔，为一代代中国青年照亮前行的路。每一代青年都有自己的际遇和理想，都要在自己所处的时代条件下谋划人生、创造历史。
+      repair_notes:
+      - strip_tail:填入括号部分最恰当的一项是
+      - manual_text_override
+    - split: holdout
+      row_key: truth.sentence_fill.2057114::横线在开头-横线为首句中的分句::横线在开头-横线为首句中的分句.docx
+      sample_id: truth.sentence_fill.2057114
+      question_id: '2057114'
+      source_doc: 横线在开头-横线为首句中的分句.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-横线为首句中的分句
+      group_key: pattern_tag:横线在开头-横线为首句中的分句
+      expected_material_card_id: fill_material.opening_clause_lead
+      material_text_override: 怀疑论者称读书疗法是江湖郎中的吹嘘之辞，但20多年来相当多的支持性研究表明，文学能对疾病针对性地产生影响。一项研究证明，辅以读书疗法比单纯服药更能降低抑郁症复发的概率。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一句是
+      - fill_blank_before_punct
+      - manual_text_override
+    negative_probe:
+    - row_key: truth.sentence_fill.10765931::横线在开头-横线为首句中的分句::横线在开头-横线为首句中的分句.docx
+      sample_id: truth.sentence_fill.10765931
+      question_id: '10765931'
+      source_doc: 横线在开头-横线为首句中的分句.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-横线为首句中的分句
+      group_key: pattern_tag:横线在开头-横线为首句中的分句
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: ''
+      repair_notes: []
+    - row_key: truth.sentence_fill.10820987::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.10820987
+      question_id: '10820987'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 着力推动科技创新与产业创新深度融合。实践证明，企业提出科研选题，高水平研究型大学和研究机构围绕选题组织科研攻关，可以构建以企业为主体、前后贯通、优势互补、开放闭环的高效创新链。高水平研究型大学要准确把握企业在科技创新中的主体地位和高校在创新链中的角色和作用，与企业开展密切合作，面向产业需求共同凝练科技问题、联合开展科研攻关、协同培养科技人才，加快推动产学研融通创新。
+        填入划横线处最合适的一项是着力推动科技创新与产业创新深度融合。
+      repair_notes:
+      - prepend_answer_before_leading_punct
+    - row_key: truth.sentence_fill.13353803::横线在开头-话题引入::横线在开头-话题引入.docx
+      sample_id: truth.sentence_fill.13353803
+      question_id: '13353803'
+      source_doc: 横线在开头-话题引入.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-话题引入
+      group_key: pattern_tag:横线在开头-话题引入
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 语言里有生生不息的乡愁。少小离家老大回，乡音无改鬓毛衰，这诗句曾扣动无数游子的心。方言是地方文化的坐标，沉淀生活记忆，凝结深厚情感。作为一项国家工程，中国语言资源保护工程一期已完成全国所有省份1700多个调查点的调查保护，覆盖国内120余种语言和方言，只要登录中国语言资源保护工程采录展示平台，就可以随时随地聆听“来自家乡的声音”。
+        填入画横线部分的句子与下文衔接最恰当的一项是语言里有生生不息的乡愁。
+      repair_notes:
+      - prepend_answer_before_leading_punct
+    - row_key: truth.sentence_fill.13596061::横线在开头-概括后文::横线在开头-概括后文.docx
+      sample_id: truth.sentence_fill.13596061
+      question_id: '13596061'
+      source_doc: 横线在开头-概括后文.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-概括后文
+      group_key: pattern_tag:横线在开头-概括后文
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 用药安全归根结底，是要着重摆正医和药的关系。对于普遍商品，电商下单即买，以消费意愿为主，把顾客当“上帝”。处方药线上销售则不能简单依顺和满足消费需求，而要根据病情所需，由医生作出决定。药为医服务，药不能喧宾夺主，没有医就不能有处方药，是医疗行为的基本逻辑。倘若医药颠倒，不经诊疗就开处方药，甚至任由消费者随意购买处方药，就容易导致处方药被滥用。
+        填入画横线部分的语句，与下文衔接最恰当的一项是用药安全归根结底，是要着重摆正医和药的关系。
+      repair_notes:
+      - prepend_answer_before_leading_punct
+    - row_key: truth.sentence_fill.13596082::横线在开头-话题引入::横线在开头-话题引入.docx
+      sample_id: truth.sentence_fill.13596082
+      question_id: '13596082'
+      source_doc: 横线在开头-话题引入.docx
+      subfamily: 横线在开头
+      pattern_tag: 横线在开头-话题引入
+      group_key: pattern_tag:横线在开头-话题引入
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 任由网络抹黑、网络暴力蔓延，每个人都有可能成为下一个受害者。治理网络暴力，需要你我携手同行，既要把控自己的“言论边界”，以身作则维护网络文明，又要保护自己的“权利边界”，避免在自身权益遭受侵害时手足无措。从留存网暴内容记录，到委托公证部门固定证据，再到向公安部门报案、向法院提起民事诉讼或刑事自诉，以法律武器回击网络暴力，不法分子的嚣张气焰必将得到遏制，还互联网一片清朗空间。
+        填入画横线部分的语句，与下文衔接最恰当的一项是任由网络抹黑、网络暴力蔓延，每个人都有可能成为下一个受害者。
+      repair_notes:
+      - prepend_answer_before_leading_punct
+  sentence_fill_middle_2026-04-14:
+    business_family_id: sentence_fill
+    question_card_id: question.sentence_fill.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 103
+      clean_rows: 91
+      negative_rows: 12
+      group_count: 3
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.sentence_fill.10173648::横线在中间-启下::横线在中间-启下.docx
+      sample_id: truth.sentence_fill.10173648
+      question_id: '10173648'
+      source_doc: 横线在中间-启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-启下
+      group_key: pattern_tag:横线在中间-启下
+      expected_material_card_id: fill_material.middle_focus_shift
+      material_text_override: “智能商业”。道阻且长，行则将至，对零售行业的未来，大家充满了想象，充满了期待，大数据、人工智能等技术，是未来行业变革的核心驱动力。但重中之重还是数字化建设，没有相对完整的数据采集和大量数据的积累，这些想象的未来都是空中楼阁。如果说未来的商业是数字化、智能化的形态，那么今天的基础性建设及应用探索就是在为未来打下坚实地基。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.18448021::横线在中间-承上::横线在中间-承上.docx
+      sample_id: truth.sentence_fill.18448021
+      question_id: '18448021'
+      source_doc: 横线在中间-承上.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上
+      group_key: pattern_tag:横线在中间-承上
+      expected_material_card_id: fill_material.middle_explanation
+      material_text_override: 高血压是一种疾病，也是心脑血管疾病的重要诱因。基于中国社会特有的看病就医环境，很多人对于高血压的认知并不到位，对于高血压导致的短时身体难受，会以硬扛、临时休息等方式来解决，并将其作为一种自限性疾病来看待，这使得部分人群忽视了对高血压的早前干预，加之高血压在部分人群身上并没有明显不适症状，特别是对中青年群体而言，这一群体认为自己年轻、身体素质较好，不会有高血压，或是在已知自身有高血压之后觉得有足够的身体资本去应对，从而导致中风等意外发生。从这一角度出发，调低成人高血压诊断界值无异于向相关人群发出健康警告，提示人们应该重视自身健康状况，向更加自律健康的生活方式转变。
+      repair_notes:
+      - strip_tail:填入横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.10530615::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.10530615
+      question_id: '10530615'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      expected_material_card_id: fill_material.bridge_transition
+      material_text_override: 从时间的精密测量与相对论的密切关系，我们可以感受到万物相同的奥妙。根据广义相对论，地面（或任何星球）上的两点之间，如果高度不同，时间流逝速度就会有所不同，高处略快，地面上每米的高度差，时间流逝差异为一个定值，这意味着，只要用原子钟精确测量两点的时间流逝的差异，就能推测两点的高度差异，这进一步表明，原子钟在测地学、水文学里都会有巨大的应用潜力。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.10173661::横线在中间-启下::横线在中间-启下.docx
+      sample_id: truth.sentence_fill.10173661
+      question_id: '10173661'
+      source_doc: 横线在中间-启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-启下
+      group_key: pattern_tag:横线在中间-启下
+      expected_material_card_id: fill_material.middle_focus_shift
+      material_text_override: 中华体育精神的对外传播秉持“礼为用，和为贵”的态度，倡导“万物并育而不相害，道并行而不相悖”，在积极的对话中丰富自身内涵，建构和谐关系，可以说中华体育精神把明德格物，立己达人作为与人相处的基本准则，形成一种对道德体育的高度共识，进而推动国际体育领域，甚至整个人类生态系统共存共荣。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_empty_quote
+    - split: train
+      row_key: truth.sentence_fill.19828456::横线在中间-承上::横线在中间-承上.docx
+      sample_id: truth.sentence_fill.19828456
+      question_id: '19828456'
+      source_doc: 横线在中间-承上.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上
+      group_key: pattern_tag:横线在中间-承上
+      expected_material_card_id: fill_material.middle_explanation
+      material_text_override: 现藏宝鸡青铜器博物院的四十三年逨鼎，共有10件，其中8件内壁铸有相同的铭文，单篇316字。铭文为我们还原了2800多年前的一场隆重的册命过程，通过繁复的仪式，单逨被周宣王任命为官司历人。同时，铭文也成为中国历史上第一次有记录的“任前廉政谈话”。在这次“谈话”中，周宣王对单逨提出了四个告诫：一是施政办事要谨慎，不能贪图安逸，放纵自己；二是要带头遵守各项规章制度，严格依法行政；三是审理案件要明辨是非，不偏不倚，确保司法的公正性；四是要廉洁自律，不得以权谋私。
+        填入文中横线处最恰当的一项是审理案件要明辨是非，不偏不倚，确保司法的公正性。
+      repair_notes:
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.11030145::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.11030145
+      question_id: '11030145'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      expected_material_card_id: fill_material.bridge_transition
+      material_text_override: 一段时间以来，医疗科普短视频走红，越来越多医生通过镜头传播知识。然而，随着流量带来巨大商机，个别打着“健康科普”旗号的短视频出现传播虚假信息的情况，部分视频账号内容陷入庸俗化。有内容创作者为了商业利益，夸大健康产品功效，影响了科普内容的可信度。还有个别创作者为迅速获得关注，采用过度戏剧化的表现手法甚至虚假摆拍。医疗科普短视频市场良莠不齐，普通人很难辨别其真实性、专业性、科学性，可能产生误导、耽误病情等不良后果。究其原因，既有市场竞争激烈的影响，也有算法驱动的引导，还有监管资源和手段的局限。
+      repair_notes:
+      - strip_tail:填入画横线处最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.11346530::横线在中间-启下::横线在中间-启下.docx
+      sample_id: truth.sentence_fill.11346530
+      question_id: '11346530'
+      source_doc: 横线在中间-启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-启下
+      group_key: pattern_tag:横线在中间-启下
+      expected_material_card_id: fill_material.middle_focus_shift
+      material_text_override: 当经过我们身边的秋风，一阵冷似一阵，我们会自觉地添加衣裳，这是一种本能。那么，没有脚不会移动、没有御寒服的植物们，面对秋风和接下来的“一场秋雨一场寒”，该如何应对？变色，是大部分落叶植物首先采取的御寒法宝。反过来说，当树叶开始变红、变橙或者变黄时，都可以看作是寒冷即将来临的预告，即所谓的“一叶知秋”。说起秋天的红叶，总也绕不开其代表“红枫”。现在我们知道，染红枫叶的，既不是“酒”，也不是“血”，而是秋天本身变色，是大部分落叶植物首先采取的御寒法宝秋天的光照、越来越大的日夜温差，以及秋天的环境温度等。当然，秋天不仅仅只染红枫，还会为许许多多植物，涂抹出与其他季节里完全不同的“妆容”，也“渲染”出了一个植物大类变色，是大部分落叶植物首先采取的御寒法宝“秋色叶树种”。
+      repair_notes:
+      - strip_tail:填入画横线处最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.2009732::横线在中间-承上::横线在中间-承上.docx
+      sample_id: truth.sentence_fill.2009732
+      question_id: '2009732'
+      source_doc: 横线在中间-承上.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上
+      group_key: pattern_tag:横线在中间-承上
+      expected_material_card_id: fill_material.middle_explanation
+      material_text_override: 这是一个秋季的薄阴的天气，微微的云在我们顶上流着。岩面与草丛都从润湿中透出几分油油的绿意，而瀑布也似乎分外的响了。
+        填入上面横线上最恰当的一项是（ ）。
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_fill.11154877::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.11154877
+      question_id: '11154877'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      expected_material_card_id: fill_material.bridge_transition
+      material_text_override: 商周铜器铭文的书写之所以如此繁盛，除了物质条件的进步与社会需求等因素外，思想、情感层面的追求也是一个重要原因。用文字进行书写是人类文明进步史上的大事，因为它代表着思想与情感的传播可以突破时空的限制。《墨子·兼爱下》提到，今人不与“先圣六王”同时，却能了解其德行，“以其所书于竹帛，镂于金石，琢于盘盂，传遗后世子孙者知之”。可见，古人早已认识到书写之于思想传承、文明演进的价值。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.11400192::横线在中间-启下::横线在中间-启下.docx
+      sample_id: truth.sentence_fill.11400192
+      question_id: '11400192'
+      source_doc: 横线在中间-启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-启下
+      group_key: pattern_tag:横线在中间-启下
+      expected_material_card_id: fill_material.middle_focus_shift
+      material_text_override: 尽管塑料对大多数生物体有毒，但它却是某些类型细菌和真菌的食物。这些细菌和真菌存在于土壤、海洋中，它们利用专门的酶来分解不同类型的塑料。以塑料制品中常见的PET为例，PET的降解产物有两种不幸的是，它们进食效率很低对苯二甲酸和乙二醇，土壤和水体中都有两种恶臭假单胞菌菌株，其中一种菌株恰恰就特别喜欢吃对苯二甲酸，另一种则特别喜欢吃乙二醇。不幸的是，它们进食效率很低。于是，科学家用基因工程修改了这两种菌株的遗传物质，通过插入或删除某些基因片段，加快它们“咀嚼”塑料的速度，或者添加某种酶，让被它们分解的PET更快、更多地转化为可生物降解的有用材料。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    holdout:
+    - split: holdout
+      row_key: truth.sentence_fill.11496578::横线在中间-启下::横线在中间-启下.docx
+      sample_id: truth.sentence_fill.11496578
+      question_id: '11496578'
+      source_doc: 横线在中间-启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-启下
+      group_key: pattern_tag:横线在中间-启下
+      expected_material_card_id: fill_material.middle_focus_shift
+      material_text_override: 从能量角度而言，越活泼的金属能够释放出的能量越多，制造成电池所储存的能量也就越多。就锂离子电池而言，锂活动顺序大致在钠与镁之间，重量又轻，可成为理想的储能电池原料，因此，锂电池在我们的日常生活中十分常见。但事实上，锂离子电池从发明到商用的过程并非一帆风顺，原因是性质活泼的金属虽然能够储存并释放更多的能量，但其活泼的另一面则是稳定性差，这就给应用带来相应的困扰。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: holdout
+      row_key: truth.sentence_fill.2012066::横线在中间-承上::横线在中间-承上.docx
+      sample_id: truth.sentence_fill.2012066
+      question_id: '2012066'
+      source_doc: 横线在中间-承上.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上
+      group_key: pattern_tag:横线在中间-承上
+      expected_material_card_id: fill_material.middle_explanation
+      material_text_override: 天文学家认为，整个地球都是由环绕早期太阳的尘埃造就的，太阳系中的固态物质概莫如此。但是，尘埃本身又从哪里来呢？这一直是个未解之迷。
+        填入上面横线的句子，与上下文衔接最恰当的一项是（ ）。
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_fill.11209709::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.11209709
+      question_id: '11209709'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      expected_material_card_id: fill_material.bridge_transition
+      material_text_override: 目前关于塑料在环境中的知识等方面依旧存在欠缺之处，但在找到最终的、整体的解决方案之前，我们需要先填补这些知识、制度、技术空白。例如目前的环境监测项目中没有塑料，因此，我们几乎没有历史数据作为研究参考，这样一来我们也就对这些影响环境的废弃塑料最重要的来源知之甚少，自然也就对其影响知之甚少。但与此同时，在某些方面我们已经有足够的知识支持我们去做出一些事情改变现状。至少我们现在知道，越来越多地使用塑料会产生越来越多的废物，而这些废物又需要花费巨大的经济成本和环境代价进行收集和处理，否则就将成为难以治理的严重污染问题。
+      repair_notes:
+      - strip_tail:填入画横线处最恰当的一项是
+      - fill_blank_before_punct
+    - split: holdout
+      row_key: truth.sentence_fill.12884660::横线在中间-启下::横线在中间-启下.docx
+      sample_id: truth.sentence_fill.12884660
+      question_id: '12884660'
+      source_doc: 横线在中间-启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-启下
+      group_key: pattern_tag:横线在中间-启下
+      expected_material_card_id: fill_material.middle_focus_shift
+      material_text_override: 置身于信息技术革命和全球产业重新分工的大背景下，城市的资源禀赋和竞争力各不相同，发展的路径和前景更是天差地别，收缩型城市的出现就成为一种必然。有的城市强者愈强，虹吸效应明显；有的城市则成功转型，搭上了快速发展的列车；也有城市偏安一隅，发展面临困境······大小分明、强弱有别、快慢相对、进退共存，实事求是地说，这符合客观发展的规律。有研究表明，2000年至2012年，全球有20%的城市属于收缩型城市，数量最多的是美国，平均收缩比例达到28%，德国、法国、英国、中国则分列其后。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: holdout
+      row_key: truth.sentence_fill.4049515::横线在中间-承上::横线在中间-承上.docx
+      sample_id: truth.sentence_fill.4049515
+      question_id: '4049515'
+      source_doc: 横线在中间-承上.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上
+      group_key: pattern_tag:横线在中间-承上
+      expected_material_card_id: fill_material.middle_explanation
+      material_text_override: 当老师，就要心无旁骛，甘守三尺讲台，“春蚕到死丝方尽，蜡炬成灰泪始干”。做研究，就要甘于寂寞，或是皓首穷经，或是扎根实验室，“板凳要坐十年冷，文章不写一句空”。搞创作，就要坚持以人民为中心的创作思想，深入实践、深入群众、深入生活，努力创作出人民群众喜爱的精品力作。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_empty_quote
+    negative_probe:
+    - row_key: truth.sentence_fill.11357638::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.11357638
+      question_id: '11357638'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 老年人获取信息的渠道较为单一，对新技术新业态适应性较弱，同时在健康养生、情感交流等方面有较强需求。因此，加强对老年群体的社会关注和家庭关爱十分必要。一方面，有必要联合居委会、物业、家属等主体，完善老人基本信息，及时发布风险提示，开展反诈宣讲；另一方面，要倡导子女和老人多交流，给予更多陪伴，加强反诈防诈知识普及。以真情关爱挤压行骗空间，用耐心细致铸成情感护盾，才能进一步筑牢全社会反诈防诈堤坝。
+        下列填入画横线部分的句子中，与上下文衔接最恰当的一项是加强对老年群体的社会关注和家庭关爱十分必要。
+      repair_notes:
+      - fill_blank_before_punct
+    - row_key: truth.sentence_fill.12571637::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.12571637
+      question_id: '12571637'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 在一定意义上说，一个城市的文明程度，不是取决于有多少高楼大厦、人文景观，而是取决于它让人感受到的舒适“温度”。城市的“温度”源于自然之美，更源于风物之美。景与城、建筑与自然，和谐共生，美美与共，城市才能别具情怀，因有气度而有温度。城市的“温度”，不仅在风物之美，也在于精神之美。城市是文化的容器、记忆的载体。一座城市吸引人的，短期而言是旖旎风光，长久而言则是其独特的精神气质。
+        填入横线部分最恰当的一句是不仅在风物之美，也在于精神之美。
+      repair_notes:
+      - fill_blank_before_punct
+    - row_key: truth.sentence_fill.13931159::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.13931159
+      question_id: '13931159'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 据专家预测，到2060年，我国风电、太阳能发电占比将超过50%，成为电量供应的主体。随着风电和太阳能发电比例的快速上升，问题也随之而来。由于光伏发电完全依靠太阳光源，发电时间受到日出日落的影响，导致其发电的高峰期主要集中在白天，夜晚几乎处于停滞状态，不能满足傍晚及夜间对能源的需求高峰，此外，阴雨天气下，光伏发电效率也将显著下降。风力发电高峰则在一天中很不稳定。
+        填入文中画横线部分最恰当的一项是随着风电和太阳能发电比例的快速上升，问题也随之而来。
+      repair_notes:
+      - fill_blank_before_punct
+    - row_key: truth.sentence_fill.15512688::横线在中间-启下::横线在中间-启下.docx
+      sample_id: truth.sentence_fill.15512688
+      question_id: '15512688'
+      source_doc: 横线在中间-启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-启下
+      group_key: pattern_tag:横线在中间-启下
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 读书和游历的结合是许多读书人的梦想。古人说“读万卷书，行万里路”，今则有人改为“读万卷书，行百万里路”，我们今天的确能够走得更多更远了。我们有时会带着某种研究目的去旅游，这样，在行前自然要读书，回来也要读书。但有时其实可能是读书读累了，烦了，不想读了，就去旅游，回来可能又想读书了。这后一种旅途中，就主要是读大地天空、人间社会这样的“无字之书”了。
+        填入文中画横线部分最恰当的一项是我们有时会带着某种研究目的去旅游。
+      repair_notes:
+      - fill_blank_before_punct
+    - row_key: truth.sentence_fill.15611580::横线在中间-承上启下::横线在中间-承上启下.docx
+      sample_id: truth.sentence_fill.15611580
+      question_id: '15611580'
+      source_doc: 横线在中间-承上启下.docx
+      subfamily: 横线在中间
+      pattern_tag: 横线在中间-承上启下
+      group_key: pattern_tag:横线在中间-承上启下
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 最近，“越野车追赶藏羚羊”的涉事人员被处以15000元罚款，这个判罚是一种进步，因为人们意识到，干扰藏羚羊的自然生活是对动物的伤害。如果用对待藏羚羊受伤害的标准来看待，蜜蜂受杀虫剂伤害而大量死亡更是一种需要追究的“犯罪”，至少是大错。表面上看，藏羚羊与人类的生活并无直接关系，只是在深层次上，如生物多样性上起作用。即便如此，扰乱它们的生活也是犯错。而蜜蜂与人类的生活直接相关，甚至休戚与共，杀死它们就更是犯罪。
+        填入划横线部分最恰当的一句是藏羚羊与人类的生活并无直接关系。
+      repair_notes:
+      - fill_blank_before_punct
+  sentence_fill_tail_end_2026-04-14:
+    business_family_id: sentence_fill
+    question_card_id: question.sentence_fill.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 133
+      clean_rows: 118
+      negative_rows: 15
+      group_count: 3
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.sentence_fill.12117499::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.12117499
+      question_id: '12117499'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      expected_material_card_id: fill_material.ending_summary
+      material_text_override: 中药咖啡、中药奶茶、中药面包、中药冰淇淋······近来，中医药广泛跨界餐饮业，有老字号中医药企业卖起了草本饮品，有中医院开设药膳房、研发中药茶饮，一些中医院的明星产品还在网上掀起热潮、广受追捧。中医药似乎正以一种更亲切、贴近日常的方式进入人们的生活。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.15250939::横线在结尾-提出对策（原为 对策）::横线在结尾-提出对策（原为 对策）.docx
+      sample_id: truth.sentence_fill.15250939
+      question_id: '15250939'
+      source_doc: 横线在结尾-提出对策（原为 对策）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-提出对策（原为 对策）
+      group_key: pattern_tag:横线在结尾-提出对策（原为 对策）
+      expected_material_card_id: fill_material.ending_countermeasure
+      material_text_override: 我们今天的一切，最初是如何开始？作为中国人，我们何以成为我们？中国何以成为中国？这一切都需要从源头说起。源头也许是一片混沌，盘古、女娲、伏羲、燧人氏、神农氏，甚至黄帝、炎帝、蚩尤······大都是虚幻飘渺的，但这些来自古人接力式的想象绘就的神话传说，融入了历代中国人对世界的观察、思考和判断，以及试图解释自己是谁、从哪里来的初心。了解他们，我们才能更好了解民族的来时路。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.10208112::横线在结尾-横线为尾句中的分句::横线在结尾-横线为尾句中的分句.docx
+      sample_id: truth.sentence_fill.10208112
+      question_id: '10208112'
+      source_doc: 横线在结尾-横线为尾句中的分句.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-横线为尾句中的分句
+      group_key: pattern_tag:横线在结尾-横线为尾句中的分句
+      expected_material_card_id: fill_material.ending_clause_summary
+      material_text_override: 当前，许多市场主体面临困难，而融资难题，是摆在不少中小微企业面前的一道坎。金融机构不敢贷，小微企业贷不到，破解这一“两难”问题，需要加快推进政府性融资担保体系建设，更好发挥财政资金“四两拨千斤”的作用，要用好政府性融资担保增信、降费、分险等功能，为企业提供便捷、优质、高效的融资担保服务，为市场主体纾困发展创造更好的金融环境，让金融机构贷得放心，让市场主体贷得舒心。
+        填入文中画横线处最恰当的一项是为市场主体纾困发展创造更好的金融环境。
+      repair_notes:
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.12469655::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.12469655
+      question_id: '12469655'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      expected_material_card_id: fill_material.ending_summary
+      material_text_override: 我国经济实力不断增强，人民生活水平不断提高，对食品的需求也由吃饱、吃好。向吃得健康快乐加速转变；目前我国食品安全状况稳中向好。尽管如此，还要看到，大众对食品安全的认知仍然存在很多误区，有关食品安全的谣言仍然存在，食品科普宣传是长期并坚持要做的重要工作。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.16631891::横线在结尾-提出对策（原为 对策）::横线在结尾-提出对策（原为 对策）.docx
+      sample_id: truth.sentence_fill.16631891
+      question_id: '16631891'
+      source_doc: 横线在结尾-提出对策（原为 对策）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-提出对策（原为 对策）
+      group_key: pattern_tag:横线在结尾-提出对策（原为 对策）
+      expected_material_card_id: fill_material.ending_countermeasure
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_fill.13226109::横线在结尾-横线为尾句中的分句::横线在结尾-横线为尾句中的分句.docx
+      sample_id: truth.sentence_fill.13226109
+      question_id: '13226109'
+      source_doc: 横线在结尾-横线为尾句中的分句.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-横线为尾句中的分句
+      group_key: pattern_tag:横线在结尾-横线为尾句中的分句
+      expected_material_card_id: fill_material.ending_clause_summary
+      material_text_override: 邵雍有言：“以物观物，性也。以我观物，情也。”这一消释情志、顺化于物的审美之情使生命的自然之性和盘托出，而与万物共存共在，并生为一。陶渊明诗云：“纵浪大化中，不喜亦不惧。”当人们以不喜不惧的淡之情观物时，就开启了一个“其身与竹化，无穷出清新”的审美世界。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一句是
+      - fill_empty_quote
+    - split: train
+      row_key: truth.sentence_fill.12807473::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.12807473
+      question_id: '12807473'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      expected_material_card_id: fill_material.ending_summary
+      material_text_override: 一个人有两个耳朵，能听话，两只眼睛，能看东西，两个鼻孔，能闻味。听话，能听正面的，也能听反面的；看东西，能看白的，也能看黑的；闻气味，能闻香的，也能闻臭的。所以，人的机能也是合乎辩证规律的。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.19007655::横线在结尾-提出对策（原为 对策）::横线在结尾-提出对策（原为 对策）.docx
+      sample_id: truth.sentence_fill.19007655
+      question_id: '19007655'
+      source_doc: 横线在结尾-提出对策（原为 对策）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-提出对策（原为 对策）
+      group_key: pattern_tag:横线在结尾-提出对策（原为 对策）
+      expected_material_card_id: fill_material.ending_countermeasure
+      material_text_override: 当前，经济社会发展十分注重效率，快节奏是各行各业的常态，即使互联网已经让人与人之间的交流“零距离”，但经济社会生活仍然需要人与人面对面线下交流。因此，空间上的距离无法缩短，就需要在缩短交通时间上发力。发展低空经济，发展城市间低空交通通勤，正契合了经济社会发展需要。
+        填入画线部分最恰当的句子是发展低空经济，发展城市间低空交通通勤，正契合了经济社会发展需要。
+      repair_notes:
+      - fill_blank_before_punct
+    - split: train
+      row_key: truth.sentence_fill.13690799::横线在结尾-横线为尾句中的分句::横线在结尾-横线为尾句中的分句.docx
+      sample_id: truth.sentence_fill.13690799
+      question_id: '13690799'
+      source_doc: 横线在结尾-横线为尾句中的分句.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-横线为尾句中的分句
+      group_key: pattern_tag:横线在结尾-横线为尾句中的分句
+      expected_material_card_id: fill_material.ending_clause_summary
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_fill.14037701::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.14037701
+      question_id: '14037701'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      expected_material_card_id: fill_material.ending_summary
+      material_text_override: 不管刺激群众想象力的是什么，采取的形式都是令人吃惊的鲜明形象，并且没有任何多余的解释，或仅仅伴之以几个不同寻常或神奇的事实。有关的事例是一场伟大的胜利，一种大奇迹、大罪恶或大前景。事例必须摆在作为一个整体的群众面前，其来源必须秘不示人。上千次小罪或小事件，丝毫也不会触动群众的想象力，而一个大罪或大事件却会给他们留下深刻的印象，即使其造成的危害与100次小罪相比不知小多少。就是几年前，流行性感冒仅在巴黎一地便造成了5000人的死亡，但是它对民众的想象力几乎没有任何影响。原因在于，这种真实的大规模死亡没有以某个生动的形象表现出来，而是通过每周发布的统计信息知道的。相反，如果一次事件造成的死亡只有500人而不是5000人，但它是在一天之内发生于公众面前，是一次极其引人瞩目的事件。由此可知，影响群众想象力的是事件发生和引起注意的方式。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    holdout:
+    - split: holdout
+      row_key: truth.sentence_fill.14430628::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.14430628
+      question_id: '14430628'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      expected_material_card_id: fill_material.ending_summary
+      material_text_override: 瘙痒是令人非常难受的，但从生物进化的角度来看，如果瘙痒带给生物体的只是负面的影响，为什么会在进化过程中保留下来呢？实际上，瘙痒是保护个体生存的一道非常重要的防线，瘙痒所诱发的搔抓行为可以把已经入侵皮肤的一些有害物质去掉，因此瘙痒对动物个体生存也有积极作用。
+      repair_notes:
+      - strip_tail:填入画横线处最恰当的一项是
+      - fill_blank_before_punct
+    - split: holdout
+      row_key: truth.sentence_fill.19715602::横线在结尾-提出对策（原为 对策）::横线在结尾-提出对策（原为 对策）.docx
+      sample_id: truth.sentence_fill.19715602
+      question_id: '19715602'
+      source_doc: 横线在结尾-提出对策（原为 对策）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-提出对策（原为 对策）
+      group_key: pattern_tag:横线在结尾-提出对策（原为 对策）
+      expected_material_card_id: fill_material.ending_countermeasure
+      material_text_override: 据估算，目前我国农村生活垃圾每年产生量已1.5亿吨左右，其中有一半以上未作任何处理。乡村的土壤、河湖正面临着污染危机，污水污染土地，土地污染粮食······形成恶性循环，久而久之，形成不小隐患，如果不加以遏止，将对整个生态环境造成无法挽回的损失，因此，破解“垃圾围村”的困境，势在必行。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一句是
+      - fill_blank_before_punct
+    - split: holdout
+      row_key: truth.sentence_fill.14479981::横线在结尾-横线为尾句中的分句::横线在结尾-横线为尾句中的分句.docx
+      sample_id: truth.sentence_fill.14479981
+      question_id: '14479981'
+      source_doc: 横线在结尾-横线为尾句中的分句.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-横线为尾句中的分句
+      group_key: pattern_tag:横线在结尾-横线为尾句中的分句
+      expected_material_card_id: fill_material.ending_clause_summary
+      material_text_override: 理解艺术，需要从历史到社会、从哲学到宗教等方面的知识。如果说艺术是一个小宇宙的话，那么，对大宇宙的理解，也就成了对小宇宙理解的前提条件。同时，对艺术的理解，是与对生活的理解联系在一起的。对生活、对社会有着深入理解的人，有丰富的生活经验的人，才能在对艺术的理解方面达到一个很高的境界。这么说来，能懂艺术不是一件易事，要经过长期的学习，与各方面的知识有关，也与人生的阅历有关。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: holdout
+      row_key: truth.sentence_fill.15547785::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.15547785
+      question_id: '15547785'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      expected_material_card_id: fill_material.ending_summary
+      material_text_override: 人工智能时代的教师必须不断提升自身学习力，以适应技术发展对教育变革的影响。在角色意识上教师不仅要确立教育意识，还要确立学习意识。学习意识是教师适应技术变革的必然要求，也是教师职业胜任能力的必然选择。人工智能技术在改变社会生产、生活和人们思维方式的同时，对人们的学习意识提出了更高的要求。在人工智能时代，一个没有学习意识的人，很难适应新技术带来的变革和挑战。
+      repair_notes:
+      - strip_tail:填入画横线部分最恰当的一项是
+      - fill_blank_before_punct
+    - split: holdout
+      row_key: truth.sentence_fill.19828460::横线在结尾-提出对策（原为 对策）::横线在结尾-提出对策（原为 对策）.docx
+      sample_id: truth.sentence_fill.19828460
+      question_id: '19828460'
+      source_doc: 横线在结尾-提出对策（原为 对策）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-提出对策（原为 对策）
+      group_key: pattern_tag:横线在结尾-提出对策（原为 对策）
+      expected_material_card_id: fill_material.ending_countermeasure
+      material_text_override: 在现代战争中，科技成为核心战力，各国纷纷加大军事科技创新投入，以提升军队的作战能力和战略威慑力。军事科技的创新发展，不仅体现在武器装备的更新换代上，还包括军事理论的创新、作战指挥体系优化以及军事培养模式的变革。科技创新为军队带来了智能化、信息化、体系化的作战能力提升，使我军能够更好地适应未来战争的要求。面对科技强军的时代潮流，我国必须全面推动军事科技创新与应用，为实现党在新时代的强军目标注入强大动力。
+        填入文中横线处最恰当的一项是全面推动军事科技创新与应用。
+      repair_notes:
+      - fill_blank_before_punct
+    negative_probe:
+    - row_key: truth.sentence_fill.18757952::横线在结尾-横线为尾句中的分句::横线在结尾-横线为尾句中的分句.docx
+      sample_id: truth.sentence_fill.18757952
+      question_id: '18757952'
+      source_doc: 横线在结尾-横线为尾句中的分句.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-横线为尾句中的分句
+      group_key: pattern_tag:横线在结尾-横线为尾句中的分句
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 中华民族富有哲学思维的传统，中华文化蕴含深邃的哲学思想，这种特征表现为思想行为以个人认识为前提，观念形成以经验活动为前提。虽然中国哲学学科的自觉意识产生于西方哲学传入之后，但中国人的思维方式却始终是哲学式的。中国人的思想特征和智慧特点之间存在着一种相互对应：个人认识活动是以在身边所发生的事情为根据和出发点的，因此，中国人的思维具有经验归纳的特征；而经验活动本身又是为了更好地认识整体和全局，所以中国人的思维又具有抽象普遍的意义。
+        填入画横线部分最恰当的是中国人的思维又具有抽象普遍的意义。
+      repair_notes:
+      - fill_blank_before_punct
+    - row_key: truth.sentence_fill.18757952::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.18757952
+      question_id: '18757952'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 中华民族富有哲学思维的传统，中华文化蕴含深邃的哲学思想，这种特征表现为思想行为以个人认识为前提，观念形成以经验活动为前提。虽然中国哲学学科的自觉意识产生于西方哲学传入之后，但中国人的思维方式却始终是哲学式的。中国人的思想特征和智慧特点之间存在着一种相互对应：个人认识活动是以在身边所发生的事情为根据和出发点的，因此，中国人的思维具有经验归纳的特征；而经验活动本身又是为了更好地认识整体和全局，所以中国人的思维又具有抽象普遍的意义。
+        填入画横线部分最恰当的是中国人的思维又具有抽象普遍的意义。
+      repair_notes:
+      - fill_blank_before_punct
+    - row_key: truth.sentence_fill.19007643::横线在结尾-总结前文（原为 结论）::横线在结尾-总结前文（原为 结论）.docx
+      sample_id: truth.sentence_fill.19007643
+      question_id: '19007643'
+      source_doc: 横线在结尾-总结前文（原为 结论）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-总结前文（原为 结论）
+      group_key: pattern_tag:横线在结尾-总结前文（原为 结论）
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 在一些年轻人看来，当工人即使没有吃大苦流大汗的苦累脏，也会面临职业上升空间不足、成长路径单一、社会认同度较低、工资待遇不高等问题，职业吸引力不强。“数字工匠”的成长经历告诉年轻人，数字技术等新兴技术的发展与应用使得生产正在发生深刻变化，生产线系统集成、现场管理、设备运维等新技能要求应运而生。过去简单重复的机械式工作，正转变为管理、分析、运维等高附加值的工作。
+        填入画横线部分最恰当的句子是过去简单重复的机械式工作，正转变为管理、分析、运维等高附加值的工作。
+      repair_notes:
+      - fill_blank_before_punct
+    - row_key: truth.sentence_fill.2007884::横线在结尾-提出对策（原为 对策）::横线在结尾-提出对策（原为 对策）.docx
+      sample_id: truth.sentence_fill.2007884
+      question_id: '2007884'
+      source_doc: 横线在结尾-提出对策（原为 对策）.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-提出对策（原为 对策）
+      group_key: pattern_tag:横线在结尾-提出对策（原为 对策）
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: 数字遗产或可大致分成精神和物质两个层面。仅就能够兑换成真金白银的网络财富而言，但凡互联网较为普及的国家，目前总价值都是天文数字。例如，调查显示，约四分之一的英国人拥有逾200英镑网络财产，包括付费购买的音乐、电子书、应用程序、电影和电子杂志等。全英网络财产总价值可能超过23亿英镑。而在更多人看来，虚拟的精神遗产更为重要。博客和网络相册中存储的照片与视频承载着独一无二的个人情感，将成为逝者亲友追寻回忆的重要渠道和情感寄托。正如线下生活中的遗产安排一样，虚拟遗产应当由网民个人自行处置。
+        填入划横线部分最恰当的一句是：（ ）。
+      repair_notes: []
+    - row_key: truth.sentence_fill.2409206::横线在结尾-横线为尾句中的分句::横线在结尾-横线为尾句中的分句.docx
+      sample_id: truth.sentence_fill.2409206
+      question_id: '2409206'
+      source_doc: 横线在结尾-横线为尾句中的分句.docx
+      subfamily: 横线在结尾
+      pattern_tag: 横线在结尾-横线为尾句中的分句
+      group_key: pattern_tag:横线在结尾-横线为尾句中的分句
+      negative_reasons:
+      - question_stem_residue
+      material_text_override: ''
+      repair_notes: []
+  sentence_order_first_sentence_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 249
+      clean_rows: 249
+      negative_rows: 0
+      group_count: 7
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.sentence_order.17646471::非首句特征-举例子::非首句特征-举例子.docx
+      sample_id: truth.sentence_order.17646471
+      question_id: '17646471'
+      source_doc: 非首句特征-举例子.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-举例子
+      group_key: pattern_tag:非首句特征-举例子
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10227155::非首句特征-关联词的后半部分::非首句特征-关联词的后半部分.docx
+      sample_id: truth.sentence_order.10227155
+      question_id: '10227155'
+      source_doc: 非首句特征-关联词的后半部分.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-关联词的后半部分
+      group_key: pattern_tag:非首句特征-关联词的后半部分
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10531035::非首句特征-其他::非首句特征-其他.docx
+      sample_id: truth.sentence_order.10531035
+      question_id: '10531035'
+      source_doc: 非首句特征-其他.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-其他
+      group_key: pattern_tag:非首句特征-其他
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10765993::非首句特征-指代不清的指代词::非首句特征-指代不清的指代词.docx
+      sample_id: truth.sentence_order.10765993
+      question_id: '10765993'
+      source_doc: 非首句特征-指代不清的指代词.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-指代不清的指代词
+      group_key: pattern_tag:非首句特征-指代不清的指代词
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.14822302::首句特征-下定义::首句特征-下定义.docx
+      sample_id: truth.sentence_order.14822302
+      question_id: '14822302'
+      source_doc: 首句特征-下定义.docx
+      subfamily: 确定首句
+      pattern_tag: 首句特征-下定义
+      group_key: pattern_tag:首句特征-下定义
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10531069::首句特征-提出观点::首句特征-提出观点.docx
+      sample_id: truth.sentence_order.10531069
+      question_id: '10531069'
+      source_doc: 首句特征-提出观点.docx
+      subfamily: 确定首句
+      pattern_tag: 首句特征-提出观点
+      group_key: pattern_tag:首句特征-提出观点
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10227158::首句特征-背景引入::首句特征-背景引入.docx
+      sample_id: truth.sentence_order.10227158
+      question_id: '10227158'
+      source_doc: 首句特征-背景引入.docx
+      subfamily: 确定首句
+      pattern_tag: 首句特征-背景引入
+      group_key: pattern_tag:首句特征-背景引入
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.2120408::非首句特征-举例子::非首句特征-举例子.docx
+      sample_id: truth.sentence_order.2120408
+      question_id: '2120408'
+      source_doc: 非首句特征-举例子.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-举例子
+      group_key: pattern_tag:非首句特征-举例子
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10531017::非首句特征-关联词的后半部分::非首句特征-关联词的后半部分.docx
+      sample_id: truth.sentence_order.10531017
+      question_id: '10531017'
+      source_doc: 非首句特征-关联词的后半部分.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-关联词的后半部分
+      group_key: pattern_tag:非首句特征-关联词的后半部分
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.11030160::非首句特征-其他::非首句特征-其他.docx
+      sample_id: truth.sentence_order.11030160
+      question_id: '11030160'
+      source_doc: 非首句特征-其他.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-其他
+      group_key: pattern_tag:非首句特征-其他
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.sentence_order.2169455::非首句特征-举例子::非首句特征-举例子.docx
+      sample_id: truth.sentence_order.2169455
+      question_id: '2169455'
+      source_doc: 非首句特征-举例子.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-举例子
+      group_key: pattern_tag:非首句特征-举例子
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.11209674::非首句特征-关联词的后半部分::非首句特征-关联词的后半部分.docx
+      sample_id: truth.sentence_order.11209674
+      question_id: '11209674'
+      source_doc: 非首句特征-关联词的后半部分.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-关联词的后半部分
+      group_key: pattern_tag:非首句特征-关联词的后半部分
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.13113827::非首句特征-其他::非首句特征-其他.docx
+      sample_id: truth.sentence_order.13113827
+      question_id: '13113827'
+      source_doc: 非首句特征-其他.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-其他
+      group_key: pattern_tag:非首句特征-其他
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.11155160::非首句特征-指代不清的指代词::非首句特征-指代不清的指代词.docx
+      sample_id: truth.sentence_order.11155160
+      question_id: '11155160'
+      source_doc: 非首句特征-指代不清的指代词.docx
+      subfamily: 确定首句
+      pattern_tag: 非首句特征-指代不清的指代词
+      group_key: pattern_tag:非首句特征-指代不清的指代词
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.15547767::首句特征-下定义::首句特征-下定义.docx
+      sample_id: truth.sentence_order.15547767
+      question_id: '15547767'
+      source_doc: 首句特征-下定义.docx
+      subfamily: 确定首句
+      pattern_tag: 首句特征-下定义
+      group_key: pattern_tag:首句特征-下定义
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []
+  sentence_order_fixed_bundle_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 184
+      clean_rows: 184
+      negative_rows: 0
+      group_count: 5
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.sentence_order.10227158::关联词-其他::关联词-其他.docx
+      sample_id: truth.sentence_order.10227158
+      question_id: '10227158'
+      source_doc: 关联词-其他.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-其他
+      group_key: pattern_tag:关联词-其他
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.13314194::关联词-并列::关联词-并列.docx
+      sample_id: truth.sentence_order.13314194
+      question_id: '13314194'
+      source_doc: 关联词-并列.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-并列
+      group_key: pattern_tag:关联词-并列
+      expected_material_card_id: order_material.carry_parallel_expand
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.11030161::关联词-转折::关联词-转折.docx
+      sample_id: truth.sentence_order.11030161
+      question_id: '11030161'
+      source_doc: 关联词-转折.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-转折
+      group_key: pattern_tag:关联词-转折
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10531035::其他（确定捆绑）::其他（确定捆绑）.docx
+      sample_id: truth.sentence_order.10531035
+      question_id: '10531035'
+      source_doc: 其他（确定捆绑）.docx
+      subfamily: 确定捆绑
+      pattern_tag: 其他（确定捆绑）
+      group_key: pattern_tag:其他（确定捆绑）
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10531017::指代词::指代词.docx
+      sample_id: truth.sentence_order.10531017
+      question_id: '10531017'
+      source_doc: 指代词.docx
+      subfamily: 确定捆绑
+      pattern_tag: 指代词
+      group_key: pattern_tag:指代词
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.18923460::关联词-其他::关联词-其他.docx
+      sample_id: truth.sentence_order.18923460
+      question_id: '18923460'
+      source_doc: 关联词-其他.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-其他
+      group_key: pattern_tag:关联词-其他
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.14157419::关联词-并列::关联词-并列.docx
+      sample_id: truth.sentence_order.14157419
+      question_id: '14157419'
+      source_doc: 关联词-并列.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-并列
+      group_key: pattern_tag:关联词-并列
+      expected_material_card_id: order_material.carry_parallel_expand
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.14936866::关联词-转折::关联词-转折.docx
+      sample_id: truth.sentence_order.14936866
+      question_id: '14936866'
+      source_doc: 关联词-转折.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-转折
+      group_key: pattern_tag:关联词-转折
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.11209881::其他（确定捆绑）::其他（确定捆绑）.docx
+      sample_id: truth.sentence_order.11209881
+      question_id: '11209881'
+      source_doc: 其他（确定捆绑）.docx
+      subfamily: 确定捆绑
+      pattern_tag: 其他（确定捆绑）
+      group_key: pattern_tag:其他（确定捆绑）
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10531041::指代词::指代词.docx
+      sample_id: truth.sentence_order.10531041
+      question_id: '10531041'
+      source_doc: 指代词.docx
+      subfamily: 确定捆绑
+      pattern_tag: 指代词
+      group_key: pattern_tag:指代词
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.sentence_order.2010570::关联词-其他::关联词-其他.docx
+      sample_id: truth.sentence_order.2010570
+      question_id: '2010570'
+      source_doc: 关联词-其他.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-其他
+      group_key: pattern_tag:关联词-其他
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.14608255::关联词-并列::关联词-并列.docx
+      sample_id: truth.sentence_order.14608255
+      question_id: '14608255'
+      source_doc: 关联词-并列.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-并列
+      group_key: pattern_tag:关联词-并列
+      expected_material_card_id: order_material.carry_parallel_expand
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.15611471::关联词-转折::关联词-转折.docx
+      sample_id: truth.sentence_order.15611471
+      question_id: '15611471'
+      source_doc: 关联词-转折.docx
+      subfamily: 确定捆绑
+      pattern_tag: 关联词-转折
+      group_key: pattern_tag:关联词-转折
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.11357641::其他（确定捆绑）::其他（确定捆绑）.docx
+      sample_id: truth.sentence_order.11357641
+      question_id: '11357641'
+      source_doc: 其他（确定捆绑）.docx
+      subfamily: 确定捆绑
+      pattern_tag: 其他（确定捆绑）
+      group_key: pattern_tag:其他（确定捆绑）
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.10531069::指代词::指代词.docx
+      sample_id: truth.sentence_order.10531069
+      question_id: '10531069'
+      source_doc: 指代词.docx
+      subfamily: 确定捆绑
+      pattern_tag: 指代词
+      group_key: pattern_tag:指代词
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []
+  sentence_order_sequence_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 161
+      clean_rows: 161
+      negative_rows: 0
+      group_count: 6
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.sentence_order.11209659::日常逻辑-时间脉络::日常逻辑-时间脉络.docx
+      sample_id: truth.sentence_order.11209659
+      question_id: '11209659'
+      source_doc: 日常逻辑-时间脉络.docx
+      subfamily: 确定顺序
+      pattern_tag: 日常逻辑-时间脉络
+      group_key: pattern_tag:日常逻辑-时间脉络
+      expected_material_card_id: order_material.timeline_progression
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.17545197::日常逻辑-行动顺序::日常逻辑-行动顺序.docx
+      sample_id: truth.sentence_order.17545197
+      question_id: '17545197'
+      source_doc: 日常逻辑-行动顺序.docx
+      subfamily: 确定顺序
+      pattern_tag: 日常逻辑-行动顺序
+      group_key: pattern_tag:日常逻辑-行动顺序
+      expected_material_card_id: order_material.timeline_progression
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10227155::行文逻辑-其他::行文逻辑-其他.docx
+      sample_id: truth.sentence_order.10227155
+      question_id: '10227155'
+      source_doc: 行文逻辑-其他.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-其他
+      group_key: pattern_tag:行文逻辑-其他
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.11155160::行文逻辑-提问+回答::行文逻辑-提问+回答.docx
+      sample_id: truth.sentence_order.11155160
+      question_id: '11155160'
+      source_doc: 行文逻辑-提问+回答.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-提问+回答
+      group_key: pattern_tag:行文逻辑-提问+回答
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10765932::行文逻辑-观点+解释说明::行文逻辑-观点+解释说明.docx
+      sample_id: truth.sentence_order.10765932
+      question_id: '10765932'
+      source_doc: 行文逻辑-观点+解释说明.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-观点+解释说明
+      group_key: pattern_tag:行文逻辑-观点+解释说明
+      expected_material_card_id: order_material.viewpoint_reason_action
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.10765993::行文逻辑-问题+对策::行文逻辑-问题+对策.docx
+      sample_id: truth.sentence_order.10765993
+      question_id: '10765993'
+      source_doc: 行文逻辑-问题+对策.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-问题+对策
+      group_key: pattern_tag:行文逻辑-问题+对策
+      expected_material_card_id: order_material.problem_solution_case_blocks
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.13113827::日常逻辑-时间脉络::日常逻辑-时间脉络.docx
+      sample_id: truth.sentence_order.13113827
+      question_id: '13113827'
+      source_doc: 日常逻辑-时间脉络.docx
+      subfamily: 确定顺序
+      pattern_tag: 日常逻辑-时间脉络
+      group_key: pattern_tag:日常逻辑-时间脉络
+      expected_material_card_id: order_material.timeline_progression
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.2008068::日常逻辑-行动顺序::日常逻辑-行动顺序.docx
+      sample_id: truth.sentence_order.2008068
+      question_id: '2008068'
+      source_doc: 日常逻辑-行动顺序.docx
+      subfamily: 确定顺序
+      pattern_tag: 日常逻辑-行动顺序
+      group_key: pattern_tag:日常逻辑-行动顺序
+      expected_material_card_id: order_material.timeline_progression
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.11357989::行文逻辑-其他::行文逻辑-其他.docx
+      sample_id: truth.sentence_order.11357989
+      question_id: '11357989'
+      source_doc: 行文逻辑-其他.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-其他
+      group_key: pattern_tag:行文逻辑-其他
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.2256496::行文逻辑-提问+回答::行文逻辑-提问+回答.docx
+      sample_id: truth.sentence_order.2256496
+      question_id: '2256496'
+      source_doc: 行文逻辑-提问+回答.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-提问+回答
+      group_key: pattern_tag:行文逻辑-提问+回答
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.sentence_order.14822298::日常逻辑-时间脉络::日常逻辑-时间脉络.docx
+      sample_id: truth.sentence_order.14822298
+      question_id: '14822298'
+      source_doc: 日常逻辑-时间脉络.docx
+      subfamily: 确定顺序
+      pattern_tag: 日常逻辑-时间脉络
+      group_key: pattern_tag:日常逻辑-时间脉络
+      expected_material_card_id: order_material.timeline_progression
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.2008804::日常逻辑-行动顺序::日常逻辑-行动顺序.docx
+      sample_id: truth.sentence_order.2008804
+      question_id: '2008804'
+      source_doc: 日常逻辑-行动顺序.docx
+      subfamily: 确定顺序
+      pattern_tag: 日常逻辑-行动顺序
+      group_key: pattern_tag:日常逻辑-行动顺序
+      expected_material_card_id: order_material.timeline_progression
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.12469660::行文逻辑-其他::行文逻辑-其他.docx
+      sample_id: truth.sentence_order.12469660
+      question_id: '12469660'
+      source_doc: 行文逻辑-其他.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-其他
+      group_key: pattern_tag:行文逻辑-其他
+      expected_material_card_id: order_material.dual_anchor_lock
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.2446075::行文逻辑-提问+回答::行文逻辑-提问+回答.docx
+      sample_id: truth.sentence_order.2446075
+      question_id: '2446075'
+      source_doc: 行文逻辑-提问+回答.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-提问+回答
+      group_key: pattern_tag:行文逻辑-提问+回答
+      expected_material_card_id: order_material.first_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.12084319::行文逻辑-观点+解释说明::行文逻辑-观点+解释说明.docx
+      sample_id: truth.sentence_order.12084319
+      question_id: '12084319'
+      source_doc: 行文逻辑-观点+解释说明.docx
+      subfamily: 确定顺序
+      pattern_tag: 行文逻辑-观点+解释说明
+      group_key: pattern_tag:行文逻辑-观点+解释说明
+      expected_material_card_id: order_material.viewpoint_reason_action
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []
+  sentence_order_tail_sentence_2026-04-14:
+    business_family_id: sentence_order
+    question_card_id: question.sentence_order.standard_v1
+    curation_mode: auto_round_robin
+    stats:
+      total_rows: 52
+      clean_rows: 52
+      negative_rows: 0
+      group_count: 2
+      train_count: 10
+      holdout_count: 5
+    train:
+    - split: train
+      row_key: truth.sentence_order.15547767::对策::对策.docx
+      sample_id: truth.sentence_order.15547767
+      question_id: '15547767'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.15251012::结论::结论.docx
+      sample_id: truth.sentence_order.15251012
+      question_id: '15251012'
+      source_doc: 结论.docx
+      subfamily: 确定尾句
+      pattern_tag: 结论
+      group_key: pattern_tag:结论
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.19794962::对策::对策.docx
+      sample_id: truth.sentence_order.19794962
+      question_id: '19794962'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.18311720::结论::结论.docx
+      sample_id: truth.sentence_order.18311720
+      question_id: '18311720'
+      source_doc: 结论.docx
+      subfamily: 确定尾句
+      pattern_tag: 结论
+      group_key: pattern_tag:结论
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.2054648::对策::对策.docx
+      sample_id: truth.sentence_order.2054648
+      question_id: '2054648'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.18475387::结论::结论.docx
+      sample_id: truth.sentence_order.18475387
+      question_id: '18475387'
+      source_doc: 结论.docx
+      subfamily: 确定尾句
+      pattern_tag: 结论
+      group_key: pattern_tag:结论
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.2230384::对策::对策.docx
+      sample_id: truth.sentence_order.2230384
+      question_id: '2230384'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.19784015::结论::结论.docx
+      sample_id: truth.sentence_order.19784015
+      question_id: '19784015'
+      source_doc: 结论.docx
+      subfamily: 确定尾句
+      pattern_tag: 结论
+      group_key: pattern_tag:结论
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.2247589::对策::对策.docx
+      sample_id: truth.sentence_order.2247589
+      question_id: '2247589'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: train
+      row_key: truth.sentence_order.2057156::结论::结论.docx
+      sample_id: truth.sentence_order.2057156
+      question_id: '2057156'
+      source_doc: 结论.docx
+      subfamily: 确定尾句
+      pattern_tag: 结论
+      group_key: pattern_tag:结论
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    holdout:
+    - split: holdout
+      row_key: truth.sentence_order.2427849::对策::对策.docx
+      sample_id: truth.sentence_order.2427849
+      question_id: '2427849'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.2064546::结论::结论.docx
+      sample_id: truth.sentence_order.2064546
+      question_id: '2064546'
+      source_doc: 结论.docx
+      subfamily: 确定尾句
+      pattern_tag: 结论
+      group_key: pattern_tag:结论
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.2444513::对策::对策.docx
+      sample_id: truth.sentence_order.2444513
+      question_id: '2444513'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.2115348::结论::结论.docx
+      sample_id: truth.sentence_order.2115348
+      question_id: '2115348'
+      source_doc: 结论.docx
+      subfamily: 确定尾句
+      pattern_tag: 结论
+      group_key: pattern_tag:结论
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    - split: holdout
+      row_key: truth.sentence_order.2463869::对策::对策.docx
+      sample_id: truth.sentence_order.2463869
+      question_id: '2463869'
+      source_doc: 对策.docx
+      subfamily: 确定尾句
+      pattern_tag: 对策
+      group_key: pattern_tag:对策
+      expected_material_card_id: order_material.tail_sentence_gate
+      material_text_override: ''
+      repair_notes: []
+    negative_probe: []

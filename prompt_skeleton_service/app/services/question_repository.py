@@ -1462,6 +1462,10 @@ class QuestionRepository:
         }
 
     def _version_row_to_dict(self, row: sqlite3.Row) -> dict:
+        runtime_snapshot = json.loads(row["runtime_snapshot_json"] or "{}")
+        material_snapshot = runtime_snapshot.get("material_snapshot") or {}
+        validation_result = json.loads(row["validation_result_json"] or "{}") or {}
+        evaluation_result = json.loads(row["evaluation_result_json"] or "{}") or {}
         return {
             "version_id": row["version_id"],
             "item_id": row["item_id"],
@@ -1471,13 +1475,18 @@ class QuestionRepository:
             "current_status": self._infer_version_status(json.loads(row["validation_result_json"] or "{}")),
             "target_difficulty": row["target_difficulty"],
             "material_id": row["material_id"],
+            "material_preview": material_snapshot.get("preview"),
+            "material_text": material_snapshot.get("original_text") or material_snapshot.get("preview"),
             "stem_preview": self._preview(row["stem"]),
+            "stem": row["stem"],
+            "options": json.loads(row["options_json"] or "{}"),
             "answer": row["answer"],
-            "validation_result": json.loads(row["validation_result_json"] or "{}"),
-            "evaluation_result": json.loads(row["evaluation_result_json"] or "{}"),
+            "analysis": row["analysis"],
+            "validation_result": validation_result,
+            "evaluation_result": evaluation_result,
             "prompt_template_name": row["prompt_template_name"],
             "prompt_template_version": row["prompt_template_version"],
-            "runtime_snapshot": json.loads(row["runtime_snapshot_json"] or "{}"),
+            "runtime_snapshot": runtime_snapshot,
             "created_at": row["created_at"],
         }
 
@@ -1527,8 +1536,13 @@ class QuestionRepository:
             "current_status": item.get("current_status", "draft"),
             "target_difficulty": item.get("difficulty_target"),
             "material_id": (item.get("material_selection") or {}).get("material_id"),
+            "material_preview": self._preview(item.get("material_text") or (item.get("material_selection") or {}).get("text")),
+            "material_text": item.get("material_text") or (item.get("material_selection") or {}).get("text"),
             "stem_preview": self._preview(generated_question.get("stem")),
+            "stem": generated_question.get("stem"),
+            "options": generated_question.get("options", {}),
             "answer": generated_question.get("answer"),
+            "analysis": generated_question.get("analysis"),
             "validation_result": item.get("validation_result") or {},
             "evaluation_result": item.get("evaluation_result") or {},
             "prompt_template_name": None,

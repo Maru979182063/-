@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import sqlite3
+import re
 from typing import Any
 from pathlib import Path
 
@@ -23,6 +25,8 @@ class MaterialBridgeV2Service:
     SEARCH_RETRY_TIMEOUT_SECONDS = 24
     SERVABLE_REVIEW_STATUSES = {"auto_tagged", "review_confirmed"}
     REJECTED_REVIEW_STATUS = "review_rejected"
+    DIVERSIFY_TOP_WINDOW = 4
+    DIVERSIFY_SCORE_DELTA = 0.18
 
     def __init__(self, config: MaterialsConfig) -> None:
         self.config = config
@@ -92,6 +96,12 @@ class MaterialBridgeV2Service:
         warnings.extend(search_result.get("warnings") or [])
         items = search_result.get("items") or []
         items = self._attach_local_usage_stats(items, usage_stats_lookup)
+        rejected_fill_items = sum(1 for item in items if self._sentence_fill_candidate_hard_rejected(item))
+        if rejected_fill_items:
+            warnings.append(
+                f"Filtered out {rejected_fill_items} sentence_fill candidates that were already blanked or carried polluted answer anchors."
+            )
+            items = [item for item in items if not self._sentence_fill_candidate_hard_rejected(item)]
         ranked = sorted(
             (
                 self._score_candidate(
@@ -115,6 +125,7 @@ class MaterialBridgeV2Service:
         )
         selections: list[MaterialSelectionResult] = []
         used_ids: set[str] = set()
+        selectable_ranked: list[dict[str, Any]] = []
         strict_rejections: list[dict[str, Any]] = []
         excluded = set(material_policy.excluded_material_ids) if material_policy else set()
         excluded.update(exclude_material_ids or set())
@@ -129,18 +140,24 @@ class MaterialBridgeV2Service:
             if material_policy and self._is_in_cooldown(item.get("last_used_at"), material_policy.cooldown_days):
                 strict_rejections.append(entry)
                 continue
+            selectable_ranked.append(entry)
+
+        while len(selections) < count:
+            entry = self._pop_diversified_entry(selectable_ranked, used_ids=used_ids, excluded=excluded)
+            if entry is None:
+                break
+            item = entry["item"]
+            material_id = str(item.get("candidate_id") or "")
             used_ids.add(material_id)
             selections.append(
                 self._to_material_selection(
                     item,
-                    entry["reason"],
+                    f"{entry['reason']}; diversified_candidate_pick",
                     decision_meta=entry.get("decision_meta"),
                     planner_score=entry.get("score"),
                     sort_key=entry.get("sort_key"),
                 )
             )
-            if len(selections) >= count:
-                break
 
         if len(selections) < count and strict_rejections:
             warnings.append(
@@ -175,6 +192,113 @@ class MaterialBridgeV2Service:
         if len(selections) < count:
             warnings.append("Not enough v2 materials were returned; generated item count may be lower than requested.")
         return selections, warnings
+
+    @staticmethod
+    def _sentence_fill_candidate_hard_rejected(item: dict[str, Any]) -> bool:
+        question_ready_context = dict(item.get("question_ready_context") or {})
+        runtime_binding = dict(question_ready_context.get("runtime_binding") or {})
+        selected_business_card = str(question_ready_context.get("selected_business_card") or "")
+        if runtime_binding.get("question_type") != "sentence_fill" and not selected_business_card.startswith("sentence_fill__"):
+            return False
+        compliance_report = dict(question_ready_context.get("material_compliance_report") or {})
+        issues = {str(issue).strip() for issue in (compliance_report.get("issues") or []) if str(issue).strip()}
+        if compliance_report.get("passed") is False and "contains_blank_markers" in issues:
+            return True
+        prompt_extras = dict(question_ready_context.get("prompt_extras") or {})
+        answer_anchor_text = str(prompt_extras.get("answer_anchor_text") or "").strip()
+        blanked_text = str(prompt_extras.get("blanked_text") or "").strip()
+        context_window = str(prompt_extras.get("context_window") or "").strip()
+        if MaterialBridgeV2Service._sentence_fill_context_too_thin(context_window or blanked_text):
+            return True
+        if MaterialBridgeV2Service._sentence_fill_anchor_overdominates_context(
+            answer_anchor_text=answer_anchor_text,
+            context_window=context_window or blanked_text,
+        ):
+            return True
+        return MaterialBridgeV2Service._contains_sentence_fill_placeholder(answer_anchor_text) or (
+            blanked_text and MaterialBridgeV2Service._contains_sentence_fill_placeholder(answer_anchor_text)
+        )
+
+    @staticmethod
+    def _contains_sentence_fill_placeholder(text: str) -> bool:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return False
+        if "[BLANK]" in normalized:
+            return True
+        if re.search(r"_{2,}|﹍+", normalized):
+            return True
+        if any(token in normalized for token in ("填入", "横线部分", "划横线部分", "画横线部分")):
+            return True
+        return False
+
+    @staticmethod
+    def _sentence_fill_context_too_thin(text: str) -> bool:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return True
+        normalized = normalized.replace("[BLANK]", "____")
+        visible = re.sub(r"[_\s?,??;?:?!????\"'??()?]+", "", normalized)
+        sentence_count = len([part for part in re.split(r"(?<=[???!?])\s*", normalized) if part.strip()])
+        return len(visible) < 12 or sentence_count < 1
+
+    @staticmethod
+    def _sentence_fill_anchor_overdominates_context(*, answer_anchor_text: str, context_window: str) -> bool:
+        anchor = re.sub(r"[\W_]+", "", str(answer_anchor_text or ""), flags=re.UNICODE)
+        context = re.sub(r"\[BLANK\]|____", "", str(context_window or ""))
+        context = re.sub(r"[\W_]+", "", context, flags=re.UNICODE)
+        if not anchor or not context or anchor not in context:
+            return False
+        remaining = context.replace(anchor, "", 1)
+        if len(remaining) < 6:
+            return True
+        return len(anchor) / max(1, len(context)) >= 0.9
+
+    def _pop_diversified_entry(
+        self,
+        ranked: list[dict[str, Any]],
+        *,
+        used_ids: set[str],
+        excluded: set[str],
+    ) -> dict[str, Any] | None:
+        valid_entries: list[tuple[int, dict[str, Any]]] = []
+        for index, entry in enumerate(ranked):
+            material_id = str((entry.get("item") or {}).get("candidate_id") or "")
+            if not material_id or material_id in used_ids or material_id in excluded:
+                continue
+            valid_entries.append((index, entry))
+
+        if not valid_entries:
+            return None
+
+        top_score = float(valid_entries[0][1].get("score") or 0.0)
+        pool: list[tuple[int, dict[str, Any]]] = []
+        for index, entry in valid_entries:
+            score = float(entry.get("score") or 0.0)
+            if pool and score < top_score - self.DIVERSIFY_SCORE_DELTA:
+                break
+            pool.append((index, entry))
+            if len(pool) >= self.DIVERSIFY_TOP_WINDOW:
+                break
+
+        if len(pool) == 1:
+            selected_index, selected_entry = pool[0]
+            ranked.pop(selected_index)
+            return selected_entry
+
+        min_usage = min(int((entry.get("item") or {}).get("usage_count") or 0) for _, entry in pool)
+        freshness_pool = [
+            (index, entry)
+            for index, entry in pool
+            if int((entry.get("item") or {}).get("usage_count") or 0) == min_usage
+        ]
+        if any(self._is_sentence_order_candidate((entry.get("item") or {})) for _, entry in freshness_pool):
+            pick_index, pick_entry = freshness_pool[0]
+            ranked.pop(pick_index)
+            return pick_entry
+        pick_index, pick_entry = random.choice(freshness_pool)
+        ranked.pop(pick_index)
+        return pick_entry
 
     def list_material_options(
         self,
@@ -494,7 +618,11 @@ class MaterialBridgeV2Service:
 
     def _post_v2_search(self, payload: dict[str, Any], *, timeout: int | None = None) -> dict[str, Any]:
         try:
-            with httpx.Client(base_url=self.config.base_url, timeout=timeout or self.SEARCH_TIMEOUT_SECONDS) as client:
+            with httpx.Client(
+                base_url=self.config.base_url,
+                timeout=timeout or self.SEARCH_TIMEOUT_SECONDS,
+                trust_env=False,
+            ) as client:
                 response = client.post(self.config.v2_search_path, json=payload)
                 response.raise_for_status()
                 data = response.json()
@@ -1096,9 +1224,33 @@ class MaterialBridgeV2Service:
         readability = 1 - float(local_profile.get("context_dependency") or article_profile.get("context_dependency") or 0.0)
         score += readability * 0.20
         reasons.append(f"readability={readability:.2f}")
+        center_adjustment, center_reasons = self._center_understanding_candidate_adjustment(
+            item=item,
+            article_profile=article_profile,
+            local_profile=local_profile,
+        )
+        if center_adjustment:
+            score += center_adjustment
+            reasons.extend(center_reasons)
+        sentence_fill_adjustment, sentence_fill_reasons = self._sentence_fill_candidate_adjustment(
+            item=item,
+            local_profile=local_profile,
+            business_feature_profile=business_feature_profile,
+        )
+        if sentence_fill_adjustment:
+            score += sentence_fill_adjustment
+            reasons.extend(sentence_fill_reasons)
+        sentence_order_adjustment, sentence_order_reasons = self._sentence_order_candidate_adjustment(
+            item=item,
+            local_profile=local_profile,
+            sentence_order_profile=sentence_order_profile,
+        )
+        if sentence_order_adjustment:
+            score += sentence_order_adjustment
+            reasons.extend(sentence_order_reasons)
         usage_count = int(item.get("usage_count") or 0)
         if usage_count > 0:
-            reuse_penalty = min(0.36, usage_count * 0.08)
+            reuse_penalty = min(0.72, usage_count * 0.18)
             score -= reuse_penalty
             reasons.append(f"reuse_penalty={reuse_penalty:.2f}")
         if topic and topic in text:
@@ -1183,6 +1335,11 @@ class MaterialBridgeV2Service:
         if top_card:
             reasons.append(f"top_card={top_card}")
         decision_meta = self._build_decision_meta(item, preference_profile=normalized_preference)
+        if sentence_order_profile:
+            decision_meta = self._apply_sentence_order_decision_bias(
+                decision_meta=decision_meta,
+                sentence_order_adjustment=sentence_order_adjustment,
+            )
         reasons.append(f"preference_note={decision_meta.get('preference_note')}")
         scoring_summary = decision_meta.get("scoring_summary") or {}
         reasons.append(
@@ -1201,6 +1358,361 @@ class MaterialBridgeV2Service:
             "decision_meta": decision_meta,
             "sort_key": self._decision_sort_key(planner_score=score, decision_meta=decision_meta),
         }
+
+    def _center_understanding_candidate_adjustment(
+        self,
+        *,
+        item: dict[str, Any],
+        article_profile: dict[str, Any],
+        local_profile: dict[str, Any],
+    ) -> tuple[float, list[str]]:
+        question_ready_context = item.get("question_ready_context") if isinstance(item.get("question_ready_context"), dict) else {}
+        runtime_binding = question_ready_context.get("runtime_binding") if isinstance(question_ready_context.get("runtime_binding"), dict) else {}
+        business_family_id = str(
+            item.get("_business_family_id")
+            or item.get("_cached_business_family_id")
+            or runtime_binding.get("question_type")
+            or ""
+        )
+        if business_family_id != "center_understanding":
+            return 0.0, []
+
+        text = str(item.get("text") or "")
+        selected_material_card = str(question_ready_context.get("selected_material_card") or item.get("material_card_id") or "")
+        naturalness_score = self._center_understanding_material_naturalness_score(text)
+        adjustment = 0.0
+        reasons = [f"center_understanding_naturalness={naturalness_score:.2f}"]
+
+        if selected_material_card.startswith("legacy.center_understanding"):
+            adjustment -= 0.08
+            reasons.append("center_understanding_legacy_material_penalty=0.08")
+        adjustment += 0.18 * (naturalness_score - 0.5)
+
+        candidate_genre = str(article_profile.get("document_genre") or "")
+        if candidate_genre in {"news", "wire", "report"}:
+            adjustment -= 0.10
+            reasons.append("center_understanding_newswire_genre_penalty=0.10")
+        if self._looks_like_newswire_material(text):
+            adjustment -= 0.12
+            reasons.append("center_understanding_newswire_style_penalty=0.12")
+        if self._looks_like_argumentative_center_material(text):
+            adjustment += 0.08
+            reasons.append("center_understanding_argumentative_bonus=0.08")
+        if str(local_profile.get("candidate_type") or "") == "whole_passage":
+            adjustment += 0.04
+            reasons.append("center_understanding_whole_passage_bonus=0.04")
+        return round(adjustment, 4), reasons
+
+    def _sentence_fill_candidate_adjustment(
+        self,
+        *,
+        item: dict[str, Any],
+        local_profile: dict[str, Any],
+        business_feature_profile: dict[str, Any],
+    ) -> tuple[float, list[str]]:
+        sentence_fill_profile = business_feature_profile.get("sentence_fill_profile") or {}
+        question_ready_context = item.get("question_ready_context") if isinstance(item.get("question_ready_context"), dict) else {}
+        selected_business_card = str(question_ready_context.get("selected_business_card") or "")
+        selected_material_card = str(question_ready_context.get("selected_material_card") or item.get("material_card_id") or "")
+        if not sentence_fill_profile and not selected_business_card.startswith("sentence_fill__"):
+            return 0.0, []
+
+        text = str(item.get("text") or "")
+        scoring = self._extract_candidate_scoring(item)
+        scoring_summary = self._build_feedback_snapshot(scoring=scoring, decision_meta=self._build_decision_meta(item), preference_profile={})
+        task_final_score = float(scoring_summary.get("final_candidate_score") or 0.0)
+        readiness_score = float(scoring_summary.get("readiness_score") or 0.0)
+        naturalness_score = self._sentence_fill_material_naturalness_score(text)
+        fragmented_material = self._looks_like_sentence_fill_fragmented_material(text)
+        report_excerpt_material = self._looks_like_sentence_fill_report_excerpt(text)
+
+        adjustment = 0.0
+        reasons = [f"sentence_fill_naturalness={naturalness_score:.2f}"]
+        if selected_material_card.startswith("legacy.sentence_fill"):
+            adjustment -= 0.22
+            reasons.append("sentence_fill_legacy_material_penalty=0.22")
+            if task_final_score <= 0.0:
+                adjustment -= 0.10
+                reasons.append("sentence_fill_legacy_without_task_score_penalty=0.10")
+        elif selected_material_card.startswith("fill_material."):
+            adjustment += 0.08
+            reasons.append("sentence_fill_runtime_material_bonus=0.08")
+
+        adjustment += 0.18 * (naturalness_score - 0.5)
+        if task_final_score > 0.0:
+            task_bonus = min(0.18, task_final_score * 0.22)
+            adjustment += task_bonus
+            reasons.append(f"sentence_fill_task_score_bonus={task_bonus:.2f}")
+        else:
+            adjustment -= 0.06
+            reasons.append("sentence_fill_missing_task_score_penalty=0.06")
+        if readiness_score > 0.0:
+            readiness_bonus = min(0.12, readiness_score * 0.14)
+            adjustment += readiness_bonus
+            reasons.append(f"sentence_fill_readiness_bonus={readiness_bonus:.2f}")
+        if naturalness_score < 0.42:
+            adjustment -= 0.08
+            reasons.append("sentence_fill_fragmented_excerpt_penalty=0.08")
+        elif naturalness_score < 0.52:
+            adjustment -= 0.04
+            reasons.append("sentence_fill_low_naturalness_penalty=0.04")
+        if fragmented_material:
+            adjustment -= 0.12
+            reasons.append("sentence_fill_heading_fragment_penalty=0.12")
+        if report_excerpt_material:
+            adjustment -= 0.08
+            reasons.append("sentence_fill_report_excerpt_penalty=0.08")
+        return round(adjustment, 4), reasons
+
+    @staticmethod
+    def _sentence_fill_material_naturalness_score(text: str) -> float:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return 0.0
+        score = 0.58
+        sentences = [part.strip() for part in re.split(r"(?<=[。！？!?；;])\s*", candidate) if part.strip()]
+        sentence_count = len(sentences)
+        if 2 <= sentence_count <= 5:
+            score += 0.14
+        elif sentence_count <= 1 or sentence_count >= 7:
+            score -= 0.12
+        ellipsis_count = candidate.count("……") + len(re.findall(r"\.{3,}", candidate))
+        semicolon_count = candidate.count("；") + candidate.count(";")
+        quote_count = candidate.count("“") + candidate.count("”") + candidate.count('"')
+        if ellipsis_count:
+            score -= min(0.14, ellipsis_count * 0.08)
+        if semicolon_count >= 2:
+            score -= min(0.12, (semicolon_count - 1) * 0.06)
+        if quote_count >= 4:
+            score -= 0.06
+        if candidate.startswith(("”", "’", "」", "』", "】", "）", ")", "]", "——", "—", "-")):
+            score -= 0.18
+        if "[BLANK]" in candidate or "____" in candidate:
+            score -= 0.40
+        if MaterialBridgeV2Service._looks_like_sentence_fill_fragmented_material(candidate):
+            score -= 0.22
+        if MaterialBridgeV2Service._looks_like_sentence_fill_report_excerpt(candidate):
+            score -= 0.10
+        return max(0.0, min(1.0, round(score, 4)))
+
+    @staticmethod
+    def _looks_like_sentence_fill_fragmented_material(text: str) -> bool:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return False
+        if re.match(r"^[\.\,，。；;：:、]+", candidate):
+            return True
+        if re.match(r"^(?:\d{1,2}[\.\、]|[（(]\d{1,2}[）)])", candidate):
+            return True
+        if re.match(r"^[一二三四五六七八九十]+[、.．]", candidate):
+            return True
+        if re.match(r"^[^\s，。！？；;]{1,16}[：:]", candidate):
+            return True
+        if re.match(r"^[^\s，。！？；;]{1,18}(?:须知|提示|提醒|要点|原则|办法|措施|路径|做法|建议)\b", candidate):
+            return True
+        if len(re.findall(r"(?:\d+[\.、]|[（(]\d+[）)])", candidate)) >= 2:
+            return True
+        return False
+
+    @staticmethod
+    def _looks_like_sentence_fill_report_excerpt(text: str) -> bool:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return False
+        if re.search(r"(记者|通讯员|消息人士|据[^。]{0,20}报道|客户端|日讯|日电)", candidate):
+            return True
+        if len(re.findall(r"\d+(?:\.\d+)?(?:亿元|万亿|万吨|万台|万人|%)", candidate)) >= 2:
+            return True
+        if candidate.count("……") >= 2:
+            return True
+        return False
+
+    @staticmethod
+    def _center_understanding_material_naturalness_score(text: str) -> float:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return 0.0
+        score = 0.56
+        sentences = [part.strip() for part in re.split(r"(?<=[。！？!?；;])\s*", candidate) if part.strip()]
+        sentence_count = len(sentences)
+        if 3 <= sentence_count <= 6:
+            score += 0.12
+        elif sentence_count <= 1 or sentence_count >= 8:
+            score -= 0.10
+        if re.search(r"^(新华社|中新网|央视网|人民网|新华网|客户端|[\u4e00-\u9fff]{2,12}电（记者|讯）)", candidate):
+            score -= 0.18
+        if re.search(r"(记者[）)]?|客户端|电（记者|据[^。]{0,18}报道)", candidate):
+            score -= 0.08
+        if len(re.findall(r"\d+(?:\.\d+)?%?", candidate)) >= 4:
+            score -= 0.08
+        if any(marker in candidate for marker in ("然而", "但这并不意味着", "更重要的是", "归根结底", "换言之", "说到底")):
+            score += 0.08
+        if candidate.count("；") + candidate.count(";") >= 2:
+            score -= 0.06
+        return max(0.0, min(1.0, round(score, 4)))
+
+    @staticmethod
+    def _looks_like_newswire_material(text: str) -> bool:
+        candidate = str(text or "").strip()
+        if not candidate:
+            return False
+        return bool(
+            re.search(r"^(新华社|中新网|央视网|人民网|新华网|客户端)", candidate)
+            or re.search(r"(记者[）)]?|客户端|电（记者|据[^。]{0,18}报道)", candidate)
+        )
+
+    @staticmethod
+    def _looks_like_argumentative_center_material(text: str) -> bool:
+        candidate = str(text or "")
+        if not candidate:
+            return False
+        markers = ("然而", "但这并不意味着", "更重要的是", "归根结底", "换言之", "说到底", "本质上", "关键在于")
+        return any(marker in candidate for marker in markers)
+
+    @staticmethod
+    def _apply_sentence_order_decision_bias(
+        *,
+        decision_meta: dict[str, Any],
+        sentence_order_adjustment: float,
+    ) -> dict[str, Any]:
+        adjusted = dict(decision_meta or {})
+        scoring_summary = (
+            dict(adjusted.get("scoring_summary"))
+            if isinstance(adjusted.get("scoring_summary"), dict)
+            else {}
+        )
+        final_candidate_score = float(scoring_summary.get("final_candidate_score") or 0.0)
+        readiness_score = float(scoring_summary.get("readiness_score") or 0.0)
+        final_candidate_score = max(-1.0, min(1.0, final_candidate_score + sentence_order_adjustment))
+        readiness_score = max(0.0, min(1.0, readiness_score + sentence_order_adjustment * 0.45))
+        scoring_summary["final_candidate_score"] = round(final_candidate_score, 4)
+        scoring_summary["readiness_score"] = round(readiness_score, 4)
+        adjusted["scoring_summary"] = scoring_summary
+        return adjusted
+
+    def _sentence_order_candidate_adjustment(
+        self,
+        *,
+        item: dict[str, Any],
+        local_profile: dict[str, Any],
+        sentence_order_profile: dict[str, Any],
+    ) -> tuple[float, list[str]]:
+        candidate_type = str(local_profile.get("candidate_type") or "")
+        if not sentence_order_profile and candidate_type != "sentence_block_group":
+            return 0.0, []
+
+        text = str(item.get("text") or "")
+        question_ready_context = item.get("question_ready_context") or {}
+        prompt_extras = (
+            question_ready_context.get("prompt_extras")
+            if isinstance(question_ready_context, dict) and isinstance(question_ready_context.get("prompt_extras"), dict)
+            else {}
+        )
+        selected_material_card = str(question_ready_context.get("selected_material_card") or "")
+        unique_opener = float(sentence_order_profile.get("unique_opener_score") or local_profile.get("unique_opener_score") or 0.0)
+        binding_pair_count = float(sentence_order_profile.get("binding_pair_count") or local_profile.get("binding_pair_count") or 0.0)
+        exchange_risk = float(sentence_order_profile.get("exchange_risk") or local_profile.get("exchange_risk") or 0.0)
+        multi_path_risk = float(sentence_order_profile.get("multi_path_risk") or local_profile.get("multi_path_risk") or 0.0)
+        function_overlap = float(
+            sentence_order_profile.get("function_overlap_score") or local_profile.get("function_overlap_score") or 0.0
+        )
+        closure_score = float(
+            sentence_order_profile.get("context_closure_score") or local_profile.get("context_closure_score") or 0.0
+        )
+        sequence_integrity = float(
+            sentence_order_profile.get("sequence_integrity") or local_profile.get("sequence_integrity") or 0.0
+        )
+        context_dependency = float(local_profile.get("context_dependency") or 0.0)
+        opening_rule = str(sentence_order_profile.get("opening_rule") or "")
+        closing_rule = str(sentence_order_profile.get("closing_rule") or "")
+
+        bonus = (
+            0.20 * unique_opener
+            + 0.16 * min(1.0, binding_pair_count / 3.0)
+            + 0.14 * closure_score
+            + 0.12 * sequence_integrity
+            + 0.08 * max(0.0, 1.0 - context_dependency)
+        )
+        penalty = (
+            0.20 * exchange_risk
+            + 0.18 * multi_path_risk
+            + 0.12 * function_overlap
+        )
+
+        reasons = [
+            "sentence_order_profile_applied",
+            f"sentence_order_unique_opener={unique_opener:.2f}",
+            f"sentence_order_binding_pairs={binding_pair_count:.2f}",
+            f"sentence_order_exchange_risk={exchange_risk:.2f}",
+            f"sentence_order_multi_path_risk={multi_path_risk:.2f}",
+        ]
+
+        if opening_rule == "weak_opening":
+            penalty += 0.18
+            reasons.append("sentence_order_weak_opening_penalty=0.18")
+        elif opening_rule == "none":
+            penalty += 0.10
+            reasons.append("sentence_order_missing_opening_penalty=0.10")
+
+        if closing_rule == "none":
+            penalty += 0.04
+            reasons.append("sentence_order_missing_closure_penalty=0.04")
+
+        if self._looks_like_sentence_order_context_dependent_opening(text):
+            penalty += 0.22
+            reasons.append("sentence_order_context_dependent_opening_penalty=0.22")
+
+        if selected_material_card.startswith("legacy.sentence_order") and not prompt_extras.get("sortable_units"):
+            penalty += 0.06
+            reasons.append("sentence_order_legacy_without_prompt_extras_penalty=0.06")
+
+        if unique_opener >= 0.55 and exchange_risk <= 0.32 and multi_path_risk <= 0.32:
+            bonus += 0.08
+            reasons.append("sentence_order_strong_head_lock_bonus=0.08")
+
+        adjustment = round(bonus - penalty, 4)
+        reasons.append(f"sentence_order_adjustment={adjustment:.4f}")
+        return adjustment, reasons
+
+    @staticmethod
+    def _looks_like_sentence_order_context_dependent_opening(text: str) -> bool:
+        if not text:
+            return False
+        first_line = ""
+        for line in str(text).splitlines():
+            clean = str(line or "").strip()
+            if clean:
+                first_line = clean
+                break
+        if not first_line:
+            return False
+        first_line = re.sub(r"^[①②③④⑤⑥⑦⑧⑨⑩]\s*", "", first_line)
+        first_line = re.sub(r"^\(?\d+\)?[\.、]?\s*", "", first_line)
+        dependent_openings = (
+            "这就",
+            "因此",
+            "所以",
+            "不过",
+            "同时",
+            "也就是说",
+            "由此",
+            "可见",
+            "总之",
+            "于是",
+            "那么",
+        )
+        return any(first_line.startswith(prefix) for prefix in dependent_openings)
+
+    @staticmethod
+    def _is_sentence_order_candidate(item: dict[str, Any]) -> bool:
+        local_profile = item.get("local_profile") if isinstance(item.get("local_profile"), dict) else {}
+        candidate_type = str(local_profile.get("candidate_type") or "")
+        if candidate_type == "sentence_block_group":
+            return True
+        question_ready_context = item.get("question_ready_context") if isinstance(item.get("question_ready_context"), dict) else {}
+        selected_business_card = str(question_ready_context.get("selected_business_card") or "")
+        selected_material_card = str(question_ready_context.get("selected_material_card") or "")
+        return selected_business_card.startswith("sentence_order__") or selected_material_card.startswith("legacy.sentence_order")
 
     def _structure_alignment_bonus(
         self,

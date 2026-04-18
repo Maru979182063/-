@@ -44,12 +44,15 @@ class SourceQuestionDetectRequest(BaseModel):
 
 class SourceQuestionDetectResponse(BaseModel):
     question_focus: str
+    business_subtype: str | None = None
     special_question_type: str | None = None
-    text_direction: str | None = None
     material_structure: str | None = None
     topic: str | None = None
     business_card_ids: list[str] = Field(default_factory=list)
     query_terms: list[str] = Field(default_factory=list)
+    leaf_id_primary: str | None = None
+    leaf_id_candidates: list[str] = Field(default_factory=list)
+    analysis_confidence: float | None = None
 
 
 class SourceQuestionParseRequest(BaseModel):
@@ -66,11 +69,11 @@ class QuestionGenerateRequest(BaseModel):
     question_card_id: str | None = None
     generation_mode: Literal["standard", "forced_user_material"] = "standard"
     question_focus: str = Field(validation_alias=AliasChoices("question_focus", "\u95ee\u9898\u8003\u70b9"))
-    difficulty_level: str = Field(validation_alias=AliasChoices("difficulty_level", "\u96be\u5ea6\u7ea7\u522b"))
-    text_direction: str | None = Field(
+    business_subtype: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("text_direction", "\u6587\u672c\u65b9\u5411"),
+        validation_alias=AliasChoices("business_subtype", "\u4e1a\u52a1\u5b50\u7c7b"),
     )
+    difficulty_level: str = Field(validation_alias=AliasChoices("difficulty_level", "\u96be\u5ea6\u7ea7\u522b"))
     material_structure: str | None = None
     special_question_types: list[str] = Field(
         default_factory=list,
@@ -87,6 +90,22 @@ class QuestionGenerateRequest(BaseModel):
     source_question: SourceQuestionPayload | None = None
     user_material: UserMaterialPayload | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def drop_deprecated_text_direction(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        updated = dict(value)
+        updated.pop("text_direction", None)
+        updated.pop("\u6587\u672c\u65b9\u5411", None)
+        extra_constraints = updated.get("extra_constraints")
+        if isinstance(extra_constraints, dict):
+            sanitized_constraints = dict(extra_constraints)
+            sanitized_constraints.pop("text_direction", None)
+            sanitized_constraints.pop("\u6587\u672c\u65b9\u5411", None)
+            updated["extra_constraints"] = sanitized_constraints
+        return updated
+
     @field_validator("question_focus", mode="before")
     @classmethod
     def normalize_question_focus(cls, value: Any) -> str:
@@ -94,6 +113,15 @@ class QuestionGenerateRequest(BaseModel):
         placeholders = {"select", "auto", "不指定", "不指定（自动匹配）", "请选择"}
         if text.lower() in placeholders or text in placeholders:
             return ""
+        return text
+
+    @field_validator("business_subtype", mode="before")
+    @classmethod
+    def normalize_business_subtype(cls, value: Any) -> str | None:
+        text = str(value or "").strip()
+        placeholders = {"select", "auto", "不指定", "不指定（自动匹配）", "请选择"}
+        if not text or text.lower() in placeholders or text in placeholders:
+            return None
         return text
 
     @field_validator("special_question_types", mode="before")
@@ -113,8 +141,8 @@ class QuestionGenerateRequest(BaseModel):
     def to_dify_form_input(self) -> DifyFormInput:
         return DifyFormInput(
             question_focus=self.question_focus,
+            business_subtype=self.business_subtype,
             difficulty_level=self.difficulty_level,
-            text_direction=self.text_direction,
             special_question_types=self.special_question_types,
             count=self.count,
         )
@@ -204,6 +232,9 @@ def _top_positive_values(payload: Any, *, limit: int = 3) -> dict[str, float]:
 
 
 def _material_feedback_snapshot(item: dict[str, Any]) -> dict[str, Any]:
+    if bool(item.get("manual_override_active")):
+        return {}
+
     material_source = item.get("material_source")
     if not isinstance(material_source, dict):
         material_source = {}
@@ -443,9 +474,11 @@ class SourceQuestionAssetListResponse(BaseModel):
 class QuestionControlValue(BaseModel):
     control_key: str
     label: str
+    control_type: str = "string"
     current_value: Any = None
     default_value: Any = None
     options: list[dict[str, Any]] = Field(default_factory=list)
+    max_selected: int | None = None
     affects_difficulty: bool = False
     editable_by: str = "generator_and_reviewer"
     mapped_action: str = "question_modify"

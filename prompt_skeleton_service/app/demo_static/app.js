@@ -44,17 +44,6 @@ const SECONDARY_BY_PRIMARY = {
   中心理解题: [{ label: "中心理解题", value: "中心理解题" }],
 };
 
-const TEXT_DIRECTION_OPTIONS = [
-  { label: "不指定", value: "" },
-  { label: "政策文", value: "政策文" },
-  { label: "法条文", value: "法条文" },
-  { label: "科普文", value: "科普文" },
-  { label: "评论文", value: "评论文" },
-  { label: "新闻报道", value: "新闻报道" },
-  { label: "通知公告", value: "通知公告" },
-  { label: "经验材料", value: "经验材料" },
-];
-
 const LOADING_STEPS = [
   { title: "参数解码", desc: "解析一级题卡、二级分类和难度请求。" },
   { title: "题卡匹配", desc: "确定 question_type、pattern 与统一骨架。" },
@@ -158,12 +147,10 @@ function renderSecondaryOptions() {
 }
 
 function buildGeneratePayload() {
-  const textDirection = $("textDirection").value || null;
   const specialType = $("specialType").value;
   return {
     question_focus: $("questionFocus").value,
     difficulty_level: $("difficultyLevel").value,
-    text_direction: textDirection,
     special_question_types: specialType ? [specialType] : [],
     count: Number.parseInt($("count").value || "1", 10),
     topic: null,
@@ -172,13 +159,6 @@ function buildGeneratePayload() {
     fewshot_mode: "structure_only",
     type_slots: {},
     extra_constraints: {},
-    material_policy: {
-      allow_reuse: false,
-      cooldown_days: 30,
-      preferred_document_genres: textDirection ? [textDirection] : [],
-      excluded_material_ids: [],
-      prefer_high_quality_reused: false,
-    },
   };
 }
 
@@ -749,7 +729,6 @@ function wireEvents() {
 
 function initPage() {
   populateSelect($("questionFocus"), PRIMARY_OPTIONS);
-  populateSelect($("textDirection"), TEXT_DIRECTION_OPTIONS);
   renderSecondaryOptions();
   syncCountValue();
   wireEvents();

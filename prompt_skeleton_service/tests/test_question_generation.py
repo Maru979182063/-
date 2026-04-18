@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sys
 import types
@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock
+
+from pydantic import TypeAdapter
 
 
 def _install_test_stubs() -> None:
@@ -18,6 +20,10 @@ def _install_test_stubs() -> None:
         responses = types.ModuleType("fastapi.responses")
         responses.JSONResponse = type("JSONResponse", (), {})
         sys.modules["fastapi.responses"] = responses
+    if "fastapi.exceptions" not in sys.modules:
+        exceptions = types.ModuleType("fastapi.exceptions")
+        exceptions.RequestValidationError = type("RequestValidationError", (Exception,), {})
+        sys.modules["fastapi.exceptions"] = exceptions
     if "yaml" not in sys.modules:
         try:
             import yaml as _yaml  # type: ignore
@@ -35,15 +41,46 @@ from app.core.exceptions import DomainError
 from app.schemas.item import GeneratedQuestion
 from app.schemas.question import MaterialSelectionResult, QuestionGenerateRequest
 from app.services.patch_scope_registry import get_patch_scope, resolve_repair_mode_scope
-from app.services.question_generation import QuestionGenerationService
+from app.services.question_generation import MaterialRefinementDraft, QuestionGenerationService
 
 
 class QuestionGenerationUnitTest(TestCase):
     def setUp(self) -> None:
         self.service = QuestionGenerationService.__new__(QuestionGenerationService)
+        self.service.orchestrator = Mock()
+        self.service.orchestrator.registry = Mock()
         self.service.material_bridge = Mock()
         self.service.material_bridge._normalize_preference_profile = Mock(return_value={})
         self.service.source_question_parser = Mock()
+        self.service.source_question_analyzer = Mock()
+        self.service.llm_gateway = Mock()
+        self.service.material_refinement_adapter = TypeAdapter(MaterialRefinementDraft)
+        self.service.distill_runtime_overlay = Mock()
+        self.service.distill_runtime_overlay.resolve.return_value = {}
+        self.service.runtime_config = SimpleNamespace(
+            evaluation=SimpleNamespace(judge=SimpleNamespace(enabled=True)),
+            llm=SimpleNamespace(
+                routing=SimpleNamespace(
+                    material_refinement="material_refinement",
+                    question_repair="question_repair",
+                    review_actions=SimpleNamespace(minor_edit="material_refinement"),
+                )
+            )
+        )
+        self.service.orchestrator.registry.list_enabled_patterns.side_effect = lambda question_type: {
+            "sentence_order": ["dual_anchor_lock", "carry_parallel_expand", "viewpoint_reason_action", "problem_solution_case_blocks"],
+            "sentence_fill": [
+                "inserted_reference_match",
+                "opening_summary",
+                "bridge_transition",
+                "middle_focus_shift",
+                "middle_explanation",
+                "ending_summary",
+                "ending_elevation",
+                "comprehensive_multi_match",
+            ],
+            "main_idea": [],
+        }.get(question_type, [])
 
     def test_prepare_request_normalizes_source_question_and_user_material_payloads(self) -> None:
         request = QuestionGenerateRequest.model_validate(
@@ -84,7 +121,7 @@ class QuestionGenerationUnitTest(TestCase):
         self.assertNotIn("A（正确）", remapped)
         self.assertNotIn("正确答案是A", remapped)
 
-    def test_explicit_question_card_decode_result_uses_runtime_binding(self) -> None:
+    def test_explicit_question_card_decode_result_drops_deprecated_text_direction(self) -> None:
         self.service.question_card_binding = Mock()
         self.service.question_card_binding.resolve.return_value = {
             "question_card_id": "question.title_selection.standard_v1",
@@ -105,7 +142,7 @@ class QuestionGenerationUnitTest(TestCase):
                 "count": 1,
                 "topic": "topic-x",
                 "type_slots": {"slot_a": "value_a"},
-                "extra_constraints": {"keep": True},
+                "extra_constraints": {"keep": True, "text_direction": "policy"},
                 "text_direction": "policy",
             }
         )
@@ -118,7 +155,7 @@ class QuestionGenerationUnitTest(TestCase):
         self.assertEqual(decoded["standard_request"]["topic"], "topic-x")
         self.assertEqual(decoded["standard_request"]["type_slots"], {"slot_a": "value_a"})
         self.assertTrue(decoded["standard_request"]["extra_constraints"]["keep"])
-        self.assertEqual(decoded["standard_request"]["extra_constraints"]["text_direction"], "policy")
+        self.assertNotIn("text_direction", decoded["standard_request"]["extra_constraints"])
 
     def test_decode_request_does_not_override_explicit_focus_or_special_type(self) -> None:
         self.service.source_question_analyzer = Mock()
@@ -137,6 +174,20 @@ class QuestionGenerationUnitTest(TestCase):
         self.assertIsNone(warning)
         self.assertEqual(decode_request.question_focus, "sentence_order")
         self.assertEqual(decode_request.special_question_types, ["dual_anchor_lock"])
+
+    def test_apply_control_overrides_accepts_review_control_slot_not_in_snapshot(self) -> None:
+        updated = self.service._apply_control_overrides(
+            {
+                "question_type": "main_idea",
+                "type_slots": {"abstraction_level": "medium"},
+                "extra_constraints": {},
+            },
+            {"type_slots": {"statement_visibility": "low"}},
+            instruction=None,
+        )
+
+        self.assertEqual(updated["type_slots"]["abstraction_level"], "medium")
+        self.assertEqual(updated["type_slots"]["statement_visibility"], "low")
 
     def test_sentence_order_extract_units_normalizes_seven_sentences_into_six_units(self) -> None:
         text = (
@@ -172,8 +223,12 @@ class QuestionGenerationUnitTest(TestCase):
         self.assertIsNotNone(coerced)
         self.assertEqual(self.service._count_sortable_units_from_material(coerced.text), 6)
 
-    def test_decode_request_does_not_infer_focus_from_source_question(self) -> None:
+    def test_decode_request_infers_missing_target_from_source_question(self) -> None:
         self.service.source_question_analyzer = Mock()
+        self.service.source_question_analyzer.infer_request_target.return_value = {
+            "question_type": "main_idea",
+            "business_subtype": "title_selection",
+        }
         request = QuestionGenerateRequest.model_validate(
             {
                 "question_focus": "",
@@ -188,9 +243,143 @@ class QuestionGenerationUnitTest(TestCase):
 
         decode_request, warning = self.service._build_decode_request(request)
 
-        self.service.source_question_analyzer.infer_request_target.assert_not_called()
-        self.assertIsNone(warning)
-        self.assertEqual(decode_request.question_focus, "")
+        self.service.source_question_analyzer.infer_request_target.assert_called_once()
+        self.assertEqual(decode_request.question_focus, "center_understanding")
+        self.assertEqual(decode_request.business_subtype, "title_selection")
+        self.assertIn("reference_question_inferred_target_applied", warning)
+
+    def test_decode_request_preserves_explicit_focus_but_completes_missing_business_subtype(self) -> None:
+        self.service.source_question_analyzer = Mock()
+        self.service.source_question_analyzer.infer_request_target.return_value = {
+            "question_type": "sentence_fill",
+            "business_subtype": None,
+        }
+        request = QuestionGenerateRequest.model_validate(
+            {
+                "question_focus": "sentence_fill",
+                "difficulty_level": "medium",
+                "count": 1,
+                "source_question": {
+                    "stem": "将最恰当的一句填入文中横线处",
+                    "options": {"A": "甲", "B": "乙", "C": "丙", "D": "丁"},
+                },
+            }
+        )
+
+        decode_request, warning = self.service._build_decode_request(request)
+
+        self.assertEqual(decode_request.question_focus, "sentence_fill")
+        self.assertEqual(decode_request.business_subtype, "sentence_fill_selection")
+        self.assertIn("business_subtype=sentence_fill_selection", warning)
+
+    def test_requested_taxonomy_bridge_hints_reads_sentence_fill_slots_and_reference_cards(self) -> None:
+        hints = self.service._requested_taxonomy_bridge_hints(
+            question_type="sentence_fill",
+            type_slots={
+                "blank_position": "ending",
+                "function_type": "countermeasure",
+                "logic_relation": "action",
+                "reference_dependency": "high",
+            },
+            extra_constraints={
+                "reference_business_cards": ["sentence_fill__ending_countermeasure__abstract"],
+                "reference_query_terms": ["治理", "路径"],
+            },
+        )
+
+        self.assertEqual(hints["business_card_ids"], ["sentence_fill__ending_countermeasure__abstract"])
+        self.assertEqual(hints["preferred_business_card_ids"], ["sentence_fill__ending_countermeasure__abstract"])
+        self.assertEqual(hints["query_terms"], ["治理", "路径"])
+        self.assertEqual(hints["structure_constraints"]["blank_position"], "ending")
+        self.assertEqual(hints["structure_constraints"]["function_type"], "countermeasure")
+        self.assertEqual(hints["structure_constraints"]["logic_relation"], "action")
+
+    def test_requested_taxonomy_bridge_hints_reads_center_understanding_cards_and_slots(self) -> None:
+        hints = self.service._requested_taxonomy_bridge_hints(
+            question_type="main_idea",
+            type_slots={
+                "structure_type": "turning",
+                "main_point_source": "whole_passage",
+                "main_axis_source": "transition_after",
+            },
+            extra_constraints={
+                "reference_business_cards": ["turning_relation_focus__main_idea"],
+            },
+        )
+
+        self.assertEqual(hints["business_card_ids"], ["turning_relation_focus__main_idea"])
+        self.assertEqual(hints["preferred_business_card_ids"], ["turning_relation_focus__main_idea"])
+        self.assertEqual(hints["structure_constraints"]["structure_type"], "turning")
+        self.assertEqual(hints["structure_constraints"]["main_axis_source"], "transition_after")
+
+    def test_requested_pattern_bridge_hints_support_sentence_order_patterns(self) -> None:
+        hints = self.service._requested_pattern_bridge_hints(
+            question_type="sentence_order",
+            pattern_id="problem_solution_case_blocks",
+        )
+
+        self.assertEqual(hints["preferred_business_card_ids"], ["sentence_order__discourse_logic__abstract"])
+        self.assertEqual(
+            hints["structure_constraints"],
+            {
+                "opening_anchor_type": "problem_opening",
+                "middle_structure_type": "problem_solution_blocks",
+                "closing_anchor_type": "case_support",
+            },
+        )
+
+    def test_normalize_requested_pattern_id_drops_cross_type_stale_pattern(self) -> None:
+        warnings: list[str] = []
+
+        normalized = self.service._normalize_requested_pattern_id(
+            question_type="sentence_order",
+            pattern_id="ending_summary",
+            warnings=warnings,
+        )
+
+        self.assertIsNone(normalized)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("Ignored stale pattern_id 'ending_summary'", warnings[0])
+
+    def test_normalize_requested_pattern_id_keeps_valid_same_type_pattern(self) -> None:
+        warnings: list[str] = []
+
+        normalized = self.service._normalize_requested_pattern_id(
+            question_type="sentence_fill",
+            pattern_id="ending_summary",
+            warnings=warnings,
+        )
+
+        self.assertEqual(normalized, "ending_summary")
+        self.assertEqual(warnings, [])
+
+    def test_build_prompt_request_from_snapshot_drops_stale_pattern_but_keeps_slots(self) -> None:
+        build_request = self.service._build_prompt_request_from_snapshot(
+            {
+                "question_type": "sentence_order",
+                "business_subtype": None,
+                "pattern_id": "ending_summary",
+                "difficulty_target": "medium",
+                "topic": None,
+                "passage_style": None,
+                "use_fewshot": True,
+                "fewshot_mode": "structure_only",
+                "type_slots": {
+                    "opening_anchor_type": "problem_opening",
+                    "middle_structure_type": "problem_solution_blocks",
+                    "closing_anchor_type": "case_support",
+                },
+                "extra_constraints": {
+                    "requested_guard_lines": ["按问题-对策-案例板块推进。"],
+                    "reference_business_cards": ["sentence_order__discourse_logic__abstract"],
+                },
+            }
+        )
+
+        self.assertIsNone(build_request.pattern_id)
+        self.assertEqual(build_request.type_slots["opening_anchor_type"], "problem_opening")
+        self.assertEqual(build_request.type_slots["middle_structure_type"], "problem_solution_blocks")
+        self.assertEqual(build_request.type_slots["closing_anchor_type"], "case_support")
 
     def test_build_request_snapshot_keeps_explicit_pattern_only(self) -> None:
         request = QuestionGenerateRequest.model_validate(
@@ -578,9 +767,222 @@ class QuestionGenerationUnitTest(TestCase):
         self.assertEqual(text.count("def _build_reference_hard_constraints("), 1)
         self.assertEqual(text.count("def _legacy_reference_hard_constraint_residuals("), 1)
         self.assertEqual(text.count("def _refine_material_if_needed("), 1)
+        self.assertEqual(text.count("def _prepare_question_service_material("), 1)
         self.assertEqual(text.count("def _clean_material_text("), 1)
         self.assertEqual(text.count("def _strip_material_template_labels("), 1)
         self.assertEqual(text.count("def _needs_material_refinement("), 1)
+
+    def test_prepare_question_service_material_builds_sentence_fill_ready_view(self) -> None:
+        material = MaterialSelectionResult(
+            material_id="m-1",
+            article_id="a-1",
+            text="第一句交代背景。第二句承接说明。第三句收束观点。",
+            original_text="第一句交代背景。第二句承接说明。第三句收束观点。",
+            source={"source_name": "src", "source_id": "src", "article_title": "title"},
+            document_genre="news",
+            selection_reason="test",
+        )
+
+        prepared = self.service._prepare_question_service_material(
+            material=material,
+            question_type="sentence_fill",
+            request_snapshot={
+                "type_slots": {"blank_position": "ending", "function_type": "summary", "logic_relation": "summary"},
+                "source_question_analysis": {"structure_constraints": {}},
+            },
+        )
+
+        self.assertIn("____", prepared.text)
+        self.assertEqual(prepared.text.count("____"), 1)
+        self.assertIn("第三句收束观点。", prepared.original_text or "")
+        prompt_extras = (prepared.source or {}).get("prompt_extras") or {}
+        self.assertEqual(prompt_extras.get("blank_position"), "ending")
+        self.assertEqual(prompt_extras.get("preferred_answer_shape"), "closing_summary")
+        self.assertIn("____", prompt_extras.get("fill_ready_local_material", ""))
+
+    def test_prepare_question_service_material_keeps_legal_opening_slot(self) -> None:
+        material = MaterialSelectionResult(
+            material_id="m-2",
+            article_id="a-2",
+            text="“活到老学到老”是他的座右铭。第二句介绍人物经历。第三句展开事迹。",
+            original_text="“活到老学到老”是他的座右铭。第二句介绍人物经历。第三句展开事迹。",
+            source={"source_name": "src", "source_id": "src", "article_title": "title"},
+            document_genre="feature",
+            selection_reason="test",
+        )
+
+        prepared = self.service._prepare_question_service_material(
+            material=material,
+            question_type="sentence_fill",
+            request_snapshot={
+                "type_slots": {"blank_position": "opening", "function_type": "summary", "logic_relation": "summary"},
+                "source_question_analysis": {"structure_constraints": {}},
+            },
+        )
+
+        self.assertTrue(prepared.text.startswith("____"))
+        self.assertIn("“活到老学到老”是他的座右铭。", prepared.original_text or "")
+
+    def test_enforce_sentence_fill_original_answer_replaces_non_original_correct_option(self) -> None:
+        material = MaterialSelectionResult(
+            material_id="m-3",
+            article_id="a-3",
+            text="前文。____。后文。",
+            original_text="前文。原句答案。后文。",
+            source={
+                "prompt_extras": {
+                    "require_original_answer_sentence": True,
+                    "answer_anchor_text": "原句答案。",
+                }
+            },
+            document_genre="news",
+            selection_reason="test",
+        )
+        generated = GeneratedQuestion(
+            question_type="sentence_fill",
+            stem="填入画横线部分最恰当的一句是（    ）。",
+            options={"A": "改写答案。", "B": "干扰1。", "C": "干扰2。", "D": "干扰3。"},
+            answer="A",
+            analysis="A项衔接最自然。",
+            metadata={},
+        )
+
+        enforced = self.service._enforce_sentence_fill_original_answer(
+            generated_question=generated,
+            material=material,
+        )
+
+        self.assertEqual(enforced.options["A"], "原句答案。")
+        self.assertTrue(enforced.metadata.get("sentence_fill_original_answer_enforced"))
+
+    def test_enforce_sentence_fill_original_answer_keeps_dominant_answer_if_already_original(self) -> None:
+        material = MaterialSelectionResult(
+            material_id="m-4",
+            article_id="a-4",
+            text="前文。____。后文。",
+            original_text="前文。原句答案。后文。",
+            source={
+                "prompt_extras": {
+                    "require_original_answer_sentence": True,
+                    "answer_anchor_text": "原句答案。",
+                }
+            },
+            document_genre="news",
+            selection_reason="test",
+        )
+        generated = GeneratedQuestion(
+            question_type="sentence_fill",
+            stem="填入画横线部分最恰当的一句是（    ）。",
+            options={"A": "原句答案。", "B": "干扰1。", "C": "干扰2。", "D": "干扰3。"},
+            answer="A",
+            analysis="A项衔接最自然。",
+            metadata={},
+        )
+
+        enforced = self.service._enforce_sentence_fill_original_answer(
+            generated_question=generated,
+            material=material,
+        )
+
+        self.assertEqual(enforced.options["A"], "原句答案。")
+        self.assertFalse(enforced.metadata.get("sentence_fill_original_answer_enforced", False))
+
+    def test_clean_material_text_strips_caption_noise(self) -> None:
+        cleaned = self.service._clean_material_text(
+            "新华社记者张三摄\n\n第一段内容。（审核：李四）\n\n第二段内容。"
+        )
+
+        self.assertNotIn("新华社记者", cleaned)
+        self.assertNotIn("审核", cleaned)
+        self.assertIn("第一段内容。", cleaned)
+        self.assertIn("第二段内容。", cleaned)
+
+    def test_prepare_question_service_material_builds_sentence_order_ready_contract(self) -> None:
+        material = MaterialSelectionResult(
+            material_id="m-so",
+            article_id="a-so",
+            text="第一句交代背景。第二句承接解释。第三句继续推进。第四句补充条件。第五句转入结果。第六句总结收束。",
+            original_text="第一句交代背景。第二句承接解释。第三句继续推进。第四句补充条件。第五句转入结果。第六句总结收束。",
+            source={"source_name": "src", "source_id": "src", "article_title": "title"},
+            document_genre="analysis",
+            selection_reason="test",
+        )
+
+        prepared = self.service._prepare_question_service_material(
+            material=material,
+            question_type="sentence_order",
+            request_snapshot={"source_question_analysis": {"structure_constraints": {"sortable_unit_count": 6}}},
+        )
+
+        prompt_extras = (prepared.source or {}).get("prompt_extras") or {}
+        self.assertEqual(prompt_extras.get("sortable_unit_count"), 6)
+        self.assertEqual(len(prompt_extras.get("sortable_units") or []), 6)
+        self.assertIn("sentence_order", prepared.validator_contract or {})
+
+    def test_prepare_question_service_material_can_polish_sentence_order_presentation(self) -> None:
+        self.service.llm_gateway.generate_json.return_value = {
+            "refined_text": (
+                "围绕城乡融合这一主题，第一句交代背景。第二句承接解释。第三句继续推进。"
+                "第四句补充条件。第五句转入结果。第六句总结收束。"
+            ),
+            "changed": True,
+            "reason": "sentence_order_presentation_polish",
+        }
+        material = MaterialSelectionResult(
+            material_id="m-so-list",
+            article_id="a-so-list",
+            text="1. 第一句交代背景。\n2. 第二句承接解释。\n3. 第三句继续推进。\n4. 第四句补充条件。\n5. 第五句转入结果。\n6. 第六句总结收束。",
+            original_text="1. 第一句交代背景。\n2. 第二句承接解释。\n3. 第三句继续推进。\n4. 第四句补充条件。\n5. 第五句转入结果。\n6. 第六句总结收束。",
+            source={"source_name": "src", "source_id": "src", "article_title": "title"},
+            document_genre="analysis",
+            selection_reason="test",
+        )
+
+        prepared = self.service._prepare_question_service_material(
+            material=material,
+            question_type="sentence_order",
+            request_snapshot={"source_question_analysis": {"structure_constraints": {"sortable_unit_count": 6}}},
+        )
+
+        prompt_extras = (prepared.source or {}).get("prompt_extras") or {}
+        self.assertTrue(prompt_extras.get("sentence_order_presentation_refined"))
+        self.assertEqual(
+            prepared.text,
+            "围绕城乡融合这一主题,第一句交代背景。第二句承接解释。第三句继续推进。第四句补充条件。第五句转入结果。第六句总结收束。",
+        )
+        self.assertEqual(len(self.service._extract_sortable_units_from_text(prepared.text)), 6)
+
+    def test_sentence_order_presentation_refinement_rejects_reordered_units(self) -> None:
+        sortable_units = [
+            "第一句交代背景。",
+            "第二句承接解释。",
+            "第三句继续推进。",
+            "第四句补充条件。",
+            "第五句转入结果。",
+            "第六句总结收束。",
+        ]
+        current_text = self.service._format_sentence_order_natural_material(
+            raw_text="\n".join(f"{index}. {unit}" for index, unit in enumerate(sortable_units, start=1)),
+            sortable_units=sortable_units,
+        )
+        self.service.llm_gateway.generate_json.return_value = {
+            "refined_text": (
+                "第二句承接解释。第一句交代背景。第三句继续推进。"
+                "第四句补充条件。第五句转入结果。第六句总结收束。"
+            ),
+            "changed": True,
+            "reason": "bad_reorder",
+        }
+
+        refined_text, metadata = self.service._refine_sentence_order_presentation_material(
+            raw_text="\n".join(f"{index}. {unit}" for index, unit in enumerate(sortable_units, start=1)),
+            current_text=current_text,
+            sortable_units=sortable_units,
+            source={},
+        )
+
+        self.assertEqual(refined_text, current_text)
+        self.assertEqual(metadata, {})
 
     def test_list_replacement_materials_preserves_question_card_id(self) -> None:
         self.service.material_bridge = Mock()
@@ -989,13 +1391,38 @@ class QuestionGenerationUnitTest(TestCase):
         self.service.material_bridge = Mock()
         self.service.repository = Mock()
         self.service.repository.get_material_usage_stats = Mock()
+        self.service._material_bridge_hints = Mock(return_value={})
+        self.service._requested_taxonomy_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": ["turning_relation_focus__main_idea"],
+                "preferred_business_card_ids": ["turning_relation_focus__main_idea"],
+                "query_terms": ["数字遗产"],
+                "structure_constraints": {"structure_type": "turning"},
+            }
+        )
+        self.service._requested_pattern_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {},
+            }
+        )
+        self.service._merge_material_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": ["turning_relation_focus__main_idea"],
+                "preferred_business_card_ids": ["turning_relation_focus__main_idea"],
+                "query_terms": ["数字遗产"],
+                "structure_constraints": {"structure_type": "turning"},
+            }
+        )
         self.service._apply_control_overrides = Mock(
             return_value={
                 "question_type": "main_idea",
                 "business_subtype": "title_selection",
                 "question_card_id": "question.title_selection.standard_v1",
                 "difficulty_target": "medium",
-                "source_question_analysis": {},
+                "source_question_analysis": {"target_length": 220, "length_tolerance": 90},
                 "extra_constraints": {},
                 "material_structure": None,
                 "topic": None,
@@ -1033,11 +1460,497 @@ class QuestionGenerationUnitTest(TestCase):
         )
         self.assertEqual(
             self.service.material_bridge.select_materials.call_args.kwargs["preferred_business_card_ids"],
-            [],
+            ["turning_relation_focus__main_idea"],
         )
         self.assertEqual(
             self.service.material_bridge.select_materials.call_args.kwargs["business_card_ids"],
-            [],
+            ["turning_relation_focus__main_idea"],
+        )
+
+    def test_revise_text_modify_requested_material_reuses_replacement_filters(self) -> None:
+        self.service.material_bridge = Mock()
+        self.service.repository = Mock()
+        self.service.repository.get_material_usage_stats = Mock()
+        self.service._material_bridge_hints = Mock(return_value={})
+        self.service._requested_taxonomy_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": ["turning_relation_focus__main_idea"],
+                "preferred_business_card_ids": ["turning_relation_focus__main_idea"],
+                "query_terms": ["数字遗产"],
+                "structure_constraints": {"structure_type": "turning"},
+            }
+        )
+        self.service._requested_pattern_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {},
+            }
+        )
+        self.service._merge_material_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": ["turning_relation_focus__main_idea"],
+                "preferred_business_card_ids": ["turning_relation_focus__main_idea"],
+                "query_terms": ["数字遗产"],
+                "structure_constraints": {"structure_type": "turning"},
+            }
+        )
+        self.service._apply_control_overrides = Mock(
+            return_value={
+                "question_type": "main_idea",
+                "business_subtype": "center_understanding",
+                "question_card_id": "question.center_understanding.standard_v1",
+                "difficulty_target": "medium",
+                "source_question_analysis": {"target_length": 220, "length_tolerance": 90},
+                "extra_constraints": {},
+                "type_slots": {"structure_type": "turning"},
+                "material_structure": None,
+                "topic": None,
+                "material_policy": None,
+                "preference_profile": {"quality": 0.2},
+                "pattern_id": None,
+            }
+        )
+        self.service._material_policy_from_snapshot = Mock(return_value=None)
+        self.service._clean_material_text = Mock(return_value="")
+        selected_material = Mock()
+        selected_material.material_id = "mat-2"
+        self.service.material_bridge.list_material_options.return_value = [selected_material]
+        self.service._refine_material_if_needed = Mock(return_value=selected_material)
+        self.service._annotate_material_usage = Mock(return_value=selected_material)
+        self.service._build_generated_item = Mock(return_value={"warnings": []})
+        self.service.runtime_config = types.SimpleNamespace(
+            llm=types.SimpleNamespace(
+                routing=types.SimpleNamespace(
+                    review_actions=types.SimpleNamespace(text_modify="text_modify_route")
+                )
+            )
+        )
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "revision_count": 0,
+            "request_snapshot": {},
+            "material_selection": {"material_id": "mat-1"},
+        }
+
+        self.service.revise_text_modify(item, instruction=None, control_overrides={"material_id": "mat-2"})
+
+        kwargs = self.service.material_bridge.list_material_options.call_args.kwargs
+        self.assertEqual(kwargs["question_card_id"], "question.center_understanding.standard_v1")
+        self.assertEqual(kwargs["business_card_ids"], ["turning_relation_focus__main_idea"])
+        self.assertEqual(kwargs["preferred_business_card_ids"], ["turning_relation_focus__main_idea"])
+        self.assertEqual(kwargs["query_terms"], ["数字遗产"])
+        self.assertEqual(kwargs["structure_constraints"], {"structure_type": "turning"})
+        self.assertEqual(kwargs["target_length"], 220)
+        self.assertEqual(kwargs["length_tolerance"], 90)
+        self.assertEqual(kwargs["exclude_material_ids"], {"mat-1"})
+
+    def test_revise_question_modify_reprepares_sentence_fill_material_before_rebuild(self) -> None:
+        self.service.repository = Mock()
+        self.service._apply_control_overrides = Mock(
+            return_value={
+                "question_type": "sentence_fill",
+                "business_subtype": None,
+                "difficulty_target": "medium",
+                "type_slots": {"blank_position": "ending", "function_type": "conclusion", "logic_relation": "summary"},
+                "extra_constraints": {},
+            }
+        )
+        current_material = MaterialSelectionResult(
+            material_id="mat-1",
+            article_id="article-1",
+            text="当前已经被处理过的材料",
+            original_text="原始未挖空材料",
+            source={"prompt_extras": {"fill_ready_material": "当前已经被处理过的材料"}},
+            document_genre="commentary",
+            selection_reason="test",
+        )
+        prepared_material = current_material.model_copy(update={"text": "重新挖空后的材料"})
+        self.service._annotate_material_usage = Mock(return_value=current_material)
+        self.service._refine_material_if_needed = Mock(return_value=current_material)
+        self.service._prepare_question_service_material = Mock(return_value=prepared_material)
+        self.service._build_prompt_request_from_snapshot = Mock(return_value=SimpleNamespace())
+        self.service._build_generated_item = Mock(return_value={"item_id": "item-1"})
+        self.service.runtime_config = types.SimpleNamespace(
+            llm=types.SimpleNamespace(
+                routing=types.SimpleNamespace(
+                    review_actions=types.SimpleNamespace(question_modify="review-actions.question_modify")
+                )
+            )
+        )
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "revision_count": 0,
+            "request_snapshot": {},
+            "material_selection": current_material.model_dump(),
+        }
+
+        self.service.revise_question_modify(item, instruction=None, control_overrides={"type_slots": {"blank_position": "ending"}})
+
+        self.service._prepare_question_service_material.assert_called_once()
+        self.assertEqual(
+            self.service._build_generated_item.call_args.kwargs["material"].text,
+            "重新挖空后的材料",
+        )
+
+    def test_revise_text_modify_reprepares_sentence_fill_material_before_rebuild(self) -> None:
+        self.service.material_bridge = Mock()
+        self.service.repository = Mock()
+        self.service.repository.get_material_usage_stats = Mock()
+        self.service._material_bridge_hints = Mock(return_value={})
+        self.service._requested_taxonomy_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {},
+            }
+        )
+        self.service._requested_pattern_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {},
+            }
+        )
+        self.service._merge_material_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {},
+            }
+        )
+        self.service._apply_control_overrides = Mock(
+            return_value={
+                "question_type": "sentence_fill",
+                "business_subtype": None,
+                "question_card_id": "question.sentence_fill.standard_v1",
+                "difficulty_target": "medium",
+                "source_question_analysis": {},
+                "extra_constraints": {},
+                "type_slots": {"blank_position": "ending", "function_type": "conclusion", "logic_relation": "summary"},
+                "material_structure": None,
+                "topic": None,
+                "material_policy": None,
+                "pattern_id": "ending_summary",
+            }
+        )
+        self.service._material_policy_from_snapshot = Mock(return_value=None)
+        self.service._clean_material_text = Mock(return_value="")
+        selected_material = MaterialSelectionResult(
+            material_id="mat-2",
+            article_id="article-2",
+            text="完整原文材料",
+            original_text="完整原文材料",
+            source={},
+            document_genre="commentary",
+            selection_reason="test",
+        )
+        prepared_material = selected_material.model_copy(update={"text": "____ 挖空后的材料"})
+        self.service.material_bridge.list_material_options.return_value = [selected_material]
+        self.service._annotate_material_usage = Mock(return_value=selected_material)
+        self.service._refine_material_if_needed = Mock(return_value=selected_material)
+        self.service._prepare_question_service_material = Mock(return_value=prepared_material)
+        self.service._build_prompt_request_from_snapshot = Mock(return_value=SimpleNamespace())
+        self.service._build_generated_item = Mock(return_value={"warnings": []})
+        self.service.runtime_config = types.SimpleNamespace(
+            llm=types.SimpleNamespace(
+                routing=types.SimpleNamespace(
+                    review_actions=types.SimpleNamespace(text_modify="text_modify_route")
+                )
+            )
+        )
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "revision_count": 0,
+            "request_snapshot": {},
+            "material_selection": {"material_id": "mat-1"},
+        }
+
+        self.service.revise_text_modify(item, instruction=None, control_overrides={"material_id": "mat-2"})
+
+        self.service._prepare_question_service_material.assert_called_once()
+        self.assertEqual(
+            self.service._build_generated_item.call_args.kwargs["material"].text,
+            "____ 挖空后的材料",
+        )
+
+    def test_revise_question_modify_reprepares_sentence_order_material_before_rebuild(self) -> None:
+        self.service.repository = Mock()
+        self.service._apply_control_overrides = Mock(
+            return_value={
+                "question_type": "sentence_order",
+                "business_subtype": None,
+                "difficulty_target": "medium",
+                "type_slots": {
+                    "opening_anchor_type": "problem_opening",
+                    "middle_structure_type": "problem_solution_blocks",
+                    "closing_anchor_type": "case_support",
+                },
+                "extra_constraints": {},
+            }
+        )
+        current_material = MaterialSelectionResult(
+            material_id="mat-1",
+            article_id="article-1",
+            text="上一轮处理过的排序展示材料",
+            original_text="第一句。第二句。第三句。第四句。第五句。第六句。",
+            source={"prompt_extras": {"sortable_units": ["上一轮", "处理过", "的", "排序", "展示", "材料"]}},
+            document_genre="commentary",
+            selection_reason="test",
+        )
+        prepared_material = current_material.model_copy(update={"text": "① 第一组\n② 第二组\n③ 第三组\n④ 第四组\n⑤ 第五组\n⑥ 第六组"})
+        self.service._annotate_material_usage = Mock(return_value=current_material)
+        self.service._refine_material_if_needed = Mock(return_value=current_material)
+        self.service._prepare_question_service_material = Mock(return_value=prepared_material)
+        self.service._build_prompt_request_from_snapshot = Mock(return_value=SimpleNamespace())
+        self.service._build_generated_item = Mock(return_value={"item_id": "item-1"})
+        self.service.runtime_config = types.SimpleNamespace(
+            llm=types.SimpleNamespace(
+                routing=types.SimpleNamespace(
+                    review_actions=types.SimpleNamespace(question_modify="review-actions.question_modify")
+                )
+            )
+        )
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "revision_count": 0,
+            "request_snapshot": {},
+            "material_selection": current_material.model_dump(),
+        }
+
+        self.service.revise_question_modify(item, instruction=None, control_overrides={"type_slots": {"opening_anchor_type": "problem_opening"}})
+
+        self.service._prepare_question_service_material.assert_called_once()
+        self.assertEqual(
+            self.service._build_generated_item.call_args.kwargs["material"].text,
+            "① 第一组\n② 第二组\n③ 第三组\n④ 第四组\n⑤ 第五组\n⑥ 第六组",
+        )
+
+    def test_revise_text_modify_reprepares_sentence_order_material_before_rebuild(self) -> None:
+        self.service.material_bridge = Mock()
+        self.service.repository = Mock()
+        self.service.repository.get_material_usage_stats = Mock()
+        self.service._material_bridge_hints = Mock(return_value={})
+        self.service._requested_taxonomy_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {"sortable_unit_count": 6},
+            }
+        )
+        self.service._requested_pattern_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {},
+            }
+        )
+        self.service._merge_material_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {"sortable_unit_count": 6},
+            }
+        )
+        self.service._apply_control_overrides = Mock(
+            return_value={
+                "question_type": "sentence_order",
+                "business_subtype": None,
+                "question_card_id": "question.sentence_order.standard_v1",
+                "difficulty_target": "medium",
+                "source_question_analysis": {},
+                "extra_constraints": {},
+                "type_slots": {"opening_anchor_type": "problem_opening"},
+                "material_structure": None,
+                "topic": None,
+                "material_policy": None,
+                "pattern_id": "problem_solution_case_blocks",
+            }
+        )
+        self.service._material_policy_from_snapshot = Mock(return_value=None)
+        self.service._clean_material_text = Mock(return_value="")
+        selected_material = MaterialSelectionResult(
+            material_id="mat-2",
+            article_id="article-2",
+            text="第一句。第二句。第三句。第四句。第五句。第六句。",
+            original_text="第一句。第二句。第三句。第四句。第五句。第六句。",
+            source={},
+            document_genre="commentary",
+            selection_reason="test",
+        )
+        prepared_material = selected_material.model_copy(update={"text": "① 第一句\n② 第二句\n③ 第三句\n④ 第四句\n⑤ 第五句\n⑥ 第六句"})
+        self.service.material_bridge.list_material_options.return_value = [selected_material]
+        self.service._annotate_material_usage = Mock(return_value=selected_material)
+        self.service._refine_material_if_needed = Mock(return_value=selected_material)
+        self.service._prepare_question_service_material = Mock(return_value=prepared_material)
+        self.service._build_prompt_request_from_snapshot = Mock(return_value=SimpleNamespace())
+        self.service._build_generated_item = Mock(return_value={"warnings": []})
+        self.service.runtime_config = types.SimpleNamespace(
+            llm=types.SimpleNamespace(
+                routing=types.SimpleNamespace(
+                    review_actions=types.SimpleNamespace(text_modify="text_modify_route")
+                )
+            )
+        )
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "revision_count": 0,
+            "request_snapshot": {},
+            "material_selection": {"material_id": "mat-1"},
+        }
+
+        self.service.revise_text_modify(item, instruction=None, control_overrides={"material_id": "mat-2"})
+
+        self.service._prepare_question_service_material.assert_called_once()
+        self.assertEqual(
+            self.service._build_generated_item.call_args.kwargs["material"].text,
+            "① 第一句\n② 第二句\n③ 第三句\n④ 第四句\n⑤ 第五句\n⑥ 第六句",
+        )
+
+    def test_revise_question_modify_reprepares_center_understanding_material_before_rebuild(self) -> None:
+        self.service.repository = Mock()
+        self.service._apply_control_overrides = Mock(
+            return_value={
+                "question_type": "main_idea",
+                "business_subtype": "center_understanding",
+                "difficulty_target": "medium",
+                "type_slots": {"structure_type": "turning", "main_axis_source": "transition_after"},
+                "extra_constraints": {},
+            }
+        )
+        current_material = MaterialSelectionResult(
+            material_id="mat-1",
+            article_id="article-1",
+            text="上一轮处理过的主旨材料",
+            original_text="原始主旨材料",
+            source={},
+            document_genre="commentary",
+            selection_reason="test",
+        )
+        prepared_material = current_material.model_copy(update={"text": "重新清洗后的主旨材料"})
+        self.service._annotate_material_usage = Mock(return_value=current_material)
+        self.service._refine_material_if_needed = Mock(return_value=current_material)
+        self.service._prepare_question_service_material = Mock(return_value=prepared_material)
+        self.service._build_prompt_request_from_snapshot = Mock(return_value=SimpleNamespace())
+        self.service._build_generated_item = Mock(return_value={"item_id": "item-1"})
+        self.service.runtime_config = types.SimpleNamespace(
+            llm=types.SimpleNamespace(
+                routing=types.SimpleNamespace(
+                    review_actions=types.SimpleNamespace(question_modify="review-actions.question_modify")
+                )
+            )
+        )
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "revision_count": 0,
+            "request_snapshot": {},
+            "material_selection": current_material.model_dump(),
+        }
+
+        self.service.revise_question_modify(item, instruction=None, control_overrides={"type_slots": {"structure_type": "turning"}})
+
+        self.service._prepare_question_service_material.assert_called_once()
+        self.assertEqual(
+            self.service._build_generated_item.call_args.kwargs["material"].text,
+            "重新清洗后的主旨材料",
+        )
+
+    def test_revise_text_modify_reprepares_center_understanding_material_before_rebuild(self) -> None:
+        self.service.material_bridge = Mock()
+        self.service.repository = Mock()
+        self.service.repository.get_material_usage_stats = Mock()
+        self.service._material_bridge_hints = Mock(return_value={})
+        self.service._requested_taxonomy_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": ["turning_relation_focus__main_idea"],
+                "preferred_business_card_ids": ["turning_relation_focus__main_idea"],
+                "query_terms": ["数字遗产"],
+                "structure_constraints": {"structure_type": "turning"},
+            }
+        )
+        self.service._requested_pattern_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": [],
+                "preferred_business_card_ids": [],
+                "query_terms": [],
+                "structure_constraints": {},
+            }
+        )
+        self.service._merge_material_bridge_hints = Mock(
+            return_value={
+                "business_card_ids": ["turning_relation_focus__main_idea"],
+                "preferred_business_card_ids": ["turning_relation_focus__main_idea"],
+                "query_terms": ["数字遗产"],
+                "structure_constraints": {"structure_type": "turning"},
+            }
+        )
+        self.service._apply_control_overrides = Mock(
+            return_value={
+                "question_type": "main_idea",
+                "business_subtype": "center_understanding",
+                "question_card_id": "question.center_understanding.standard_v1",
+                "difficulty_target": "medium",
+                "source_question_analysis": {"target_length": 220, "length_tolerance": 90},
+                "extra_constraints": {},
+                "type_slots": {"structure_type": "turning"},
+                "material_structure": None,
+                "topic": None,
+                "material_policy": None,
+                "pattern_id": None,
+            }
+        )
+        self.service._material_policy_from_snapshot = Mock(return_value=None)
+        self.service._clean_material_text = Mock(return_value="")
+        selected_material = MaterialSelectionResult(
+            material_id="mat-2",
+            article_id="article-2",
+            text="原始主旨材料全文",
+            original_text="原始主旨材料全文",
+            source={},
+            document_genre="commentary",
+            selection_reason="test",
+        )
+        prepared_material = selected_material.model_copy(update={"text": "重新清洗后的主旨材料全文"})
+        self.service.material_bridge.list_material_options.return_value = [selected_material]
+        self.service._annotate_material_usage = Mock(return_value=selected_material)
+        self.service._refine_material_if_needed = Mock(return_value=selected_material)
+        self.service._prepare_question_service_material = Mock(return_value=prepared_material)
+        self.service._build_prompt_request_from_snapshot = Mock(return_value=SimpleNamespace())
+        self.service._build_generated_item = Mock(return_value={"warnings": []})
+        self.service.runtime_config = types.SimpleNamespace(
+            llm=types.SimpleNamespace(
+                routing=types.SimpleNamespace(
+                    review_actions=types.SimpleNamespace(text_modify="text_modify_route")
+                )
+            )
+        )
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "revision_count": 0,
+            "request_snapshot": {},
+            "material_selection": {"material_id": "mat-1"},
+        }
+
+        self.service.revise_text_modify(item, instruction=None, control_overrides={"material_id": "mat-2"})
+
+        self.service._prepare_question_service_material.assert_called_once()
+        self.assertEqual(
+            self.service._build_generated_item.call_args.kwargs["material"].text,
+            "重新清洗后的主旨材料全文",
         )
 
     def test_build_round1_fewshot_sections_returns_empty_for_missing_block(self) -> None:
@@ -1184,6 +2097,101 @@ class QuestionGenerationUnitTest(TestCase):
         self.assertIn("Target distractor intensity: strong", llm_call["user_prompt"])
         self.service.validator.validate.assert_called_once()
         self.service.evaluator.evaluate.assert_called_once()
+
+    def test_apply_manual_edit_takes_over_current_item_without_validation_or_evaluation(self) -> None:
+        self.service.repository = Mock()
+        self.service.repository._utc_now.return_value = "2026-04-12T12:00:00Z"
+        self.service.snapshot_builder = Mock()
+        self.service.snapshot_builder.build.return_value = {"snapshot": True}
+        self.service.runtime_config = SimpleNamespace(
+            llm=SimpleNamespace(
+                routing=SimpleNamespace(
+                    review_actions=SimpleNamespace(question_modify="review-actions.question_modify")
+                )
+            )
+        )
+        self.service.validator = Mock()
+        self.service.evaluator = Mock()
+        self.service._resolve_template = Mock(return_value=SimpleNamespace(template_name="tmpl", template_version="v1"))
+        self.service._preference_profile_from_snapshot = Mock(return_value={"profile": "demo"})
+        self.service._build_prompt_request_from_snapshot = Mock(
+            return_value=SimpleNamespace(model_dump=lambda: {"question_type": "main_idea"})
+        )
+        self.service._attach_feedback_runtime_context = Mock(side_effect=lambda **kwargs: kwargs["runtime_snapshot"])
+        self.service._build_version_record = Mock(return_value={"source_action": "manual_edit"})
+
+        item = {
+            "item_id": "item-1",
+            "batch_id": "batch-1",
+            "question_type": "main_idea",
+            "business_subtype": "title_selection",
+            "difficulty_target": "medium",
+            "generated_question": {
+                "question_type": "main_idea",
+                "pattern_id": "pattern-1",
+                "stem": "根据材料选择最合适的标题。",
+                "options": {
+                    "A": "正确标题",
+                    "B": "错误项B",
+                    "C": "错误项C",
+                    "D": "错误项D",
+                },
+                "answer": "A",
+                "analysis": "A项正确，因为它最符合材料主旨。",
+            },
+            "material_selection": {
+                "material_id": "mat-1",
+                "article_id": "art-1",
+                "text": "材料原文",
+                "original_text": "材料原文",
+                "source": {"site": "demo"},
+                "document_genre": "commentary",
+                "selection_reason": "unit-test",
+            },
+            "material_text": "材料原文",
+            "material_source": {"site": "demo"},
+            "request_snapshot": {
+                "source_form": {"question_focus": "main_idea"},
+                "question_type": "main_idea",
+            },
+            "statuses": {
+                "generation_status": "success",
+                "validation_status": "passed",
+                "review_status": "waiting_review",
+            },
+            "validation_result": {"passed": True, "validation_status": "passed"},
+            "evaluation_result": {"overall_score": 90},
+            "current_version_no": 1,
+            "revision_count": 0,
+        }
+
+        revised = self.service.apply_manual_edit(
+            item,
+            instruction="manual takeover",
+            control_overrides={
+                "manual_patch": {
+                    "material_text": "手工改后的材料",
+                    "stem": "手工改后的题干",
+                    "options": {"A": "新A", "B": "新B", "C": "新C", "D": "新D"},
+                    "answer": "B",
+                    "analysis": "手工改后的解析",
+                }
+            },
+        )
+
+        self.assertTrue(revised["manual_override_active"])
+        self.assertEqual(revised["material_text"], "手工改后的材料")
+        self.assertEqual(revised["generated_question"]["stem"], "手工改后的题干")
+        self.assertEqual(revised["generated_question"]["answer"], "B")
+        self.assertEqual(revised["generated_question"]["analysis"], "手工改后的解析")
+        self.assertIsNone(revised["validation_result"])
+        self.assertIsNone(revised["evaluation_result"])
+        self.assertEqual(revised["current_status"], "generated")
+        self.assertEqual(revised["statuses"]["generation_status"], "success")
+        self.assertEqual(revised["statuses"]["validation_status"], "not_started")
+        self.assertEqual(revised["statuses"]["review_status"], "waiting_review")
+        self.service.validator.validate.assert_not_called()
+        self.service.evaluator.evaluate.assert_not_called()
 
     def test_apply_analysis_only_repair_only_updates_analysis_and_reruns_validation_and_evaluation(self) -> None:
         validation_result = Mock()

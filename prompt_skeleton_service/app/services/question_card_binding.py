@@ -8,6 +8,13 @@ import yaml
 
 from app.core.exceptions import DomainError
 
+SUPPORTED_RUNTIME_BINDINGS: set[tuple[str, str | None]] = {
+    ("main_idea", "center_understanding"),
+    ("main_idea", "title_selection"),
+    ("sentence_fill", None),
+    ("sentence_order", None),
+}
+
 
 def _question_card_root() -> Path:
     root = Path(__file__).resolve().parents[3] / "card_specs" / "normalized" / "question_cards"
@@ -34,6 +41,8 @@ def load_question_card_registry() -> dict[str, Any]:
         question_type = str(runtime_binding.get("question_type") or "").strip()
         business_subtype_raw = runtime_binding.get("business_subtype")
         business_subtype = str(business_subtype_raw).strip() if business_subtype_raw not in {None, ""} else None
+        if (question_type, business_subtype) not in SUPPORTED_RUNTIME_BINDINGS:
+            continue
         cards_by_id[card_id] = payload
         cards_by_runtime_binding.setdefault((question_type, business_subtype), []).append(payload)
 

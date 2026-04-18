@@ -34,6 +34,7 @@ class ControlMetadata(BaseModel):
     control_type: str
     options: list[ControlOption] = Field(default_factory=list)
     default_value: Any = None
+    max_selected: int | None = None
     required: bool = False
     affects_difficulty: bool = False
     editable_by: str = "generator_and_reviewer"

@@ -1,0 +1,326 @@
+{
+  "base_url": "http://127.0.0.1:8111",
+  "endpoint": "/api/v1/questions/generate",
+  "preset": "standard",
+  "requests": 1,
+  "concurrency": 1,
+  "timeout_seconds": 300.0,
+  "payload": {
+    "question_focus": "center_understanding",
+    "difficulty_level": "medium",
+    "count": 1,
+    "source_question": {
+      "passage": "人工智能正在进入城市治理、医疗协同和公共服务等领域。技术提升效率的同时，也要求制度设计、伦理审查和数据治理同步跟进。",
+      "stem": "根据材料，下列最适合作为标题的一项是？",
+      "options": {
+        "A": "智能技术应用需要与制度建设同步推进",
+        "B": "只要引入人工智能，治理问题就会自然消失",
+        "C": "技术企业应独自承担全部公共治理责任",
+        "D": "公共服务数字化意味着传统治理方式已经失效"
+      },
+      "answer": "A",
+      "analysis": "A项能够概括材料主旨，兼顾技术应用与制度建设两方面要求。"
+    }
+  },
+  "ready_probe": {
+    "status_code": 200,
+    "service_status": "ready",
+    "continued": true,
+    "payload": {
+      "service": "prompt_skeleton_service",
+      "status": "ready",
+      "checks": [
+        {
+          "name": "config_dir",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+            "exists": true,
+            "kind": "dir"
+          }
+        },
+        {
+          "name": "runtime_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.mvp.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "prompt_template_config_path",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+            "exists": true,
+            "kind": "file"
+          }
+        },
+        {
+          "name": "question_repository",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+            "exists": true,
+            "repository_initialized": true
+          }
+        },
+        {
+          "name": "config_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "loaded_types": 4,
+            "warnings": []
+          }
+        },
+        {
+          "name": "prompt_template_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "active_templates": 23
+          }
+        },
+        {
+          "name": "runtime_registry",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "materials_base_url": "http://127.0.0.1:8001",
+            "materials_v2_search_path": "/materials/v2/search",
+            "llm_provider": "generation_llm"
+          }
+        },
+        {
+          "name": "passage_service",
+          "status": "ok",
+          "critical": true,
+          "details": {
+            "base_url": "http://127.0.0.1:8001",
+            "health_url": "http://127.0.0.1:8001/healthz",
+            "ready_url": "http://127.0.0.1:8001/readyz",
+            "status_code": 200,
+            "reachable": true,
+            "service_status": "ready",
+            "service_name": "passage_service",
+            "database_url": "sqlite:///./passage_service.db",
+            "resolved_database_url": "sqlite:///C:/Users/Maru/Documents/agent/passage_service/passage_service.db",
+            "resolved_database_path": "C:\\Users\\Maru\\Documents\\agent\\passage_service\\passage_service.db",
+            "database_mode": "primary",
+            "allow_non_primary_database": false,
+            "expected_primary_database_name": "passage_service.db",
+            "material_span_count": 7552,
+            "primary_material_count": 6509,
+            "v2_indexed_primary_count": 6251,
+            "database_exists": true,
+            "db_pool_size": 20,
+            "db_max_overflow": 40,
+            "db_pool_timeout_seconds": 60.0,
+            "db_pool_recycle_seconds": 1800
+          }
+        }
+      ],
+      "settings": {
+        "config_dir": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\types",
+        "runtime_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\question_runtime.mvp.yaml",
+        "prompt_template_config_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\configs\\prompt_templates.yaml",
+        "question_db_path": "C:\\Users\\Maru\\Documents\\agent\\prompt_skeleton_service\\data\\question_workbench.dev.db",
+        "generation_queue": {
+          "max_concurrent": 3,
+          "max_waiting": 12,
+          "acquire_timeout_seconds": 240
+        }
+      },
+      "runtime_state": {
+        "generation_queue": {
+          "active_requests": 0,
+          "waiting_requests": 0,
+          "max_concurrent": 3,
+          "max_waiting": 12
+        }
+      }
+    }
+  },
+  "warmup": {
+    "count": 0,
+    "success": 0,
+    "failure": 0
+  },
+  "results": [
+    {
+      "request_index": 1,
+      "started_at": 1776336974.3204222,
+      "duration_ms": 38054.4,
+      "status_code": 200,
+      "ok": true,
+      "batch_id": "b34c249e-919b-46b5-93a9-cf6bb68a38fc",
+      "item_count": 1,
+      "request_id": "dfc9166c-6186-4411-9559-9b5c808d81e3",
+      "queue_position": 0,
+      "queue_wait_seconds": 0.0,
+      "active_requests": 1,
+      "waiting_requests": 0,
+      "error_message": null,
+      "error_reason": null,
+      "error_details": null
+    }
+  ],
+  "summary": {
+    "success_count": 1,
+    "failure_count": 0,
+    "success_rate": 1.0,
+    "throughput_rps": 0.026,
+    "total_seconds": 38.055,
+    "latency_ms": {
+      "min": 38054.4,
+      "avg": 38054.4,
+      "p50": 38054.4,
+      "p90": 38054.4,
+      "p95": 38054.4,
+      "max": 38054.4
+    },
+    "queue": {
+      "queued_request_count": 0,
+      "max_queue_position_seen": 0,
+      "wait_seconds_avg": 0.0,
+      "wait_seconds_p95": 0.0,
+      "wait_seconds_max": 0.0
+    },
+    "status_codes": {
+      "200": 1
+    },
+    "error_reasons": {}
+  },
+  "diagnostics": {
+    "sample_count": 17,
+    "max_active_requests": 2,
+    "max_waiting_requests": 0,
+    "samples": [
+      {
+        "captured_at": 1776336974.319836,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336976.74618,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336979.0937693,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336981.3402472,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336983.7314017,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336987.19072,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 2,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336989.305674,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336991.615622,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336993.7614489,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336995.7826097,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776336997.8897758,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776337000.0650294,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776337002.1167965,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776337004.0890002,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776337006.1802022,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776337009.2250373,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      },
+      {
+        "captured_at": 1776337011.1990988,
+        "status_code": 200,
+        "service_status": "ready",
+        "active_requests": 1,
+        "waiting_requests": 0
+      }
+    ]
+  }
+}

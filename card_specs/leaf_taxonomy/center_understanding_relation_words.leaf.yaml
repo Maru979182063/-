@@ -1,0 +1,47 @@
+schema_version: leaf_taxonomy.v1
+batch_id: center_understanding_relation_words_v1
+mother_family_id: center_understanding
+child_family_id: relation_words
+notes:
+  - leaf_id is the runtime identity for generation/validation/logging.
+  - each leaf_id currently maps to one business card id; this is transitional until full leaf-only migration.
+  - source docs in this batch are expected to provide 50 questions per leaf.
+
+leaves:
+  - leaf_id: cu_relation_turning
+    display_name: 转折
+    business_card_id: turning_relation_focus__main_idea
+    expected_question_type: main_idea
+    expected_business_subtype: center_understanding
+    source_doc_alias: turning.docx
+
+  - leaf_id: cu_relation_parallel
+    display_name: 并列
+    business_card_id: parallel_comprehensive_summary__main_idea
+    expected_question_type: main_idea
+    expected_business_subtype: center_understanding
+    source_doc_alias: parallel.docx
+
+  - leaf_id: cu_relation_countermeasure
+    display_name: 对策
+    business_card_id: necessary_condition_countermeasure__main_idea
+    expected_question_type: main_idea
+    expected_business_subtype: center_understanding
+    source_doc_alias: countermeasure.docx
+
+  - leaf_id: cu_relation_plain
+    display_name: 普通考法
+    business_card_id: theme_word_focus__main_idea
+    expected_question_type: main_idea
+    expected_business_subtype: center_understanding
+    source_doc_alias: plain.docx
+    risk_flags:
+      - weak_legacy_business_card
+      - replace_with_plain_main_recovery_leaf_card_later
+
+  - leaf_id: cu_relation_variant
+    display_name: 变形考法
+    business_card_id: cause_effect__conclusion_focus__main_idea
+    expected_question_type: main_idea
+    expected_business_subtype: center_understanding
+    source_doc_alias: variant.docx

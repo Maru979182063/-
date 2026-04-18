@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>前端工作台演示版</title>
-    <link rel="stylesheet" href="/demo-static/styles.css?v=20260408a" />
+    <title>言语理解v0.6</title>
+    <link rel="stylesheet" href="/demo-static/styles.css?v=20260417c" />
     <style>
       .screen-subtitle {
         margin: -18px 0 28px;
@@ -226,6 +226,248 @@
         line-height: 1.7;
       }
 
+      .screen-topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 20px;
+      }
+
+      .screen-topbar-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .question-head-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .history-trigger-btn {
+        white-space: nowrap;
+      }
+
+      .overlay-root[hidden] {
+        display: none !important;
+      }
+
+      .overlay-root {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+      }
+
+      .overlay-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.38);
+        backdrop-filter: blur(3px);
+      }
+
+      .overlay-shell {
+        position: absolute;
+        top: 24px;
+        right: 24px;
+        bottom: 24px;
+        width: min(1080px, calc(100vw - 48px));
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+        border-radius: 28px;
+        border: 1px solid rgba(210, 220, 234, 0.9);
+        box-shadow: 0 30px 80px rgba(15, 23, 42, 0.18);
+        overflow: hidden;
+      }
+
+      .overlay-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 24px 26px 18px;
+        border-bottom: 1px solid #e7eef8;
+        background: linear-gradient(180deg, rgba(248, 251, 255, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+      }
+
+      .overlay-header h2 {
+        margin: 0 0 6px;
+        font-size: 26px;
+      }
+
+      .overlay-header p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .overlay-close-btn {
+        min-width: 96px;
+      }
+
+      .overlay-body {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 22px 26px 28px;
+        background: #fbfdff;
+      }
+
+      .history-layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.35fr);
+        gap: 18px;
+        min-height: 100%;
+      }
+
+      .history-column {
+        min-width: 0;
+      }
+
+      .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .history-card {
+        width: 100%;
+        text-align: left;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid #dce7f5;
+        background: #ffffff;
+        transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        cursor: pointer;
+      }
+
+      .history-card.is-active {
+        border-color: #7ea7e8;
+        box-shadow: 0 14px 28px rgba(65, 109, 187, 0.12);
+        transform: translateY(-1px);
+      }
+
+      .history-card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .history-card-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 800;
+        color: #24344f;
+      }
+
+      .history-card-meta,
+      .history-card-preview {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .history-card-tags {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .history-detail {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .history-detail-card {
+        padding: 18px 20px;
+        border-radius: 18px;
+        border: 1px solid #dce7f5;
+        background: #ffffff;
+      }
+
+      .history-detail-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .history-detail-head h3 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .history-detail-subtitle {
+        margin: 6px 0 0;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .history-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .history-mini-card {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #f6f9fe;
+        line-height: 1.7;
+      }
+
+      .history-mini-card strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #30415e;
+      }
+
+      .history-options {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .history-option {
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #f8fbff;
+        border: 1px solid #e5edf9;
+        line-height: 1.75;
+      }
+
+      .history-option strong {
+        display: inline-block;
+        margin-bottom: 6px;
+      }
+
+      .history-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .history-empty {
+        padding: 26px;
+        border-radius: 18px;
+        border: 1px dashed #ccd9eb;
+        background: #ffffff;
+        color: var(--muted);
+        line-height: 1.8;
+      }
+
+      .history-loading {
+        padding: 30px;
+        text-align: center;
+        color: var(--muted);
+      }
+
       @media (max-width: 900px) {
         .signal-grid {
           grid-template-columns: 1fr;
@@ -234,6 +476,38 @@
         .replacement-preview-meta {
           grid-template-columns: 1fr;
         }
+
+        .screen-topbar,
+        .history-card-head,
+        .history-detail-head {
+          flex-direction: column;
+        }
+
+        .history-layout,
+        .history-detail-grid,
+        .history-options {
+          grid-template-columns: 1fr;
+        }
+
+        .screen-topbar-actions,
+        .question-head-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        .overlay-shell {
+          top: 10px;
+          right: 10px;
+          bottom: 10px;
+          left: 10px;
+          width: auto;
+        }
+
+        .overlay-header,
+        .overlay-body {
+          padding-left: 18px;
+          padding-right: 18px;
+        }
       }
     </style>
   </head>
@@ -241,15 +515,14 @@
     <div class="page-shell">
       <section id="builderScreen" class="screen active">
         <div class="hero-card">
-          <h1>前端工作台演示版</h1>
+          <h1>言语理解v0.6</h1>
           <p class="screen-subtitle">
-            这一页只承担参数录入、主链提交、结果展示和评审动作承载。
-            不在前端定义题型规则，不在前端推导校验语义。
+            这个页面只负责参数录入、主链提交、结果展示和审核动作承载，不在前端定义题型规则，也不在前端推导校验语义。
           </p>
 
           <form id="generateForm" class="builder-form">
             <div class="builder-note">
-              构建区本轮只发送后端真实消费字段：题型、业务子类、数量、难度、文本方向，以及可选参考母题或用户自带材料。
+              构建区本轮只发送后端真实消费字段：题型、业务子类、业务孙类、数量、难度，以及可选参考母题或用户自带材料。
             </div>
 
             <div class="builder-grid">
@@ -260,6 +533,11 @@
 
               <label class="field">
                 <span>业务子类</span>
+                <select id="businessSubtype" name="business_subtype"></select>
+              </label>
+
+              <label class="field">
+                <span>业务孙类</span>
                 <select id="specialType" name="special_question_type"></select>
               </label>
 
@@ -268,10 +546,6 @@
                 <select id="difficultyLevel" name="difficulty_level"></select>
               </label>
 
-              <label class="field">
-                <span>文本方向</span>
-                <select id="textDirection" name="text_direction"></select>
-              </label>
             </div>
 
             <div class="count-card">
@@ -293,10 +567,7 @@
               <div class="user-material-card-head">
                 <div>
                   <h2>自己上传材料</h2>
-                  <p>
-                    不想走平台自动选材时，可以直接把用户文段贴进来。系统会带着当前页面已选参数直接制作，
-                    并把结果标成需要谨慎分析的特殊样本。
-                  </p>
+                  <p>不想走平台自动选材时，可以直接把用户文段贴进来。系统会带着当前页面已选参数直接制作，并把结果标成需要谨慎分析的特殊样本。</p>
                 </div>
                 <button id="userMaterialToggleBtn" type="button" class="secondary-btn">自己上传材料</button>
               </div>
@@ -314,9 +585,7 @@
                   <button id="userMaterialCancelBtn" type="button" class="secondary-btn">取消</button>
                   <button id="userMaterialSubmitBtn" type="button" class="primary-btn">提交</button>
                 </div>
-                <div class="user-material-inline-note">
-                  取消会直接清空这段材料并收起文本框；提交时如果缺少必要参数，会先弹窗提醒你补齐。
-                </div>
+                <div class="user-material-inline-note">取消会直接清空这段材料并收起文本框；提交时如果缺少必要参数，会先弹窗提醒你补齐。</div>
               </div>
             </section>
 
@@ -324,13 +593,11 @@
               <div class="reference-card-head">
                 <div>
                   <h2>参考母题</h2>
-                  <p>
-                    可选填写。支持直接粘贴整道原题，再自动拆成材料、题干、选项、答案和解析，作为生成时的参考输入。
-                  </p>
+                  <p>可选填写。支持直接粘贴整道原题，再自动拆题、识别母子孙层级并回填，作为生成时的 fewshot 参考入口。</p>
                 </div>
                 <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
                   <span class="reference-badge">可选输入</span>
-                  <button id="sourceQuestionDetectBtn" type="button" class="secondary-btn">自动拆题并回填</button>
+                  <button id="sourceQuestionDetectBtn" type="button" class="secondary-btn">自动拆题识别并回填</button>
                 </div>
               </div>
 
@@ -340,17 +607,13 @@
                   <textarea
                     id="sourceQuestionPassage"
                     rows="6"
-                    placeholder="可直接粘贴整道原题。点击“自动拆题并回填”后，系统会尝试拆成材料、题干、选项、答案、解析。"
+                    placeholder="可直接粘贴整道原题。点击“自动拆题识别并回填”后，系统会尝试拆成材料、题干、选项、答案、解析，并识别母题/子类/孙族卡。"
                   ></textarea>
                 </label>
 
                 <label class="reference-field reference-field-full">
                   <span>原题题干</span>
-                  <textarea
-                    id="sourceQuestionStem"
-                    rows="2"
-                    placeholder="例如：这段文字意在强调（ ）。"
-                  ></textarea>
+                  <textarea id="sourceQuestionStem" rows="2" placeholder="例如：这段文字意在强调（ ）。"></textarea>
                 </label>
 
                 <label class="reference-field">
@@ -383,11 +646,7 @@
 
                 <label class="reference-field reference-field-wide">
                   <span>原题解析</span>
-                  <textarea
-                    id="sourceQuestionAnalysis"
-                    rows="3"
-                    placeholder="可选。填写后会和原题一起作为示例风格参考。"
-                  ></textarea>
+                  <textarea id="sourceQuestionAnalysis" rows="3" placeholder="可选。填写后会和原题一起作为示例风格参考。"></textarea>
                 </label>
               </div>
 
@@ -405,15 +664,29 @@
 
       <section id="loadingScreen" class="screen">
         <div class="loading-card">
-          <h1>前端工作台演示版</h1>
-          <p class="screen-subtitle">
-            加载区只负责请求过程可见化、最小错误提示和成功后的结果切换。
-          </p>
+          <h1>言语理解v0.6</h1>
+          <p class="screen-subtitle">加载区只负责请求过程可视化、最小错误提示和成功后的结果切换。</p>
 
           <div class="loading-layout">
             <div class="loading-left">
               <h2>当前进度</h2>
               <div id="loadingSteps" class="step-list"></div>
+            </div>
+
+            <div class="loading-center" aria-live="polite">
+              <div class="loading-visual-card">
+                <div class="loading-visual-frame">
+                  <img
+                    class="loading-visual-img"
+                    src="/demo-static/assets/loading-work.gif"
+                    alt="加载中动画"
+                  />
+                </div>
+                <div class="loading-visual-caption">
+                  <div class="loading-visual-title">努力工作中…</div>
+                  <p class="loading-visual-desc">稍等一下，正在把这轮请求稳稳送到结果区。</p>
+                </div>
+              </div>
             </div>
 
             <div class="loading-right">
@@ -433,7 +706,7 @@
         <div class="result-shell">
           <div class="result-header">
             <div>
-              <h1>前端工作台演示版</h1>
+              <h1>言语理解v0.6</h1>
               <p id="resultBatchInfo">等待本次生成结果...</p>
             </div>
 
@@ -449,6 +722,6 @@
       </section>
     </div>
 
-    <script src="/demo-static/app_v2.js?v=20260410a"></script>
+    <script src="/demo-static/app_v2.js?v=20260417b"></script>
   </body>
 </html>

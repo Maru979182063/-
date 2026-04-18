@@ -15,13 +15,25 @@ main_card_dual_judge:
   consensus_rule: "unanimous"
   use_full_card_catalog: true
   models:
-    judge_a: "gpt-4o-mini"
+    judge_a: "gpt-5-nano"
   common_instructions: |
     你是材料业务适配判官，只负责判断候选内容是否真实落位到指定主卡的正式承载单元。
     你不能通过放宽门槛来放行样本，也不能因为形式整齐就高估业务价值。
     你必须优先判断业务题感是否成立，再判断它属于 strong、weak 还是 reject。
     strong 代表业务上已经稳定可用；weak 代表业务上可承接但仍属过渡正式单元；reject 代表不应进入有效库存。
-    你只能在给定的 material/business card 候选里选择落点；如果都不合适，应返回 null。
+    weak 不是兜底放行。只有当主卡已经真实成立、只是形式强度不足时，才允许使用 weak；如果主卡本身不成立，必须 reject。
+    注意：在文章级检索/深度一场景里，候选常常是“包裹真实材料核的搜索窗口”，不一定已经切成最终最小材料单元。
+    只要窗口内部存在单一主导、可继续消费的材料核，且其余句子主要是在同向支撑、解释、限定或提供紧邻上下文，不要因为“候选偏长、尚未裁净、仍带上下文”就直接 reject。
+    这类候选应根据窗口内真正占主导的材料核来判 strong 或 weak，并选择最接近的 material card。
+    只有当窗口内没有稳定主导材料核、存在多个角色并列抢主导、或核心段一抽掉就不再成立时，才应该 reject。
+    你要先判断 material card 是否成立，再判断 business card 是否有明确落点。
+    只要你认为 material 正式承载单元成立，就必须从给定 material cards 中选出最接近的一张，selected_material_card 不能留空。
+    business card 现在只是附带参考，不是材料是否成立的前置门槛。
+    如果 material card 明确成立、但给定 business card 都不精确，你应保留 material card，并优先将 business card 置为 null；不要因为 business card 不贴合而 reject。
+    只有当 material 正式承载单元本身都不成立时，才返回 null 并 reject。
+    decision 字段只能填 accept / borderline / reject。
+    formal_layer 字段只能填 strong / weak / reject。
+    如果判断为弱正式单元，应输出 decision=borderline 且 formal_layer=weak。
     reason 要说明主因；evidence_summary 要给出一句最关键证据。
   user_prompt_template: |
     主卡: {family_label} ({business_family_id})
@@ -45,7 +57,7 @@ main_card_dual_judge:
     文章标题: {article_title}
     候选类型: {candidate_type}
     当前机械选中 material card: {selected_material_card}
-    当前机械选中 business card: {selected_business_card}
+    当前机械选中 business card(可忽略): {selected_business_card}
     quality_score: {quality_score}
 
     候选正文:
@@ -66,7 +78,7 @@ main_card_dual_judge:
     可选 material cards(JSON):
     {eligible_material_cards_json}
 
-    可选 business cards(JSON):
+    可选 business cards(JSON，可留空/可忽略):
     {eligible_business_cards_json}
 
     当前 question_ready_context(JSON):
@@ -79,44 +91,77 @@ main_card_dual_judge:
       goal: |
         判断材料是否真正适合承载中心理解主卡，而不是泛泛主题相关或标题观感。
       formal_unit_definition: |
-        重点看强单中心、主轴收束、非例证主导、多信息共同服务一个核心判断，是否足以承载主旨判断。
+        重点看强单中心、主轴收束、多信息是否共同服务一个核心判断。允许“例证/数据/多角度展开后回收到统一主旨”的标准文段，
+        不要求正文必须完全无例证，只要例证最终没有抢走主轴即可。
+        在文章级搜索窗口中，如果主旨核已经明确，而额外句子主要是在补事实、给例证或做局部铺垫，也应视为同一中心理解材料核的包裹窗口，而不是直接按“太长”拒绝。
       strong_accept_definition: |
-        主轴明确、收束稳定、例证不压过主旨，业务上可以直接拿去做中心理解题。
+        主轴明确、收束稳定、例证或支撑信息最终回收到统一主旨，业务上可以直接拿去做中心理解题。
       weak_accept_definition: |
-        主轴大致成立，但仍有轻微背景铺垫或支撑冗余，属于可承接的弱正式单元。
+        主轴大致成立，但仍有背景铺垫、例证偏重、数据支撑偏多或局部枝杈，属于可承接的弱正式单元。
       reject_definition: |
-        只是主题相关、主旨分散、例证过重，或更像背景段/材料片段而不是中心理解正式单元。
+        只是主题相关、主旨分散、支撑信息无法回收到统一主轴，或更像背景段/材料片段而不是中心理解正式单元。
     sentence_fill:
       label: "语句填空"
       goal: |
         判断候选是否真能作为填空题槽位句，而不是表面像连接句。
       formal_unit_definition: |
-        重点看 functional_slot_unit：槽位句加最小上下文，要求 blank-value ready、缺口明显、上下文依赖清晰、值得抽空。
+        Focus on functional_slot_unit: the slot role plus minimal context must be slot-role clear, structurally grounded, context-dependent, and suitable for downstream question amplification.
+        可接受的正式槽位不仅包括承上启下句，也包括段首话题引入、段尾总结/对策、句内分句补位、并列枚举项补写、插入定位句。
+        材料服务判断的是“这段标准材料能否承载填空消费”，不要求候选已经切成最终挖空句。
+        材料服务也不负责验证“此刻是否已经达到最终唯一答案题强度”；最终唯一性由后续题服挖空、选项构造与题面约束继续放大。
+        因此，不要把“还存在若干可接受近义表达”直接当作材料 reject 理由；材料侧只需判断这段内容是否提供了稳定槽位角色、真实约束方向与可继续消费的结构支点。
+        如果一段标准文段中存在稳定的 opening/middle/ending 槽位功能，而其余文本主要是在支撑这个槽位角色，不要仅因候选偏长就拒绝。
+        对于“总起句 + 事例/论证支撑”“分析后落到结尾回收”这类真题标准段，材料侧应判断其是否具备可被后续题服抽取的稳定槽位角色，而不是要求整段本身已经等于最终空位。
+        对于 opening_summary / opening_topic_intro / opening_clause_lead，不要把“存在若干近义改写空间”直接等同于 reject。
+        真题中的段首槽位常允许同义改写；关键看后文是否把对象、立场、范围、展开方向稳定锁住，以及该槽位是否真实承担起题、总起或句内领起功能。
       strong_accept_definition: |
-        抽空后缺口明显、上下文预期清晰、角色真实成立，业务上可直接做语句填空。
+        抽空后缺口明显、上下文预期清晰、角色真实成立，且空位功能有明确边界，业务上可直接做语句填空。
       weak_accept_definition: |
-        仍有填空价值，但缺口显著性或角色稳定性略弱，属于可承接的过渡正式单元。
+        仍有填空价值，但缺口显著性或角色稳定性略弱，或属于句内分句补位/枚举项补写、段级支撑中承载明确槽位角色的弱正式单元。
+        只有当槽位功能已经真实成立、只是边界不够硬时才可判 weak，不能拿 weak 去放过“其实没有真实空位价值”的材料。
+        对段首槽位尤其如此：只要后文对对象/立场/范围形成真实约束，且缺口承担 opening role，即使不是唯一措辞，也可作为 weak 正式单元。
+        在文章级搜索窗口里，如果候选包含“真实槽位句 + 紧邻支撑/解释句”，且这些额外句子仍在为同一槽位角色服务，不应仅因窗口未裁净就 reject。
+        For opening_summary, accept cases where the first sentence already gives the paragraph-level judgment and the next 1-2 sentences mainly remain on the same object as support, even if the downstream is not a clean multi-branch list.
+        For opening_summary, a same-object follow-up sentence that concretizes the judgment through ownership, usage restriction, scene condition, or one direct explanatory fact still counts as valid support, not a role break.
+        For opening_topic_intro, accept cases where the opener frames the topic and the very next sentence immediately launches one concrete case or example, as long as that case is still serving the same topic entry rather than replacing it.
+        For opening_topic_intro, quote-led or slogan-led openings can be accepted when the next sentence immediately locks onto a historical subject, commemorative object, or collective value direction that the downstream keeps expanding.
+        For opening_clause_lead, accept first-sentence judgment or policy-stance clauses when the next 1-2 sentences mainly justify that first-sentence claim, especially with markers like 第一个原因/第二个原因, 一方面/另一方面, or short causal support.
+        For opening_clause_lead, also accept contrastive first-sentence claims such as “有人这样说，但研究/实践表明……” when the next sentence provides direct empirical support for that contrastive judgment.
       reject_definition: |
         只是表面像承接/总结/引题，抽空价值弱、上下文依赖模糊，或替换成别的同类句也差不多。
+        但不要因为它是枚举项、句内分句或段首/段尾位置就直接拒绝；要先判断其功能边界是否清楚、答案约束是否真实存在。
+        也不要仅因为候选是一整段观点/分析/论证材料就拒绝；如果其中承载着稳定可抽取的槽位角色，应以“材料是否可消费”为准。
+        更不要用“尚未达到最终成题唯一性”来拒绝材料；只有当这段内容连稳定槽位角色都没有，或后续题服也无法从中继续放大约束时，才应 reject。
+        只有当后文对对象/立场/范围几乎不给约束，或所谓空位只是装饰性起句、泛赞泛批、可整体删除而不伤结构时，才应按 opening reject。
+        Do not reject opening_summary only because the downstream support stays on one object instead of unfolding as a textbook multi-branch list; reject it only when later sentences form a separate main block and no stable summary role is left at the opening.
+        Do not reject opening_topic_intro only because a quote-led or stance-led opener is followed immediately by one case-launching sentence; reject it only when the case block itself becomes the real carrying unit and the opener can be swapped out with little loss.
+        Do not reject opening_clause_lead only because the sample still contains 2-3 tightly coupled support sentences; reject it only when those later sentences change the role away from first-sentence lead into a new main block.
     sentence_order:
       label: "语句排序"
       goal: |
         判断候选句组是否真有排序意义，而不是仅仅句子都相关或读起来顺。
       formal_unit_definition: |
         重点看 ordered_unit_group 或 weak_formal_order_group：有稳定顺序链、首尾方向感、局部 binding，不多解到失去题感。
+        可接受的排序单元包括完整强链，也包括“首句合法性强”“尾句收束强”“时间推进清楚”“问题-对策-补充”这类弱正式排序句组。
+        材料服务判断的是“句组是否具有可消费的排序意义”，不要求它已经达到最强唯一答案题的强度。
+        只要存在显著更优序列，且这种更优序列来自首句/尾句/时间推进/局部 binding 中的真实结构约束，就不应因仍有少量可交换性而直接 reject。
+        不要把“不是最强唯一六句成题品相”误当成 reject 理由；材料侧只需要判断它是否已经具备可被后续题服消费的排序偏序结构。
+        在文章级搜索窗口里，如果候选句组已经包住真实排序骨架，但仍夹带少量同向说明句或紧邻上下文，只要排序主骨架占主导，就不应按“窗口偏长”直接 reject。
       strong_accept_definition: |
         句组顺序链清楚，首尾较稳定，多解风险低，业务上可直接作为排序题正式承载。
       weak_accept_definition: |
-        整体排序意义成立，但尾句或局部收束不够完美，属于业务上可承接的弱正式排序句组。
+        整体排序意义成立，但尾句或局部收束不够完美，或主要依赖首句合法性/尾句收束/时间推进这类单侧强锚，属于业务上可承接的弱正式排序句组。
+        只有当“更优顺序”已经真实成立、只是唯一性还不够满格时才可判 weak，不能把主题相关或松散顺承段落放成 weak。
       reject_definition: |
-        虽然句子相关，但顺序意义弱、首尾模糊、多解风险高，或只是形式像排序而题感不足。
+        虽然句子相关，但顺序意义弱、首尾模糊、多解风险高，且没有任何稳定锚点或链条；只是主题相关不等于排序可用。
+        只有在既没有显著更优序列、也没有可提炼的首尾/时间/局部绑定结构时，才应 reject。
 
 main_card_signal_resolver:
   enabled: true
   mode: "enforce"
   judge_count: 1
   models:
-    judge_a: "gpt-4o-mini"
+    judge_a: "gpt-5-nano"
   common_instructions: |
     你是三主卡结构信号判官，只负责把候选内容翻译成结构化业务信号。
     你不能机械追随已有分数，也不能为了放行而夸大信号强度。
@@ -155,25 +200,28 @@ main_card_signal_resolver:
         判断这段正文是否具备中心理解所需的主轴、归旨和收束。
       signal_goal: |
         重新判断强单中心、主轴收束、例证/枝杈干扰程度、归纳提升程度，并输出保守分值。
+        例证、数据、多角度展开如果最终明确回收到一个主旨，不应被机械打成负样本。
     sentence_fill:
       label: "语句填空"
       goal: |
         判断这条候选是否真的有槽位句价值，而不是表面像连接句。
       signal_goal: |
         重新判断 blank_position、function_type、logic_relation，以及承前/启后/双向依赖强度、blank-value 就绪度。
+        对段首引题、句内分句补位、并列枚举项补写、段尾总结/对策都要给出真实信号，而不是默认按桥接句处理。
     sentence_order:
       label: "语句排序"
       goal: |
         判断这组句子是否真的具备排序题感，而不是仅仅相关。
       signal_goal: |
         重新判断 opener/closer、局部绑定、顺序链、多解风险、推进与收束，并输出保守分值。
+        如果这组材料主要靠首句合法性、尾句收束、时间推进或问题-对策链形成排序意义，也要如实体现，不要只按“全链强锚”标准打分。
 
 main_card_family_landing:
   enabled: true
   mode: "enforce"
   judge_count: 1
   models:
-    judge_a: "gpt-4o-mini"
+    judge_a: "gpt-5-nano"
   common_instructions: |
     你是三主卡正文落位判官，只负责判断一条 material 是否真实落位到中心理解、语句填空、语句排序中的一个或多个主卡。
     你不能因为材料整体不错就放行，也不能机械追随已有 family 名称。
@@ -220,10 +268,10 @@ main_card_family_landing:
       reject_definition: "只是主题相关、背景铺垫或例证堆积，不足以稳定承载中心理解。"
     sentence_fill:
       label: "语句填空"
-      goal: "判断 material 是否真有值得抽空的槽位句，而不是表面像连接句。"
-      formal_unit_definition: "functional_slot_unit，要求 blank-value ready、缺口明显、上下文依赖清晰。"
-      accept_definition: "抽空后缺口真实存在，语义预期明确，业务上值得做填空。"
-      reject_definition: "只是看起来像承接/总结/引题，但抽空价值弱或替换空间过大。"
+      goal: "Decide whether the material carries a reusable slot role for downstream sentence-fill consumption, not whether it already looks like the final blank sentence."
+      formal_unit_definition: "functional_slot_unit with slot-role clear, structurally grounded context, and enough downstream constraints for later amplification by the question service."
+      accept_definition: "The slot role truly exists, downstream direction is clear, and the material is worth keeping as a sentence-fill carrier for later question construction."
+      reject_definition: "It only looks like an opener/bridge/summary on the surface, but the slot role is not real, downstream constraints are vague, or later question construction still cannot amplify it."
     sentence_order:
       label: "语句排序"
       goal: "判断句组是否真有排序意义，而不是句子相关但顺序不稳。"
@@ -239,3 +287,29 @@ timeouts:
 
 retries:
   max_attempts: 3
+
+depth2_repair:
+  enabled: true
+  min_text_chars: 80
+  max_text_chars: 1200
+  families:
+    center_understanding:
+      enabled: true
+      model: "gpt-5-nano"
+      rewrite_mode: "preserve_rewrite_80"
+      preserve_ratio_target: 0.8
+    title_selection:
+      enabled: true
+      model: "gpt-5-nano"
+      rewrite_mode: "preserve_rewrite_80"
+      preserve_ratio_target: 0.8
+    sentence_fill:
+      enabled: true
+      model: "gpt-5-nano"
+      rewrite_mode: "preserve_rewrite_80"
+      preserve_ratio_target: 0.8
+    sentence_order:
+      enabled: true
+      model: "gpt-5-nano"
+      rewrite_mode: "adaptive_rewrite_60"
+      preserve_ratio_target: 0.6
